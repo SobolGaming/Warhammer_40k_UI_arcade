@@ -1,0 +1,123 @@
+# warhammer40k-arcade-ui
+
+Arcade-based local UI client for the
+[`Warhammer_40k_AI`](https://github.com/SobolGaming/Warhammer_40k_AI) core engine.
+
+This repository is a companion client, not a second rules engine. It renders engine-owned
+projections, collects user intent, submits choices through the shared adapter decision contract, and
+displays authoritative results or diagnostics returned by the core engine.
+
+## Start here
+
+Target Python version: **3.14.5**.
+
+```bash
+uv python install 3.14.5
+uv lock
+uv sync
+uv run warhammer40k-arcade-ui
+uv run pytest
+```
+
+## Local quality gates
+
+Run these before opening a pull request:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run pyright
+uv run pytest
+uv run pre-commit run --all-files
+```
+
+If optional gates such as `mypy` are enabled for the current slice, run them too.
+
+## Purpose
+
+The core engine is a strict bottom-up reconstruction of the Warhammer 40,000 rules engine. This UI
+exists to drive that engine with an Arcade tactical table, while preserving the core invariant that
+UI, headless, network, replay, and test drivers all use the same decision and command path.
+
+The UI is initially scoped to:
+
+- local Arcade rendering;
+- a blank runnable client for Phase 0;
+- later movement-only interaction as the first rules-facing vertical slice;
+- engine-authoritative validation for all accepted state changes.
+
+## References
+
+- Core engine repository: <https://github.com/SobolGaming/Warhammer_40k_AI>
+- Core adapter decision contract:
+  <https://github.com/SobolGaming/Warhammer_40k_AI/blob/main/docs/ADAPTER_DECISION_CONTRACT.md>
+- Core architecture roadmap:
+  <https://github.com/SobolGaming/Warhammer_40k_AI/blob/main/ARCHITECTURE_V2.md>
+- Legacy pygame-era reference repository: <https://github.com/SobolGaming/Warhammer40k_AI>
+- UI architecture: [architecture.md](architecture.md)
+- UI phase plans: [docs/plans/README.md](docs/plans/README.md)
+
+## Non-negotiable UI invariants
+
+These rules are copied forward from the core project's architecture where they apply to the UI:
+
+1. Engine alone mutates authoritative game state.
+2. No player choice occurs outside `DecisionRequest` / `DecisionResult`.
+3. UI, headless, network, replay, and tests use the same engine decision path.
+4. Movement, charge, pile-in, consolidate, disembark, reserves, and reactive movement require
+   `PathWitness` or an explicit typed invalid result.
+5. Endpoint-only movement validation is invalid unless a rule explicitly models teleport/setup
+   placement.
+6. All request IDs, option IDs, entity IDs, event IDs, and replay-facing payloads must be
+   deterministic and serializable.
+7. Client-side previews are advisory only and must be labeled as such.
+
+## Current repository layout
+
+```text
+warhammer40k-arcade-ui/
+  AGENTS.md
+  README.md
+  architecture.md
+  pyproject.toml
+  uv.lock
+  src/
+    warhammer40k_arcade_ui/
+      __init__.py
+      app.py
+      config.py
+      logging_config.py
+      main.py
+  tests/
+    test_config.py
+    test_entrypoint.py
+  docs/
+    README.md
+    plans/
+      README.md
+      phase-00-repository-bootstrap.md
+      ...
+```
+
+## Dependency direction
+
+The UI must remain a leaf client of the core engine:
+
+```text
+Warhammer_40k_AI engine/session APIs -> exposed through core_client facade
+warhammer40k_arcade_ui.core_client -> may wrap approved adapter/session APIs
+render/input/hud/state -> depend on UI view models, not mutable engine internals
+Arcade objects -> visual and input only, never authoritative game objects
+```
+
+Phase 0 intentionally has no core-engine dependency yet. The future `core_client` package will own
+the only approved engine import surface.
+
+## Development notes
+
+- Use `uv` for Python version management, dependency locking, and command execution.
+- Keep `pyright` strict for `src/`.
+- Prefer deterministic tests for non-rendering logic.
+- Do not add hidden fallback behavior when an engine payload is incomplete; fix the fixture or show
+  a typed diagnostic.
+- Keep `docs/plans/` updated as implementation scope changes.

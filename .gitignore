@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environments and tooling
+.venv/
+.idea/
+.vscode/
+
+# OS/editor noise
+.DS_Store
+*.swp
