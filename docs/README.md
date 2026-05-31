@@ -10,4 +10,6 @@ plans separate from engine/core documentation.
 - `protocol-notes.md` — future UI-facing notes about the engine adapter/session protocol.
 - `movement-ui-flow.md` — future detailed movement interaction flow.
 
-The only active documentation subtree at repository bootstrap is `plans/`.
+The active documentation foundation is `plans/`, `README.md`, and `architecture.md`. Add detailed
+protocol notes, movement flow notes, and ADRs as the later phases introduce those implementation
+decisions.

@@ -1,6 +1,6 @@
 # warhammer40k-arcade-ui
 
-Arcade-based local UI client for the
+Arcade-based local and future network-capable UI client for the
 [`Warhammer_40k_AI`](https://github.com/SobolGaming/Warhammer_40k_AI) core engine.
 
 This repository is a companion client, not a second rules engine. It renders engine-owned
@@ -10,6 +10,8 @@ displays authoritative results or diagnostics returned by the core engine.
 ## Start here
 
 Target Python version: **3.14.5**.
+
+From a clean clone of this repository:
 
 ```bash
 uv python install 3.14.5
@@ -39,12 +41,30 @@ The core engine is a strict bottom-up reconstruction of the Warhammer 40,000 rul
 exists to drive that engine with an Arcade tactical table, while preserving the core invariant that
 UI, headless, network, replay, and test drivers all use the same decision and command path.
 
+Repository relationships:
+
+- This repository owns the Arcade UI, local UI state, rendering, HUD, and user-input workflows.
+- [`Warhammer_40k_AI`](https://github.com/SobolGaming/Warhammer_40k_AI) owns authoritative rules,
+  validation, mutation, projections, events, replay-facing records, and adapter/session contracts.
+- [`Warhammer40k_AI`](https://github.com/SobolGaming/Warhammer40k_AI) is the legacy pygame-era
+  reference repository. Treat it as a reference for concepts and known bug classes, not as code to
+  copy wholesale.
+
 The UI is initially scoped to:
 
 - local Arcade rendering;
-- a blank runnable client for Phase 0;
-- later movement-only interaction as the first rules-facing vertical slice;
-- engine-authoritative validation for all accepted state changes.
+- blank runnable client scaffolding;
+- initial movement-only interaction as the first rules-facing vertical slice;
+- engine-authoritative validation for all accepted state changes;
+- a future network client mode behind the same UI-facing client facade.
+
+Early milestone non-goals:
+
+- no full 3D asset loading;
+- no authoritative shooting, charge, fight, or damage UI yet;
+- no private rules path in the UI;
+- no UI-owned mutation of authoritative game state;
+- no hidden validation fallback when the engine returns an invalid or unsupported result.
 
 ## References
 
@@ -118,6 +138,11 @@ the only approved engine import surface.
 - Use `uv` for Python version management, dependency locking, and command execution.
 - Keep `pyright` strict for `src/`.
 - Prefer deterministic tests for non-rendering logic.
+- UI consumes engine `GameViewPayload`-style projections rather than mutable engine objects.
+- UI submits `FiniteOptionSubmission` / `ParameterizedSubmission`-style choices through the
+  adapter/session contract.
+- UI displays authoritative invalid diagnostics from the engine instead of silently correcting them.
+- UI previews are advisory only; only accepted engine results can update authoritative state.
 - Do not add hidden fallback behavior when an engine payload is incomplete; fix the fixture or show
   a typed diagnostic.
 - Keep `docs/plans/` updated as implementation scope changes.

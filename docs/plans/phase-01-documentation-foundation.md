@@ -8,27 +8,27 @@ Make the repository understandable before it grows.
 
 The README should include:
 
-- [ ] Project purpose: “Arcade-based local/network-capable UI client for `Warhammer_40k_AI`.”
-- [ ] Explicit repository references:
+- [x] Project purpose: “Arcade-based local/network-capable UI client for `Warhammer_40k_AI`.”
+- [x] Explicit repository references:
   - current core repo: `https://github.com/SobolGaming/Warhammer_40k_AI`
   - adapter contract: `https://github.com/SobolGaming/Warhammer_40k_AI/blob/main/docs/ADAPTER_DECISION_CONTRACT.md`
   - legacy pygame-era reference repo: `https://github.com/SobolGaming/Warhammer40k_AI`
-- [ ] Current scope:
+- [x] Current scope:
   - local Arcade UI
   - initial movement-only interaction
   - engine-authoritative validation
   - no UI-owned mutation of authoritative game state
-- [ ] Non-goals for first milestones:
+- [x] Non-goals for first milestones:
   - no full 3D asset loading
   - no authoritative shooting/fight/charge UI yet
   - no private rules path in the UI
-- [ ] Setup commands:
+- [x] Setup commands:
   - `uv sync`
   - `uv run warhammer40k-arcade-ui`
   - `uv run pytest`
   - `uv run ruff check .`
   - `uv run pyright`
-- [ ] Development principles:
+- [x] Development principles:
   - UI consumes `GameViewPayload`.
   - UI submits `FiniteOptionSubmission` / `ParameterizedSubmission`.
   - UI displays invalid diagnostics from the engine.
@@ -55,11 +55,11 @@ Suggested sections:
 
 ## Acceptance criteria
 
-- [ ] README explains how this repo relates to both the new and legacy repositories.
-- [ ] README includes a first-run path that works from a clean clone.
-- [ ] `architecture.md` explains the UI/core boundary clearly.
-- [ ] `architecture.md` has a “last updated” or “decision log” section so it can evolve.
-- [ ] Docs explicitly say client-side previews are not authoritative.
+- [x] README explains how this repo relates to both the new and legacy repositories.
+- [x] README includes a first-run path that works from a clean clone.
+- [x] `architecture.md` explains the UI/core boundary clearly.
+- [x] `architecture.md` has a “last updated” or “decision log” section so it can evolve.
+- [x] Docs explicitly say client-side previews are not authoritative.
 
 ## Closeout milestone
 

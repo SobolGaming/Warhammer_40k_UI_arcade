@@ -1,5 +1,7 @@
 # Arcade UI Architecture Build Order
 
+Last updated: 2026-05-31
+
 This document is the build-order roadmap for the Arcade UI client that drives the
 [`Warhammer_40k_AI`](https://github.com/SobolGaming/Warhammer_40k_AI) core engine.
 
@@ -26,13 +28,13 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phase 0 is complete. Later phases are planned and linked to independently reviewable documents under
-`docs/plans/`.
+Phases 0-1 are complete. Later phases are planned and linked to independently reviewable documents
+under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
 | --- | --- | --- | --- |
 | 0 | Complete | Repository bootstrap and quality baseline | [phase-00](docs/plans/phase-00-repository-bootstrap.md) |
-| 1 | Planned | Documentation foundation | [phase-01](docs/plans/phase-01-documentation-foundation.md) |
+| 1 | Complete | Documentation foundation | [phase-01](docs/plans/phase-01-documentation-foundation.md) |
 | 2 | Planned | Core client adapter layer | [phase-02](docs/plans/phase-02-core-client-adapter.md) |
 | 3 | Planned | Arcade rendering foundation | [phase-03](docs/plans/phase-03-arcade-rendering-foundation.md) |
 | 4 | Planned | Selection and unit information HUD | [phase-04](docs/plans/phase-04-selection-unit-hud.md) |
@@ -74,6 +76,14 @@ Planned modules from later phases:
 - `hud` — decision panels, unit panels, diagnostics, and context menus.
 - `state` — local-only UI state such as selection and movement drafts.
 
+## Runtime modes
+
+- **Local in-process session** — planned first integration mode. `core_client` will wrap approved
+  engine lifecycle/session APIs and expose UI view models.
+- **Future network session** — planned transport mode behind the same UI-facing client facade.
+- **Future replay inspection mode** — planned read-only mode for inspecting engine replay/projection
+  data without introducing a second mutation path.
+
 ## Decision flow
 
 ```text
@@ -110,6 +120,16 @@ finite movement action selection
 - Future render-adjacent tests for camera coordinate transforms and render primitive generation.
 - Future static checks to keep direct engine imports isolated to `core_client`.
 
+## Known deferred work
+
+- Core client adapter implementation and real local game-session integration.
+- Network transport.
+- Replay inspector.
+- Shooting HUD, charge HUD, fight HUD, and damage-allocation UI.
+- Line-of-sight and cover visualization.
+- 3D renderer or full asset loading.
+- Import-boundary audit that enforces direct engine imports only from `core_client`.
+
 ## Decision log
 
 - 2026-05-31: Phase 0 targets Python 3.14.5 to match the current core-engine workflow.
@@ -117,3 +137,6 @@ finite movement action selection
   engine-facing boundary will be introduced in Phase 2 through `core_client`.
 - 2026-05-31: Phase 0 completed with a locked `uv` project, blank Arcade entry point, strict
   typing/linting configuration, pre-commit hooks, and bootstrap tests.
+- 2026-05-31: Phase 1 completed with README and architecture documentation covering repository
+  relationships, first-run commands, UI/core boundaries, runtime modes, roadmap links, and deferred
+  work.
