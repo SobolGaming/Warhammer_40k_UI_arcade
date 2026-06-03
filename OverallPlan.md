@@ -38,10 +38,12 @@ warhammer40k-arcade-ui/
 
       preferences/
         __init__.py
+        defaults.py
+        diagnostics.py
+        export_profile.py
+        io.py
+        registries.py
         schema.py
-        loader.py
-        commands.py
-        overlays.py
 
       hud/
         __init__.py
@@ -343,7 +345,7 @@ Future-facing preferences may name known planned properties, but validation must
 
 ### Tasks
 
-* [ ] Add a `preferences` or `settings` module with versioned typed schemas:
+* [x] Add a `preferences` or `settings` module with versioned typed schemas:
 
   * `UiPreferences`
   * `OverlayPreferences`
@@ -351,53 +353,57 @@ Future-facing preferences may name known planned properties, but validation must
   * `SelectionBehaviorPreferences`
   * `HudPreferences`
   * `ExperimentalPreferenceFlags`
-* [ ] Define schema behavior for future-facing properties:
+* [x] Define schema behavior for future-facing properties:
 
   * preserve recognized-but-unimplemented settings through load/export round trips;
   * mark them as inactive through diagnostics rather than dropping them;
   * reject unknown top-level keys unless they are under a clearly named experimental/extension section.
-* [ ] Support loading preferences from:
+* [x] Support loading preferences from:
 
   * an explicit config path, planned for a future CLI flag;
   * a platform default path via `platformdirs`;
   * built-in defaults when no user file exists.
-* [ ] Support hand-editable JSON and YAML files:
+* [x] Support hand-editable JSON and YAML files:
 
   * keep generated examples portable and free of machine-specific absolute paths;
   * add a YAML parser dependency only when this phase is implemented;
   * include `schema_version` in every persisted profile.
-* [ ] Support exporting profiles as deterministic JSON and YAML with stable field order.
-* [ ] Define stable UI command and overlay registries for local-only presentation commands.
-* [ ] Add selection-triggered overlay preferences:
+* [x] Support exporting profiles as deterministic JSON and YAML with stable field order.
+* [x] Define stable UI command and overlay registries for local-only presentation commands.
+* [x] Add selection-triggered overlay preferences:
 
   * overlays enabled when a model is selected with the default mouse button;
   * overlays enabled when a unit is selected;
   * overlays enabled while a movement draft is active.
-* [ ] Add configurable hotkeys for toggling known overlays, selected model information, selected unit information, context menus, measure mode, confirm, cancel, and cycling.
-* [ ] Add typed config diagnostics for unsupported schema versions, unknown command IDs, unknown overlay IDs, duplicate hotkeys, invalid key syntax, inactive planned settings, and settings that reference unavailable features.
-* [ ] Add example profiles for defaults, dense/debug workflows, and keyboard-heavy workflows.
-* [ ] Add a small command-line or callable export path so users can generate a starter profile without copying internal defaults by hand.
-* [ ] Document the preference file format, supported IDs, planned-but-inactive IDs, and extension policy.
-* [ ] Wire preferences through render, input, HUD, and local UI state boundaries via typed registries rather than ad hoc string checks.
+* [x] Add configurable hotkeys for toggling known overlays, selected model information, selected unit information, context menus, measure mode, confirm, cancel, and cycling.
+* [x] Add typed config diagnostics for unsupported schema versions, unknown command IDs, unknown overlay IDs, duplicate hotkeys, invalid key syntax, inactive planned settings, and settings that reference unavailable features.
+* [x] Add example profiles for defaults, dense/debug workflows, and keyboard-heavy workflows.
+* [x] Add a small command-line or callable export path so users can generate a starter profile without copying internal defaults by hand.
+* [x] Document the preference file format, supported IDs, planned-but-inactive IDs, and extension policy.
+* [x] Establish typed registries for render, input, HUD, and local UI state boundaries so later phases consume the framework instead of ad hoc string checks.
 
 ### Acceptance criteria
 
-* [ ] JSON and YAML preference files can be loaded through the same typed schema.
-* [ ] Built-in defaults can be exported or documented as a complete hand-editable profile.
-* [ ] Exported profiles are portable, deterministic, schema-versioned, and easy to diff.
-* [ ] Recognized upcoming properties can be encoded, round-tripped, and diagnosed as inactive until the implementing phase enables them.
-* [ ] Unknown commands, unknown overlays, duplicate hotkeys, and invalid syntax produce visible typed config diagnostics instead of silent fallback behavior.
-* [ ] Default selection overlays can be configured for model selection, unit selection, and movement drafting.
-* [ ] Hotkeys can toggle known overlays and selected model/unit information panels.
-* [ ] Config files cannot create finite options, proposal kinds, engine decisions, or validation behavior.
-* [ ] Config-driven overlays remain viewer-scoped and cannot expose hidden opponent information.
-* [ ] Tests cover schema loading, JSON/YAML parsing, default-profile generation, hotkey conflict detection, export determinism, command/overlay ID validation, future-facing inactive properties, and selection-triggered overlay activation.
+* [x] JSON and YAML preference files can be loaded through the same typed schema.
+* [x] Built-in defaults can be exported or documented as a complete hand-editable profile.
+* [x] Exported profiles are portable, deterministic, schema-versioned, and easy to diff.
+* [x] Recognized upcoming properties can be encoded, round-tripped, and diagnosed as inactive until the implementing phase enables them.
+* [x] Unknown commands, unknown overlays, duplicate hotkeys, and invalid syntax produce visible typed config diagnostics instead of silent fallback behavior.
+* [x] Default selection overlays can be configured for model selection, unit selection, and movement drafting.
+* [x] Hotkeys can toggle known overlays and selected model/unit information panels.
+* [x] Config files cannot create finite options, proposal kinds, engine decisions, or validation behavior.
+* [x] Config-driven overlays remain viewer-scoped and cannot expose hidden opponent information.
+* [x] Tests cover schema loading, JSON/YAML parsing, default-profile generation, hotkey conflict detection, export determinism, command/overlay ID validation, future-facing inactive properties, and selection-triggered overlay activation.
 
 ### Phase closeout milestone
 
 **Milestone 4: “Shareable Preferences Framework”**
 
 Users can hand-edit and pass around a portable UI preferences file that controls known overlays, selected-model/unit information affordances, HUD defaults, hotkeys, and planned UI behavior settings while preserving the engine-authoritative decision boundary.
+
+Implemented by `warhammer40k_arcade_ui.preferences`, documented in `docs/ui-configuration.md`, and
+covered by `tests/test_preferences.py`. Later phases should consume these typed registries rather
+than introducing new local configuration shapes.
 
 ---
 

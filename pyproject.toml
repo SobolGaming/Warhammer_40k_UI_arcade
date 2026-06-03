@@ -11,12 +11,14 @@ dependencies = [
     "orjson>=3.10",
     "platformdirs>=4.3",
     "pydantic>=2.11",
+    "PyYAML>=6.0",
     "typing-extensions>=4.14",
     "warhammer40k-core-v2",
 ]
 
 [project.scripts]
 warhammer40k-arcade-ui = "warhammer40k_arcade_ui.main:main"
+warhammer40k-export-preferences = "warhammer40k_arcade_ui.preferences.export_profile:main"
 
 [build-system]
 requires = ["hatchling>=1.27"]
@@ -90,4 +92,5 @@ dev = [
     "pytest>=8.4",
     "pytest-cov>=6.2",
     "ruff>=0.12",
+    "types-PyYAML>=6.0",
 ]

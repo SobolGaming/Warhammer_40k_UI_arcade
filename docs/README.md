@@ -9,9 +9,10 @@ plans separate from engine/core documentation.
 - `adr/` — future architecture decision records once implementation decisions need durable history.
 - `protocol-notes.md` — future UI-facing notes about the engine adapter/session protocol.
 - `movement-ui-flow.md` — future detailed movement interaction flow.
-- `ui-configuration.md` — future detailed notes produced by Phase 4's shareable UI preferences
-  framework.
+- `ui-configuration.md` — Phase 4 notes for the shareable UI preferences framework.
+- `preferences/` — documented portable example profiles for the default, dense-debug, and
+  keyboard-heavy configurations.
 
-The active documentation foundation is `plans/`, `README.md`, and `architecture.md`. Add detailed
-protocol notes, movement flow notes, UI configuration notes, and ADRs as the later phases introduce
-those implementation decisions.
+The active documentation foundation is `plans/`, `README.md`, `architecture.md`,
+`ui-configuration.md`, and `preferences/`. Add detailed protocol notes, movement flow notes, and
+ADRs as later phases introduce those implementation decisions.

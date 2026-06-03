@@ -29,11 +29,10 @@ Run these before opening a pull request:
 uv run ruff check .
 uv run ruff format --check .
 uv run pyright
+uv run mypy src tests
 uv run pytest
 uv run pre-commit run --all-files
 ```
-
-If optional gates such as `mypy` are enabled for the current slice, run them too.
 
 ## Purpose
 
@@ -122,6 +121,14 @@ warhammer40k-arcade-ui/
         default_fixture.py
         primitives.py
         view_models.py
+      preferences/
+        __init__.py
+        defaults.py
+        diagnostics.py
+        export_profile.py
+        io.py
+        registries.py
+        schema.py
   tests/
     fixtures/
       phase03_battlefield_view.json
@@ -129,10 +136,16 @@ warhammer40k-arcade-ui/
     test_core_client_protocol.py
     test_config.py
     test_entrypoint.py
+    test_preferences.py
     test_render_camera.py
     test_render_primitives.py
   docs/
     README.md
+    ui-configuration.md
+    preferences/
+      default.yaml
+      dense-debug.yaml
+      keyboard-heavy.yaml
     plans/
       README.md
       phase-00-repository-bootstrap.md
@@ -170,10 +183,12 @@ surface.
   constructing engine-facing results.
 - UI displays authoritative invalid diagnostics from the engine instead of silently correcting them.
 - UI previews are advisory only; only accepted engine results can update authoritative state.
-- Planned Phase 4 UI preference files may configure known overlays, hotkeys, HUD defaults, selected
-  model/unit information affordances, and recognized upcoming behavior settings, but they must not
+- Phase 4 UI preference files may configure known overlays, hotkeys, HUD defaults, selected
+  model/unit information affordances, and recognized upcoming behavior settings. They must not
   define rules, legal actions, engine decisions, proposal kinds, validation behavior, or
   hidden-information visibility.
+- Generate starter preference profiles with `uv run warhammer40k-export-preferences --format yaml`
+  or load the documented examples under `docs/preferences/`.
 - Do not add hidden fallback behavior when an engine payload is incomplete; fix the fixture or show
   a typed diagnostic.
 - Keep `docs/plans/` updated as implementation scope changes.

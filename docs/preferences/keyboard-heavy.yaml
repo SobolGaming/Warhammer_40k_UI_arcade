@@ -1,0 +1,64 @@
+schema_version: '1'
+profile_name: keyboard-heavy
+overlays:
+  default_on_model_selection:
+  - selected_model
+  default_on_unit_selection:
+  - selected_unit
+  default_on_movement_draft:
+  - movement_path_draft
+  - movement_budget
+  enabled_by_default:
+  - debug_coordinates
+hotkeys:
+- command_id: cancel
+  key: escape
+  modifiers: []
+- command_id: confirm
+  key: enter
+  modifiers: []
+- command_id: cycle_selection
+  key: tab
+  modifiers: []
+- command_id: show_selected_unit
+  key: i
+  modifiers: []
+- command_id: show_selected_model
+  key: i
+  modifiers:
+  - shift
+- command_id: open_selected_unit_actions
+  key: space
+  modifiers: []
+- command_id: toggle_overlay
+  key: '1'
+  modifiers: []
+  overlay_id: movement_budget
+- command_id: toggle_overlay
+  key: '2'
+  modifiers: []
+  overlay_id: movement_path_draft
+- command_id: toggle_overlay
+  key: '3'
+  modifiers: []
+  overlay_id: objective_control_context
+- command_id: toggle_measure_mode
+  key: r
+  modifiers: []
+selection:
+  default_mouse_button: left
+  cycle_overlapping_bases: true
+  show_debug_inspector: false
+hud:
+  show_phase: true
+  show_active_player: true
+  show_event_log: true
+  show_config_diagnostics: true
+  show_selected_model_panel: true
+  show_selected_unit_panel: true
+  text_scale: 1.0
+  high_contrast: false
+experimental:
+  planned_settings:
+    input.keyboard_first_mode: true
+extensions: {}
