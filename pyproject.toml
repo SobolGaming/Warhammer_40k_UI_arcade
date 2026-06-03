@@ -12,6 +12,7 @@ dependencies = [
     "platformdirs>=4.3",
     "pydantic>=2.11",
     "typing-extensions>=4.14",
+    "warhammer40k-core-v2",
 ]
 
 [project.scripts]
@@ -26,6 +27,9 @@ packages = ["src/warhammer40k_arcade_ui"]
 
 [tool.uv]
 package = true
+
+[tool.uv.sources]
+warhammer40k-core-v2 = { path = "../Warhammer_40k_AI", editable = true }
 
 [tool.ruff]
 target-version = "py314"
@@ -52,12 +56,15 @@ warn_unreachable = true
 no_implicit_optional = true
 show_error_codes = true
 pretty = true
-mypy_path = "src"
+mypy_path = ["src", "../Warhammer_40k_AI/src"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 include = ["src", "tests"]
+extraPaths = ["../Warhammer_40k_AI/src"]
+venv = ".venv"
+venvPath = "."
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --strict-config"

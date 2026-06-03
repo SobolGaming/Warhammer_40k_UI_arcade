@@ -107,9 +107,16 @@ warhammer40k-arcade-ui/
       __init__.py
       app.py
       config.py
+      core_client/
+        __init__.py
+        fake_client.py
+        local_session_client.py
+        protocol.py
       logging_config.py
       main.py
   tests/
+    test_core_client_local_session.py
+    test_core_client_protocol.py
     test_config.py
     test_entrypoint.py
   docs/
@@ -131,8 +138,9 @@ render/input/hud/state -> depend on UI view models, not mutable engine internals
 Arcade objects -> visual and input only, never authoritative game objects
 ```
 
-Phase 0 intentionally has no core-engine dependency yet. The future `core_client` package will own
-the only approved engine import surface.
+Phase 2 introduces the core-engine dependency as an editable local path dependency on the sibling
+`../Warhammer_40k_AI` repository. The `core_client` package owns the only approved engine import
+surface.
 
 ## Development notes
 
@@ -142,6 +150,8 @@ the only approved engine import surface.
 - UI consumes engine `GameViewPayload`-style projections rather than mutable engine objects.
 - UI submits `FiniteOptionSubmission` / `ParameterizedSubmission`-style choices through the
   adapter/session contract.
+- UI-facing submission methods keep `request_id` explicit and reject stale request drift before
+  constructing engine-facing results.
 - UI displays authoritative invalid diagnostics from the engine instead of silently correcting them.
 - UI previews are advisory only; only accepted engine results can update authoritative state.
 - Future UI preference files may configure known overlays, hotkeys, HUD defaults, and selected

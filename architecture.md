@@ -29,14 +29,14 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-1 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-2 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
 | --- | --- | --- | --- |
 | 0 | Complete | Repository bootstrap and quality baseline | [phase-00](docs/plans/phase-00-repository-bootstrap.md) |
 | 1 | Complete | Documentation foundation | [phase-01](docs/plans/phase-01-documentation-foundation.md) |
-| 2 | Planned | Core client adapter layer | [phase-02](docs/plans/phase-02-core-client-adapter.md) |
+| 2 | Complete | Core client adapter layer | [phase-02](docs/plans/phase-02-core-client-adapter.md) |
 | 3 | Planned | Arcade rendering foundation | [phase-03](docs/plans/phase-03-arcade-rendering-foundation.md) |
 | 4 | Planned | Selection and unit information HUD | [phase-04](docs/plans/phase-04-selection-unit-hud.md) |
 | 5 | Planned | Finite decision submission | [phase-05](docs/plans/phase-05-finite-decision-submission.md) |
@@ -66,16 +66,19 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phase 0 provides only the runnable shell:
+Phases 0-2 provide the runnable shell and core client boundary:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
 - `warhammer40k_arcade_ui.app` — blank Arcade window and event-loop launcher.
 - `warhammer40k_arcade_ui.main` — console-script entry point.
+- `warhammer40k_arcade_ui.core_client.protocol` — UI-facing dataclasses and client protocol.
+- `warhammer40k_arcade_ui.core_client.local_session_client` — local in-process wrapper over the
+  core engine adapter/session APIs.
+- `warhammer40k_arcade_ui.core_client.fake_client` — deterministic fake client for UI tests.
 
 Planned modules from later phases:
 
-- `core_client` — UI-facing facade over approved core adapter/session APIs.
 - `preferences` — typed loading, validation, diagnostics, and export for shareable UI
   JSON/YAML profiles.
 - `render` — camera, table, terrain, unit, and overlay rendering primitives.
@@ -127,6 +130,11 @@ GameViewPayload
 The UI may preview proposed actions, but preview state is advisory only. Accepted state appears only
 after the core engine returns an accepted result and a refreshed projection.
 
+`LocalSessionClient` preserves explicit `request_id` values at the UI boundary. It rejects stale
+request IDs before constructing engine `DecisionResult` objects, and accepted submissions still flow
+through `FiniteOptionSubmission` or `ParameterizedSubmission` into
+`GameLifecycle.submit_decision(...)`.
+
 ## Movement flow target
 
 The first rules-facing vertical slice will be movement:
@@ -173,3 +181,7 @@ finite movement action selection
 - 2026-06-03: Added Phase 8 for shareable JSON/YAML UI preferences covering overlay defaults,
   hotkeys, selected-model/unit information affordances, and config diagnostics while preserving the
   engine-authoritative decision boundary.
+- 2026-06-03: Phase 2 completed with a `core_client` protocol, local in-process session wrapper,
+  fake UI client, explicit request-ID submission boundary, core dependency declaration, and tests
+  covering pending decisions, movement proposal requests, invalid diagnostics, terminal status, and
+  stale request rejection.
