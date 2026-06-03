@@ -1,17 +1,17 @@
-"""Arcade application shell for the Phase 0 bootstrap."""
+"""Arcade application shell and launch path."""
 
 from __future__ import annotations
 
 from importlib import import_module
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from warhammer40k_arcade_ui.config import AppConfig
 
 
 class ArcadeWindow(Protocol):
-    """Small protocol for the Arcade window surface used by Phase 0."""
+    """Small protocol for the Arcade window surface used by tests and launch code."""
 
-    background_color: object
+    background_color: Any
 
 
 class ArcadeWindowFactory(Protocol):
@@ -67,7 +67,12 @@ def create_window(
     """Create the application window without entering Arcade's event loop."""
 
     resolved_config = config or AppConfig()
-    runtime = arcade_runtime or _load_arcade()
+    if arcade_runtime is None:
+        from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
+
+        return ArcadeWarhammerWindow(config=resolved_config)
+
+    runtime = arcade_runtime
     window = runtime.Window(
         width=resolved_config.window_width,
         height=resolved_config.window_height,
@@ -82,8 +87,13 @@ def run_app(
     config: AppConfig | None = None,
     arcade_runtime: ArcadeRuntime | None = None,
 ) -> None:
-    """Create a blank Arcade window and start the event loop."""
+    """Create the Arcade window and start the event loop."""
 
-    runtime = arcade_runtime or _load_arcade()
+    if arcade_runtime is None:
+        create_window(config)
+        _load_arcade().run()
+        return
+
+    runtime = arcade_runtime
     create_window(config, runtime)
     runtime.run()

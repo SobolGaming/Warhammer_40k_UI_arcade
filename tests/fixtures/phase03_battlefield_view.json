@@ -1,0 +1,90 @@
+{
+  "table": {
+    "width": 60,
+    "height": 44,
+    "label": "Strike Force Test Table"
+  },
+  "deployment_zones": [
+    {
+      "zone_id": "player_1_deployment",
+      "player_id": "player_1",
+      "label": "Player 1 Deployment",
+      "polygon": [[0, 0], [10, 0], [10, 44], [0, 44]],
+      "visible": true
+    },
+    {
+      "zone_id": "player_2_deployment",
+      "player_id": "player_2",
+      "label": "Player 2 Deployment",
+      "polygon": [[50, 0], [60, 0], [60, 44], [50, 44]],
+      "visible": true
+    }
+  ],
+  "objectives": [
+    {
+      "objective_id": "objective_alpha",
+      "label": "A",
+      "position": [30, 22],
+      "radius": 3
+    },
+    {
+      "objective_id": "objective_bravo",
+      "label": "B",
+      "position": [18, 12],
+      "radius": 3
+    }
+  ],
+  "terrain": [
+    {
+      "terrain_id": "ruin_west",
+      "label": "Ruin",
+      "footprint": [[13, 24], [24, 24], [24, 36], [13, 36]]
+    }
+  ],
+  "units": [
+    {
+      "unit_id": "intercessor_squad",
+      "player_id": "player_1",
+      "label": "Intercessors",
+      "models": [
+        {
+          "model_id": "intercessor_1",
+          "label": "I1",
+          "position": [7, 18],
+          "base_radius": 0.63
+        },
+        {
+          "model_id": "intercessor_2",
+          "label": "I2",
+          "position": [7, 22],
+          "base_radius": 0.63
+        }
+      ]
+    },
+    {
+      "unit_id": "guardian_squad",
+      "player_id": "player_2",
+      "label": "Guardians",
+      "models": [
+        {
+          "model_id": "guardian_1",
+          "label": "G1",
+          "position": [53, 18],
+          "base_radius": 0.63
+        },
+        {
+          "model_id": "guardian_2",
+          "label": "G2",
+          "position": [53, 22],
+          "base_radius": 0.63
+        }
+      ]
+    }
+  ],
+  "hud": {
+    "phase_label": "Fixture: Movement Phase",
+    "active_player_id": "player_1",
+    "pending_decision_summary": "Select movement action",
+    "event_log_lines": ["Fixture loaded", "Two units visible"]
+  }
+}

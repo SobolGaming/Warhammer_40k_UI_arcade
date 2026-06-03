@@ -114,11 +114,22 @@ warhammer40k-arcade-ui/
         protocol.py
       logging_config.py
       main.py
+      render/
+        __init__.py
+        arcade_window.py
+        camera.py
+        default_fixture.py
+        primitives.py
+        view_models.py
   tests/
+    fixtures/
+      phase03_battlefield_view.json
     test_core_client_local_session.py
     test_core_client_protocol.py
     test_config.py
     test_entrypoint.py
+    test_render_camera.py
+    test_render_primitives.py
   docs/
     README.md
     plans/
@@ -148,6 +159,10 @@ surface.
 - Keep `pyright` strict for `src/`.
 - Prefer deterministic tests for non-rendering logic.
 - UI consumes engine `GameViewPayload`-style projections rather than mutable engine objects.
+- The current launch path renders a fixture-backed inspectable battlefield until live engine
+  projections are connected to the render view models.
+- Render code uses typed read-only view models, pure camera transforms, and render primitives before
+  handing anything to Arcade.
 - UI submits `FiniteOptionSubmission` / `ParameterizedSubmission`-style choices through the
   adapter/session contract.
 - UI-facing submission methods keep `request_id` explicit and reject stale request drift before

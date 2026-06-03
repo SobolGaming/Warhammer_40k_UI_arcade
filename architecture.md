@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-2 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-3 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -37,7 +37,7 @@ under `docs/plans/`.
 | 0 | Complete | Repository bootstrap and quality baseline | [phase-00](docs/plans/phase-00-repository-bootstrap.md) |
 | 1 | Complete | Documentation foundation | [phase-01](docs/plans/phase-01-documentation-foundation.md) |
 | 2 | Complete | Core client adapter layer | [phase-02](docs/plans/phase-02-core-client-adapter.md) |
-| 3 | Planned | Arcade rendering foundation | [phase-03](docs/plans/phase-03-arcade-rendering-foundation.md) |
+| 3 | Complete | Arcade rendering foundation | [phase-03](docs/plans/phase-03-arcade-rendering-foundation.md) |
 | 4 | Planned | Selection and unit information HUD | [phase-04](docs/plans/phase-04-selection-unit-hud.md) |
 | 5 | Planned | Finite decision submission | [phase-05](docs/plans/phase-05-finite-decision-submission.md) |
 | 6 | Planned | Movement path drafting UI | [phase-06](docs/plans/phase-06-movement-path-drafting.md) |
@@ -66,22 +66,32 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-2 provide the runnable shell and core client boundary:
+Phases 0-3 provide the runnable shell, core client boundary, and inspectable render foundation:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
-- `warhammer40k_arcade_ui.app` — blank Arcade window and event-loop launcher.
+- `warhammer40k_arcade_ui.app` — Arcade window and event-loop launcher, with fake-runtime support
+  for entry-point tests.
 - `warhammer40k_arcade_ui.main` — console-script entry point.
 - `warhammer40k_arcade_ui.core_client.protocol` — UI-facing dataclasses and client protocol.
 - `warhammer40k_arcade_ui.core_client.local_session_client` — local in-process wrapper over the
   core engine adapter/session APIs.
 - `warhammer40k_arcade_ui.core_client.fake_client` — deterministic fake client for UI tests.
+- `warhammer40k_arcade_ui.render.view_models` — read-only battlefield render view models parsed from
+  deterministic fixture/projection payloads.
+- `warhammer40k_arcade_ui.render.camera` — world-space camera, pan/zoom, and screen/world
+  coordinate conversion.
+- `warhammer40k_arcade_ui.render.primitives` — pure table, deployment-zone, objective, terrain,
+  unit, model-base, and HUD primitive generation.
+- `warhammer40k_arcade_ui.render.arcade_window` — `ArcadeWarhammerWindow` consuming render
+  primitives for drawing, right/middle-drag panning, mouse-wheel zoom, and mouse coordinate display.
+- `warhammer40k_arcade_ui.render.default_fixture` — deterministic launch-time battlefield fixture
+  used until live projections are connected.
 
 Planned modules from later phases:
 
 - `preferences` — typed loading, validation, diagnostics, and export for shareable UI
   JSON/YAML profiles.
-- `render` — camera, table, terrain, unit, and overlay rendering primitives.
 - `input` — selection, movement path tooling, and command mapping.
 - `hud` — decision panels, unit panels, diagnostics, and context menus.
 - `state` — local-only UI state such as selection and movement drafts.
@@ -109,8 +119,8 @@ authoritative validation behavior.
 
 ## Runtime modes
 
-- **Local in-process session** — planned first integration mode. `core_client` will wrap approved
-  engine lifecycle/session APIs and expose UI view models.
+- **Local in-process session** — initial wrapper implemented in `core_client`; later phases will
+  bind live projections to render, selection, HUD, and decision workflows.
 - **Future network session** — planned transport mode behind the same UI-facing client facade.
 - **Future replay inspection mode** — planned read-only mode for inspecting engine replay/projection
   data without introducing a second mutation path.
@@ -151,16 +161,17 @@ finite movement action selection
 ## Testing strategy
 
 - Unit tests for immutable config and entry-point behavior.
+- Protocol shape tests for request IDs, option IDs, proposal payloads, and diagnostic view models.
+- Render-adjacent tests for camera coordinate transforms, zoom clamping, fixture view-model parsing,
+  HUD primitive placement, and view-model-to-render-primitive generation.
 - Future pure state tests for selection and movement draft transitions.
 - Future preferences tests for JSON/YAML schema loading, default-profile export, hotkey conflict
   detection, command/overlay registry validation, and config diagnostics.
-- Future protocol shape tests for request IDs, option IDs, and diagnostic view models.
-- Future render-adjacent tests for camera coordinate transforms and render primitive generation.
 - Future static checks to keep direct engine imports isolated to `core_client`.
 
 ## Known deferred work
 
-- Core client adapter implementation and real local game-session integration.
+- Live projection-to-render-state integration for the local game session.
 - Network transport.
 - Replay inspector.
 - Shooting HUD, charge HUD, fight HUD, and damage-allocation UI.
@@ -185,3 +196,6 @@ finite movement action selection
   fake UI client, explicit request-ID submission boundary, core dependency declaration, and tests
   covering pending decisions, movement proposal requests, invalid diagnostics, terminal status, and
   stale request rejection.
+- 2026-06-03: Phase 3 completed with fixture-backed battlefield view models, pure render primitive
+  generation, camera pan/zoom coordinate transforms, `ArcadeWarhammerWindow`, HUD/debug coordinate
+  rendering, and tests for camera math plus fixture-to-primitive generation.
