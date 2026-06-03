@@ -1,0 +1,144 @@
+"""Tests for selected-unit HUD and context action models."""
+
+from __future__ import annotations
+
+from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
+from warhammer40k_arcade_ui.hud.view_models import (
+    build_context_menu,
+    build_debug_inspector,
+    build_unit_panel,
+    decision_targets_unit,
+)
+from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
+from warhammer40k_arcade_ui.state.selection import SelectionState
+
+
+def test_unit_panel_options_are_derived_from_pending_decision_data() -> None:
+    view = default_battlefield_view()
+    selection = _selected_intercessors()
+    decision = _finite_decision_for("intercessor_squad")
+
+    panel = build_unit_panel(view=view, selection=selection, pending_decision=decision)
+
+    assert panel is not None
+    assert panel.unit_id == "intercessor_squad"
+    assert panel.model_count == 3
+    assert panel.selected_model_id == "intercessor_1"
+    assert panel.pending_request_id == "decision-request-000004"
+    assert [action.option_id for action in panel.available_actions] == [
+        "normal_move",
+        "advance",
+    ]
+    assert panel.available_actions[1].disabled_reason == "Unit is battle-shocked."
+
+
+def test_context_menu_only_uses_finite_options_for_targeted_unit() -> None:
+    view = default_battlefield_view()
+    selection = _selected_intercessors().open_context_menu((7.0, 18.0))
+    decision = _finite_decision_for("intercessor_squad")
+
+    menu = build_context_menu(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+    )
+
+    assert menu is not None
+    assert menu.request_id == "decision-request-000004"
+    assert [action.label for action in menu.actions] == ["Normal Move", "Advance"]
+
+
+def test_context_menu_ignores_non_targeted_and_parameterized_decisions() -> None:
+    view = default_battlefield_view()
+    selection = _selected_intercessors().open_context_menu((7.0, 18.0))
+
+    non_targeted = build_context_menu(
+        view=view,
+        selection=selection,
+        pending_decision=_finite_decision_for("guardian_squad"),
+    )
+    parameterized = build_context_menu(
+        view=view,
+        selection=selection,
+        pending_decision=UiDecision(
+            request_id="decision-request-000005",
+            decision_type="submit_movement_proposal",
+            actor_id="player_1",
+            payload={"unit_instance_id": "intercessor_squad"},
+            options=(
+                UiFiniteOption(
+                    option_id="submit_parameterized_payload",
+                    label="Submit Parameterized Payload",
+                    payload={"submission_kind": "parameterized"},
+                ),
+            ),
+            is_parameterized=True,
+        ),
+    )
+
+    assert non_targeted is None
+    assert parameterized is None
+
+
+def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> None:
+    selection = _selected_intercessors().toggle_debug_inspector()
+    decision = _finite_decision_for("intercessor_squad")
+
+    inspector = build_debug_inspector(
+        selection=selection,
+        pending_decision=decision,
+        cursor_position=(12.0, 13.5),
+        event_cursor=7,
+    )
+
+    assert inspector is not None
+    assert inspector.lines == (
+        "Request: decision-request-000004",
+        "Selected unit: intercessor_squad",
+        "Proposal kind: none",
+        "Cursor: 12.00, 13.50 in",
+        "Event cursor: 7",
+    )
+
+
+def test_decision_target_detection_uses_payload_unit_ids() -> None:
+    decision = _finite_decision_for("intercessor_squad")
+
+    assert decision_targets_unit(decision, "intercessor_squad") is True
+    assert decision_targets_unit(decision, "guardian_squad") is False
+
+
+def _selected_intercessors() -> SelectionState:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    return SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+
+
+def _finite_decision_for(unit_id: str) -> UiDecision:
+    return UiDecision(
+        request_id="decision-request-000004",
+        decision_type="select_movement_action",
+        actor_id="player_1",
+        payload={"unit_instance_id": unit_id},
+        options=(
+            UiFiniteOption(
+                option_id="normal_move",
+                label="Normal Move",
+                payload={"movement_phase_action": "normal_move"},
+            ),
+            UiFiniteOption(
+                option_id="advance",
+                label="Advance",
+                payload={
+                    "movement_phase_action": "advance",
+                    "disabled_reason": "Unit is battle-shocked.",
+                },
+            ),
+        ),
+        is_parameterized=False,
+    )

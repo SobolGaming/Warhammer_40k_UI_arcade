@@ -112,6 +112,12 @@ warhammer40k-arcade-ui/
         fake_client.py
         local_session_client.py
         protocol.py
+      hud/
+        __init__.py
+        view_models.py
+      input/
+        __init__.py
+        commands.py
       logging_config.py
       main.py
       render/
@@ -129,6 +135,9 @@ warhammer40k-arcade-ui/
         io.py
         registries.py
         schema.py
+      state/
+        __init__.py
+        selection.py
   tests/
     fixtures/
       phase03_battlefield_view.json
@@ -136,9 +145,11 @@ warhammer40k-arcade-ui/
     test_core_client_protocol.py
     test_config.py
     test_entrypoint.py
+    test_hud_selection.py
     test_preferences.py
     test_render_camera.py
     test_render_primitives.py
+    test_selection_state.py
   docs/
     README.md
     ui-configuration.md
@@ -189,6 +200,9 @@ surface.
   hidden-information visibility.
 - Generate starter preference profiles with `uv run warhammer40k-export-preferences --format yaml`
   or load the documented examples under `docs/preferences/`.
+- Phase 5 selection state is local-only: model-base clicks select projected units, selection
+  highlights and panels are advisory, and context menus display engine-provided finite options
+  without submitting them.
 - Do not add hidden fallback behavior when an engine payload is incomplete; fix the fixture or show
   a typed diagnostic.
 - Keep `docs/plans/` updated as implementation scope changes.

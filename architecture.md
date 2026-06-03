@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-4 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-5 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -39,7 +39,7 @@ under `docs/plans/`.
 | 2 | Complete | Core client adapter layer | [phase-02](docs/plans/phase-02-core-client-adapter.md) |
 | 3 | Complete | Arcade rendering foundation | [phase-03](docs/plans/phase-03-arcade-rendering-foundation.md) |
 | 4 | Complete | Shareable UI preferences framework | [phase-04](docs/plans/phase-04-shareable-ui-preferences.md) |
-| 5 | Planned | Selection and unit information HUD | [phase-05](docs/plans/phase-05-selection-unit-hud.md) |
+| 5 | Complete | Selection and unit information HUD | [phase-05](docs/plans/phase-05-selection-unit-hud.md) |
 | 6 | Planned | Finite decision submission | [phase-06](docs/plans/phase-06-finite-decision-submission.md) |
 | 7 | Planned | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
 | 8 | Planned | Movement proposal diagnostics | [phase-08](docs/plans/phase-08-movement-proposal-diagnostics.md) |
@@ -66,8 +66,8 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-4 provide the runnable shell, core client boundary, inspectable render foundation, and
-shareable UI preference framework:
+Phases 0-5 provide the runnable shell, core client boundary, inspectable render foundation,
+shareable UI preference framework, and local selection/HUD state:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
@@ -98,12 +98,17 @@ shareable UI preference framework:
   JSON, and YAML load/export helpers.
 - `warhammer40k_arcade_ui.preferences.export_profile` — CLI entry point for exporting starter
   profiles.
+- `warhammer40k_arcade_ui.state.selection` — local-only selection state, model-base hit detection,
+  overlap cycling, active overlay defaults, panel visibility, and debug/context-menu toggles.
+- `warhammer40k_arcade_ui.input.commands` — preference-backed local hotkey matching.
+- `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, and debug inspector
+  view models derived from projection data and current pending finite requests.
 
 Planned modules from later phases:
 
-- `input` — selection, movement path tooling, and command mapping.
-- `hud` — decision panels, unit panels, diagnostics, and context menus.
-- `state` — local-only UI state such as selection and movement drafts.
+- `input` — movement path tooling and later command flows.
+- `hud` — decision submission panels, diagnostics, and movement workflow controls.
+- `state` — movement drafts and other local-only workflow state.
 
 ## Shareable Preferences
 
@@ -139,6 +144,18 @@ Built-in profiles are exported through:
 uv run warhammer40k-export-preferences --format yaml
 uv run warhammer40k-export-preferences --profile dense-debug --format json
 ```
+
+## Selection and HUD State
+
+Phase 5 adds local-only selection and inspection state. The UI can select a model base from a
+viewer-scoped battlefield projection, derive the owning unit, cycle overlapping hits when configured
+by preferences, render selected-unit/model overlays, and show a selected-unit panel. Context menu
+actions are derived only from the current engine-provided finite options when the pending decision
+payload targets the selected unit.
+
+This phase remains display-only for decisions: no option is submitted until the finite decision
+submission phase. Selection state, context menu anchors, and debug inspector visibility are local UI
+state and do not mutate authoritative engine state.
 
 ## Runtime modes
 
@@ -190,7 +207,10 @@ finite movement action selection
 - Preferences tests for JSON/YAML schema loading, deterministic default-profile export, hotkey
   conflict detection, future-facing inactive properties, command/overlay registry validation, config
   diagnostics, and documented example profiles.
-- Future pure state tests for selection and movement draft transitions.
+- Pure state/HUD tests for selection hit detection, overlap cycling, preference-backed hotkeys,
+  selected-unit panels, context menu derivation from pending finite decisions, debug inspector
+  content, and selection overlay primitive generation.
+- Future pure state tests for movement draft transitions.
 - Future static checks to keep direct engine imports isolated to `core_client`.
 
 ## Known deferred work
@@ -230,3 +250,7 @@ finite movement action selection
   command/overlay/planned-setting registries, built-in default/dense-debug/keyboard-heavy profiles,
   documented example files, CLI export support, and tests covering schema diagnostics and
   round-trips.
+- 2026-06-03: Phase 5 completed with local selection state, model-base hit detection, overlap
+  cycling, selected-unit/model overlays, selected-unit panel view models, context menu display from
+  engine-provided finite options, debug inspector view models, preference-backed hotkeys, and tests
+  covering state, HUD derivation, and render primitives.

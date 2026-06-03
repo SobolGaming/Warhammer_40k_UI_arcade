@@ -94,12 +94,12 @@ def overlay_registry() -> dict[str, OverlayDefinition]:
         "selected_model": OverlayDefinition(
             overlay_id="selected_model",
             label="Selected model highlight",
-            status="planned",
+            status="active",
         ),
         "selected_unit": OverlayDefinition(
             overlay_id="selected_unit",
             label="Selected unit highlight",
-            status="planned",
+            status="active",
         ),
         "debug_coordinates": OverlayDefinition(
             overlay_id="debug_coordinates",
