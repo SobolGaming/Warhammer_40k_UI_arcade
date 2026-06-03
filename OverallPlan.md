@@ -36,6 +36,13 @@ warhammer40k-arcade-ui/
         movement_path_tool.py
         commands.py
 
+      preferences/
+        __init__.py
+        schema.py
+        loader.py
+        commands.py
+        overlays.py
+
       hud/
         __init__.py
         decision_panel.py
@@ -58,6 +65,7 @@ warhammer40k-arcade-ui/
   docs/
     protocol-notes.md
     movement-ui-flow.md
+    ui-configuration.md
 ```
 
 Use `uv` as the project and lockfile manager. It is a good fit here because it handles project dependencies, lockfiles, Python versions, scripts, and package-tool execution in one workflow. ([Astral Docs][2]) Arcade is a reasonable UI base because it is a Python 2D game library with GUI/event primitives and camera support, which maps well to a tactical table view with pan, zoom, selectable units, overlays, and HUD widgets. ([Python Arcade][3])
@@ -533,9 +541,66 @@ A user can complete the full flow: select unit → select movement action → dr
 
 ---
 
-# Phase 8 — HUD ergonomics pass
+# Phase 8 — Shareable UI configuration and bindings
+
+**Goal:** Add hand-editable, shareable UI preferences for presentation, overlays, HUD defaults, and input bindings without creating a second rules path.
+
+User configuration is allowed to control how the UI presents known information and maps local input to known UI commands. It must not create legal actions, finite option IDs, proposal kinds, rule validation, hidden-information visibility, or authoritative state changes.
+
+### Tasks
+
+* [ ] Add a `preferences` or `settings` module with versioned typed schemas:
+
+  * `UiPreferences`
+  * `OverlayPreferences`
+  * `HotkeyBinding`
+  * `SelectionBehaviorPreferences`
+  * `HudPreferences`
+* [ ] Support loading preferences from:
+
+  * an explicit config path, planned for a future CLI flag;
+  * a platform default path via `platformdirs`;
+  * built-in defaults when no user file exists.
+* [ ] Support hand-editable JSON and YAML files:
+
+  * keep generated examples portable and free of machine-specific absolute paths;
+  * add a YAML parser dependency only when this phase is implemented;
+  * include `schema_version` in every persisted profile.
+* [ ] Define stable UI command and overlay registries for local-only presentation commands.
+* [ ] Add selection-triggered overlay preferences:
+
+  * overlays enabled when a model is selected with the default mouse button;
+  * overlays enabled when a unit is selected;
+  * overlays enabled while a movement draft is active.
+* [ ] Add configurable hotkeys for toggling known overlays, selected model information, selected unit information, context menus, measure mode, confirm, cancel, and cycling.
+* [ ] Add typed config diagnostics for unsupported schema versions, unknown command IDs, unknown overlay IDs, duplicate hotkeys, invalid key syntax, and settings that reference unavailable features.
+* [ ] Add example profiles for defaults, dense/debug workflows, and keyboard-heavy workflows.
+* [ ] Wire preferences through render, input, HUD, and local UI state via typed registries rather than ad hoc string checks.
+
+### Acceptance criteria
+
+* [ ] JSON and YAML preference files can be loaded through the same typed schema.
+* [ ] Built-in defaults can be exported or documented as a complete hand-editable profile.
+* [ ] Unknown commands, unknown overlays, duplicate hotkeys, and invalid syntax produce visible typed config diagnostics instead of silent fallback behavior.
+* [ ] Default selection overlays can be configured for model selection, unit selection, and movement drafting.
+* [ ] Hotkeys can toggle known overlays and selected model/unit information panels.
+* [ ] Config files cannot create finite options, proposal kinds, engine decisions, or validation behavior.
+* [ ] Config-driven overlays remain viewer-scoped and cannot expose hidden opponent information.
+* [ ] Tests cover schema loading, JSON/YAML parsing, default-profile generation, hotkey conflict detection, command/overlay ID validation, and selection-triggered overlay activation.
+
+### Phase closeout milestone
+
+**Milestone 8: “Shareable Preferences Layer”**
+
+Users can hand-edit and pass around a portable UI preferences file that controls known overlays, selected-model/unit information affordances, HUD defaults, and hotkeys while preserving the engine-authoritative decision boundary.
+
+---
+
+# Phase 9 — HUD ergonomics pass
 
 **Goal:** Improve decision-making speed and reduce cognitive load.
+
+This phase should consume the Phase 8 preferences layer for overlay defaults, HUD defaults, and hotkeys instead of hard-coding user workflow assumptions into render, input, or HUD modules.
 
 ### Tasks
 
@@ -545,7 +610,7 @@ A user can complete the full flow: select unit → select movement action → dr
   * inspect
   * measure
   * cancel
-* [ ] Add range overlays:
+* [ ] Add range overlays using configured defaults where available:
 
   * movement budget
   * advance preview band, if data exists
@@ -566,11 +631,17 @@ A user can complete the full flow: select unit → select movement action → dr
   * open action menu
   * confirm action
   * submit/cancel draft
+  * honor configured hotkeys for known commands and overlays
 * [ ] Add accessibility basics:
 
   * scalable HUD text
   * color-independent warning icons
   * high-contrast toggle
+* [ ] Add preference-aware HUD affordances:
+
+  * apply configured selected-model and selected-unit panels;
+  * apply configured default overlay sets;
+  * surface config diagnostics in a non-authoritative diagnostics view.
 
 ### Acceptance criteria
 
@@ -578,17 +649,18 @@ A user can complete the full flow: select unit → select movement action → dr
 * [ ] A movement can be completed with mostly mouse input.
 * [ ] HUD labels distinguish authoritative facts from preview estimates.
 * [ ] Radial menu is not required for functionality; there is also a panel/button path.
+* [ ] Configured overlay defaults and hotkeys route through stable command/overlay registries.
 * [ ] Tests cover HUD view-model generation for selected unit and pending request.
 
 ### Phase closeout milestone
 
-**Milestone 8: “Usable Movement Client”**
+**Milestone 9: “Usable Movement Client”**
 
 The UI is no longer only a technical prototype; it is comfortable enough for repeated manual movement-phase testing.
 
 ---
 
-# Phase 9 — Packaging, CI, and regression hardening
+# Phase 10 — Packaging, CI, and regression hardening
 
 **Goal:** Make the UI reliable enough to use during engine development.
 
@@ -609,6 +681,8 @@ The UI is no longer only a technical prototype; it is comfortable enough for rep
   * movement proposal request
   * accepted movement response
   * invalid movement response
+  * default UI preferences profile
+  * invalid UI preferences profile
 * [ ] Add “no direct engine mutation” static check:
 
   * prohibit imports or calls into known mutable engine state APIs outside `core_client`
@@ -620,13 +694,14 @@ The UI is no longer only a technical prototype; it is comfortable enough for rep
 
 * [ ] CI passes on clean checkout.
 * [ ] All fixtures are deterministic and JSON-safe.
+* [ ] Preference fixtures are deterministic, portable, and schema-versioned.
 * [ ] Pull requests fail if pyright, ruff, or tests fail.
 * [ ] A new developer can run the UI from README without hidden steps.
 * [ ] `architecture.md` reflects actual module structure.
 
 ### Phase closeout milestone
 
-**Milestone 9: “Development-Ready UI Repo”**
+**Milestone 10: “Development-Ready UI Repo”**
 
 The UI repo is stable enough to use as a companion project while the core engine continues evolving.
 
@@ -714,6 +789,7 @@ I would choose your Python version based on dependency compatibility. The core r
 | `core_client` | Contract translation, request IDs, invalid diagnostics | Given a pending movement request, generated submission includes exact request id. |
 | `state`       | Selection, draft path, cancel/submit transitions       | Escape clears local draft but does not call submit.                               |
 | `input`       | Hit testing, waypoint editing, command mapping         | Clicking overlapping bases cycles candidates deterministically.                   |
+| `preferences` | Schema loading, hotkey conflicts, overlay/command IDs  | Unknown overlay IDs produce typed config diagnostics, not silent fallback.        |
 | `render`      | Coordinate transforms, primitive generation            | World-to-screen-to-world round trip stays within tolerance.                       |
 | `hud`         | View-model generation                                  | Finite options shown are exactly pending engine options.                          |
 | integration   | End-to-end finite + movement flow                      | Select Normal Move, submit path, refresh view, clear draft.                       |

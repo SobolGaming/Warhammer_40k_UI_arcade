@@ -38,8 +38,9 @@ Build bottom-up:
 7. finite decision display and submission
 8. movement draft state and path witness payloads
 9. proposal submission diagnostics
-10. HUD ergonomics
-11. packaging, CI, regression fixtures, and import-boundary audits
+10. shareable UI preferences for known overlays, HUD defaults, and input bindings
+11. HUD ergonomics
+12. packaging, CI, regression fixtures, and import-boundary audits
 
 Do not add shooting, fight, charge, AI, training, or private rule logic before the movement
 decision path is trustworthy end to end.
@@ -60,6 +61,9 @@ decision path is trustworthy end to end.
   viewer-scoped.
 - Entity IDs, request IDs, option IDs, UI result IDs, and payloads must be deterministic and
   serializable.
+- User preferences may configure known UI commands, known overlays, local hotkeys, HUD defaults, and
+  advisory presentation only; they must not create engine decisions, legal actions, proposal kinds,
+  validation behavior, or hidden-information visibility.
 
 ## Exception and fallback policy
 
@@ -82,6 +86,8 @@ If a fixture lacks a required field, fix the fixture. Do not weaken production U
 Dependency direction:
 
 - `warhammer40k_arcade_ui.core_client` may import or wrap approved core adapter/session APIs.
+- `warhammer40k_arcade_ui.preferences` may load and validate UI-local config profiles but must not
+  import mutable engine internals or define rule behavior.
 - `render`, `input`, `hud`, and `state` must depend on UI view models, not mutable engine internals.
 - Arcade objects are visual/input objects only; they are not game objects.
 - Future network clients must preserve the same UI-facing client facade.
@@ -115,6 +121,8 @@ Prefer pure, deterministic tests for non-rendering logic:
 - selection and movement draft state transitions
 - generated movement payload shapes
 - diagnostic view models
+- shareable preferences schema loading, default-profile export, hotkey conflict diagnostics, and
+  command/overlay registry validation
 - camera coordinate transforms and render primitive generation
 - static checks that only `core_client` imports approved engine adapter/session modules
 

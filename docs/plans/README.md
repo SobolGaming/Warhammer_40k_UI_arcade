@@ -15,8 +15,9 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 5 | [Finite decision submission](phase-05-finite-decision-submission.md) | Authoritative Finite Decision UI |
 | 6 | [Movement path drafting UI](phase-06-movement-path-drafting.md) | Movement Path Planner |
 | 7 | [Movement proposal submission and diagnostics](phase-07-movement-proposal-diagnostics.md) | End-to-End Movement UI |
-| 8 | [HUD ergonomics pass](phase-08-hud-ergonomics.md) | Usable Movement Client |
-| 9 | [Packaging, CI, and regression hardening](phase-09-packaging-ci-regression.md) | Development-Ready UI Repo |
+| 8 | [Shareable UI configuration and bindings](phase-08-shareable-ui-configuration.md) | Shareable Preferences Layer |
+| 9 | [HUD ergonomics pass](phase-09-hud-ergonomics.md) | Usable Movement Client |
+| 10 | [Packaging, CI, and regression hardening](phase-10-packaging-ci-regression.md) | Development-Ready UI Repo |
 
 ## First sprint recommendation
 
@@ -30,7 +31,8 @@ Keep the first sprint intentionally narrow:
 6. Add a unit info panel.
 7. Add a fake pending decision panel with “Normal Move”.
 8. Add movement path drafting against fake data.
-9. Connect the same UI flow to a real `LocalGameSession` wrapper only after the UI loop is stable.
+9. Add a small default preferences profile for overlay and hotkey assumptions used by the prototype.
+10. Connect the same UI flow to a real `LocalGameSession` wrapper only after the UI loop is stable.
 
 ## Most important architectural rule
 
