@@ -1,4 +1,4 @@
-# Phase 7 — Movement proposal submission and diagnostics
+# Phase 8 — Movement proposal submission and diagnostics
 
 ## Goal
 
@@ -45,7 +45,7 @@ diagnostics.
 
 ## Closeout milestone
 
-**Milestone 7: “End-to-End Movement UI”**
+**Milestone 8: “End-to-End Movement UI”**
 
 A user can complete the full flow: select unit → select movement action → draw path → submit
 movement proposal → see accepted state or authoritative diagnostics.

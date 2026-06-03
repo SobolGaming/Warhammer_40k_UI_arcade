@@ -38,11 +38,11 @@ under `docs/plans/`.
 | 1 | Complete | Documentation foundation | [phase-01](docs/plans/phase-01-documentation-foundation.md) |
 | 2 | Complete | Core client adapter layer | [phase-02](docs/plans/phase-02-core-client-adapter.md) |
 | 3 | Complete | Arcade rendering foundation | [phase-03](docs/plans/phase-03-arcade-rendering-foundation.md) |
-| 4 | Planned | Selection and unit information HUD | [phase-04](docs/plans/phase-04-selection-unit-hud.md) |
-| 5 | Planned | Finite decision submission | [phase-05](docs/plans/phase-05-finite-decision-submission.md) |
-| 6 | Planned | Movement path drafting UI | [phase-06](docs/plans/phase-06-movement-path-drafting.md) |
-| 7 | Planned | Movement proposal diagnostics | [phase-07](docs/plans/phase-07-movement-proposal-diagnostics.md) |
-| 8 | Planned | Shareable UI configuration and bindings | [phase-08](docs/plans/phase-08-shareable-ui-configuration.md) |
+| 4 | Planned | Shareable UI preferences framework | [phase-04](docs/plans/phase-04-shareable-ui-preferences.md) |
+| 5 | Planned | Selection and unit information HUD | [phase-05](docs/plans/phase-05-selection-unit-hud.md) |
+| 6 | Planned | Finite decision submission | [phase-06](docs/plans/phase-06-finite-decision-submission.md) |
+| 7 | Planned | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
+| 8 | Planned | Movement proposal diagnostics | [phase-08](docs/plans/phase-08-movement-proposal-diagnostics.md) |
 | 9 | Planned | HUD ergonomics pass | [phase-09](docs/plans/phase-09-hud-ergonomics.md) |
 | 10 | Planned | Packaging, CI, and regression hardening | [phase-10](docs/plans/phase-10-packaging-ci-regression.md) |
 
@@ -98,8 +98,10 @@ Planned modules from later phases:
 
 ## Shareable Preferences
 
-The UI should support portable hand-editable preference profiles in JSON and YAML. These profiles are
-intended to be easy to pass between users and should control local presentation and input behavior:
+Phase 4 pulls the preferences framework forward so portable hand-editable profiles are available
+before selection, HUD, movement drafting, and ergonomics begin hard-coding workflow assumptions.
+Profiles should load and export as JSON and YAML. They are intended to be easy to pass between users
+and should control local presentation and input behavior:
 
 - default overlays enabled when a model or unit is selected;
 - default overlays enabled while movement drafting is active;
@@ -116,6 +118,12 @@ are ever needed.
 Preferences can only select from registered UI commands and registered advisory overlays. A config
 file cannot invent finite option IDs, proposal kinds, engine decisions, hidden visibility rules, or
 authoritative validation behavior.
+
+The schema may include recognized future-facing properties so users can encode and exchange upcoming
+behavior assumptions early. These settings must round-trip through export, but they remain inactive
+until their implementing phase wires them to a registered UI command, overlay, HUD feature, or local
+state behavior. Unknown settings outside an explicit experimental/extension section must produce
+typed diagnostics.
 
 ## Runtime modes
 
@@ -165,8 +173,9 @@ finite movement action selection
 - Render-adjacent tests for camera coordinate transforms, zoom clamping, fixture view-model parsing,
   HUD primitive placement, and view-model-to-render-primitive generation.
 - Future pure state tests for selection and movement draft transitions.
-- Future preferences tests for JSON/YAML schema loading, default-profile export, hotkey conflict
-  detection, command/overlay registry validation, and config diagnostics.
+- Future preferences tests for JSON/YAML schema loading, deterministic default-profile export,
+  hotkey conflict detection, future-facing inactive properties, command/overlay registry validation,
+  and config diagnostics.
 - Future static checks to keep direct engine imports isolated to `core_client`.
 
 ## Known deferred work
@@ -189,9 +198,9 @@ finite movement action selection
 - 2026-05-31: Phase 1 completed with README and architecture documentation covering repository
   relationships, first-run commands, UI/core boundaries, runtime modes, roadmap links, and deferred
   work.
-- 2026-06-03: Added Phase 8 for shareable JSON/YAML UI preferences covering overlay defaults,
-  hotkeys, selected-model/unit information affordances, and config diagnostics while preserving the
-  engine-authoritative decision boundary.
+- 2026-06-03: Added an initial later-phase plan for shareable JSON/YAML UI preferences covering
+  overlay defaults, hotkeys, selected-model/unit information affordances, and config diagnostics
+  while preserving the engine-authoritative decision boundary.
 - 2026-06-03: Phase 2 completed with a `core_client` protocol, local in-process session wrapper,
   fake UI client, explicit request-ID submission boundary, core dependency declaration, and tests
   covering pending decisions, movement proposal requests, invalid diagnostics, terminal status, and
@@ -199,3 +208,6 @@ finite movement action selection
 - 2026-06-03: Phase 3 completed with fixture-backed battlefield view models, pure render primitive
   generation, camera pan/zoom coordinate transforms, `ArcadeWarhammerWindow`, HUD/debug coordinate
   rendering, and tests for camera math plus fixture-to-primitive generation.
+- 2026-06-03: Pulled the shareable preferences framework forward to Phase 4 so upcoming overlay,
+  HUD, hotkey, and local behavior settings can be encoded, exported, swapped, and round-tripped
+  before selection and movement workflows consume them.

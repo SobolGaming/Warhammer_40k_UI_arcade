@@ -34,11 +34,11 @@ Build bottom-up:
 3. UI/core client facade
 4. fixture-backed view models
 5. rendering primitives and camera
-6. selection and local UI state
-7. finite decision display and submission
-8. movement draft state and path witness payloads
-9. proposal submission diagnostics
-10. shareable UI preferences for known overlays, HUD defaults, and input bindings
+6. shareable UI preferences for known and planned overlays, HUD defaults, and input bindings
+7. selection and local UI state
+8. finite decision display and submission
+9. movement draft state and path witness payloads
+10. proposal submission diagnostics
 11. HUD ergonomics
 12. packaging, CI, regression fixtures, and import-boundary audits
 

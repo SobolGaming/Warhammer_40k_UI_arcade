@@ -1,13 +1,22 @@
-# Phase 8 — Shareable UI configuration and bindings
+# Phase 4 — Shareable UI preferences framework
 
 ## Goal
 
-Add a hand-editable, shareable UI preferences layer for presentation, overlays, HUD defaults, and
-input bindings without creating a second rules path.
+Add a hand-editable, shareable UI preferences framework before selection/HUD work so upcoming UI
+behavior can be encoded, exported, swapped, and experimented with through portable JSON or YAML
+profiles.
 
 User configuration is allowed to control how the UI presents known information and maps local input
 to known UI commands. It must not create legal actions, finite option IDs, proposal kinds, rule
 validation, hidden-information visibility, or authoritative state changes.
+
+This phase intentionally creates the preferences schema early, before every referenced overlay or
+HUD behavior exists. Future-facing preferences may name known planned properties, but validation must
+distinguish between:
+
+- supported settings that are active in the current build;
+- planned settings that are accepted and preserved but not yet applied;
+- unknown settings, unknown commands, or unknown overlays that should produce typed diagnostics.
 
 ## Tasks
 
@@ -17,6 +26,12 @@ validation, hidden-information visibility, or authoritative state changes.
   - `HotkeyBinding`
   - `SelectionBehaviorPreferences`
   - `HudPreferences`
+  - `ExperimentalPreferenceFlags`
+- [ ] Define schema behavior for future-facing properties:
+  - preserve recognized-but-unimplemented settings through load/export round trips;
+  - mark them as inactive through diagnostics rather than dropping them;
+  - reject unknown top-level keys unless they are under a clearly named experimental/extension
+    section.
 - [ ] Support loading preferences from:
   - an explicit config path, planned for a future CLI flag;
   - a platform default path via `platformdirs`;
@@ -25,6 +40,11 @@ validation, hidden-information visibility, or authoritative state changes.
   - keep generated examples portable and free of machine-specific absolute paths;
   - add a YAML parser dependency only when this phase is implemented;
   - include `schema_version` in every persisted profile.
+- [ ] Support exporting profiles:
+  - write the active/default profile as JSON;
+  - write the active/default profile as YAML;
+  - preserve stable field order for easy diffs;
+  - include comments or adjacent docs for YAML examples where practical.
 - [ ] Define a stable UI command registry for local-only commands:
   - toggle known overlay for selected model or unit;
   - show selected model details;
@@ -58,13 +78,21 @@ validation, hidden-information visibility, or authoritative state changes.
   - default profile;
   - dense/debug profile;
   - keyboard-heavy profile.
-- [ ] Wire preferences through render, input, HUD, and local UI state via typed registries rather
-  than ad hoc string checks.
+- [ ] Add a small command-line or callable export path so users can generate a starter profile
+  without copying internal defaults by hand.
+- [ ] Document the preference file format, supported IDs, planned-but-inactive IDs, and extension
+  policy.
+- [ ] Wire preferences through render, input, HUD, and local UI state boundaries via typed registries
+  rather than ad hoc string checks. Later phases should consume the framework instead of inventing
+  local configuration shapes.
 
 ## Acceptance criteria
 
 - [ ] JSON and YAML preference files can be loaded through the same typed schema.
 - [ ] Built-in defaults can be exported or documented as a complete hand-editable profile.
+- [ ] Exported profiles are portable, deterministic, schema-versioned, and easy to diff.
+- [ ] Recognized upcoming properties can be encoded, round-tripped, and diagnosed as inactive until
+  the implementing phase enables them.
 - [ ] Unknown commands, unknown overlays, duplicate hotkeys, and invalid syntax produce visible typed
   config diagnostics instead of silent fallback behavior.
 - [ ] Default selection overlays can be configured for model selection, unit selection, and movement
@@ -74,12 +102,13 @@ validation, hidden-information visibility, or authoritative state changes.
   behavior.
 - [ ] Config-driven overlays remain viewer-scoped and cannot expose hidden opponent information.
 - [ ] Tests cover schema loading, JSON/YAML parsing, default-profile generation, hotkey conflict
-  detection, command/overlay ID validation, and selection-triggered overlay activation.
+  detection, export determinism, command/overlay ID validation, future-facing inactive properties,
+  and selection-triggered overlay activation.
 
 ## Closeout milestone
 
-**Milestone 8: “Shareable Preferences Layer”**
+**Milestone 4: “Shareable Preferences Framework”**
 
 Users can hand-edit and pass around a portable UI preferences file that controls known overlays,
-selected-model/unit information affordances, HUD defaults, and hotkeys while preserving the
-engine-authoritative decision boundary.
+selected-model/unit information affordances, HUD defaults, hotkeys, and planned UI behavior settings
+while preserving the engine-authoritative decision boundary.

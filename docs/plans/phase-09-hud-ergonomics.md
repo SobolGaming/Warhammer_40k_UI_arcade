@@ -4,7 +4,7 @@
 
 Improve decision-making speed and reduce cognitive load.
 
-This phase should consume the Phase 8 preferences layer for overlay defaults, HUD defaults, and
+This phase should consume the Phase 4 preferences framework for overlay defaults, HUD defaults, and
 hotkeys instead of hard-coding user workflow assumptions into render, input, or HUD modules.
 
 ## Tasks

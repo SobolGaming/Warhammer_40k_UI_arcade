@@ -103,5 +103,5 @@ feel, but native offscreen framebuffer readback is now available for Codex-side 
 
 - Connect `LocalSessionClient.get_view(...)` projections to `BattlefieldView` once the core exposes
   stable renderable battlefield projection fields.
-- Phase 4 should layer selection state over the primitive IDs rather than making Arcade objects into
+- Phase 5 should layer selection state over the primitive IDs rather than making Arcade objects into
   game objects.

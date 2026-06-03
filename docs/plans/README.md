@@ -11,11 +11,11 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 1 | [Documentation foundation](phase-01-documentation-foundation.md) | Documented Scaffold |
 | 2 | [Core client adapter layer](phase-02-core-client-adapter.md) | Engine Boundary Stable |
 | 3 | [Arcade rendering foundation](phase-03-arcade-rendering-foundation.md) | Inspectable Battlefield |
-| 4 | [Selection and unit information HUD](phase-04-selection-unit-hud.md) | Selectable Tactical View |
-| 5 | [Finite decision submission](phase-05-finite-decision-submission.md) | Authoritative Finite Decision UI |
-| 6 | [Movement path drafting UI](phase-06-movement-path-drafting.md) | Movement Path Planner |
-| 7 | [Movement proposal submission and diagnostics](phase-07-movement-proposal-diagnostics.md) | End-to-End Movement UI |
-| 8 | [Shareable UI configuration and bindings](phase-08-shareable-ui-configuration.md) | Shareable Preferences Layer |
+| 4 | [Shareable UI preferences framework](phase-04-shareable-ui-preferences.md) | Shareable Preferences Framework |
+| 5 | [Selection and unit information HUD](phase-05-selection-unit-hud.md) | Selectable Tactical View |
+| 6 | [Finite decision submission](phase-06-finite-decision-submission.md) | Authoritative Finite Decision UI |
+| 7 | [Movement path drafting UI](phase-07-movement-path-drafting.md) | Movement Path Planner |
+| 8 | [Movement proposal submission and diagnostics](phase-08-movement-proposal-diagnostics.md) | End-to-End Movement UI |
 | 9 | [HUD ergonomics pass](phase-09-hud-ergonomics.md) | Usable Movement Client |
 | 10 | [Packaging, CI, and regression hardening](phase-10-packaging-ci-regression.md) | Development-Ready UI Repo |
 
@@ -27,11 +27,12 @@ Keep the first sprint intentionally narrow:
 2. Launch a blank Arcade window.
 3. Render a fake 60" x 44" table with placeholder objectives.
 4. Render two fake units from fixture JSON.
-5. Add pan/zoom and click selection.
-6. Add a unit info panel.
-7. Add a fake pending decision panel with “Normal Move”.
-8. Add movement path drafting against fake data.
-9. Add a small default preferences profile for overlay and hotkey assumptions used by the prototype.
+5. Add a small default preferences profile for overlay, HUD, and hotkey assumptions used by the
+   prototype.
+6. Add pan/zoom and click selection.
+7. Add a unit info panel.
+8. Add a fake pending decision panel with “Normal Move”.
+9. Add movement path drafting against fake data.
 10. Connect the same UI flow to a real `LocalGameSession` wrapper only after the UI loop is stable.
 
 ## Most important architectural rule

@@ -1,4 +1,4 @@
-# Phase 6 — Movement path drafting UI
+# Phase 7 — Movement path drafting UI
 
 ## Goal
 
@@ -56,7 +56,7 @@ rule explicitly models teleport/setup placement.
 
 ## Closeout milestone
 
-**Milestone 6: “Movement Path Planner”**
+**Milestone 7: “Movement Path Planner”**
 
 A user can select a unit, choose Normal Move, draft a movement path, preview the result, and prepare
 an engine-compatible movement proposal payload.

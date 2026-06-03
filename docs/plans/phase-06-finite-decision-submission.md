@@ -1,4 +1,4 @@
-# Phase 5 — Finite decision submission
+# Phase 6 — Finite decision submission
 
 ## Goal
 
@@ -34,7 +34,7 @@ option IDs rather than inventing option IDs.
 
 ## Closeout milestone
 
-**Milestone 5: “Authoritative Finite Decision UI”**
+**Milestone 6: “Authoritative Finite Decision UI”**
 
 The UI can answer engine-provided finite decisions correctly and visibly handles invalid/stale
 outcomes.

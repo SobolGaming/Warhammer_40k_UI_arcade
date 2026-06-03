@@ -1,8 +1,12 @@
-# Phase 4 — Selection and unit information HUD
+# Phase 5 — Selection and unit information HUD
 
 ## Goal
 
 Select a unit/model and show useful information without submitting decisions yet.
+
+This phase should consume the Phase 4 preferences framework for default selection overlays,
+selected-model/unit information panel defaults, debug inspector defaults, and configured local
+selection hotkeys.
 
 ## Tasks
 
@@ -27,6 +31,11 @@ Select a unit/model and show useful information without submitting decisions yet
   - proposal kind
   - cursor position
   - event cursor
+- [ ] Apply relevant Phase 4 preferences:
+  - default overlays when a model is selected;
+  - default overlays when a unit is selected;
+  - selected-model and selected-unit information panel defaults;
+  - selection cycling and debug inspector hotkeys.
 
 ## Acceptance criteria
 
@@ -36,9 +45,11 @@ Select a unit/model and show useful information without submitting decisions yet
 - [ ] Radial/context menu never invents options; it only displays engine-provided options.
 - [ ] Tests verify hit detection and selection priority.
 - [ ] Tests verify menu options are derived from pending decision data, not hard-coded rule assumptions.
+- [ ] Tests verify selection behavior consumes typed preferences and ignores inactive future-facing
+  preference fields.
 
 ## Closeout milestone
 
-**Milestone 4: “Selectable Tactical View”**
+**Milestone 5: “Selectable Tactical View”**
 
 A user can select a unit, inspect it, and see context-sensitive options provided by the engine.

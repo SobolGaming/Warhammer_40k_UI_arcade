@@ -56,7 +56,8 @@ The UI is initially scoped to:
 - blank runnable client scaffolding;
 - initial movement-only interaction as the first rules-facing vertical slice;
 - engine-authoritative validation for all accepted state changes;
-- future hand-editable JSON/YAML UI preferences for shareable overlay, HUD, and hotkey workflows;
+- Phase 4 hand-editable JSON/YAML UI preferences for shareable overlay, HUD, hotkey, and planned
+  local behavior settings;
 - a future network client mode behind the same UI-facing client facade.
 
 Early milestone non-goals:
@@ -169,9 +170,10 @@ surface.
   constructing engine-facing results.
 - UI displays authoritative invalid diagnostics from the engine instead of silently correcting them.
 - UI previews are advisory only; only accepted engine results can update authoritative state.
-- Future UI preference files may configure known overlays, hotkeys, HUD defaults, and selected
-  model/unit information affordances, but they must not define rules, legal actions, engine
-  decisions, proposal kinds, validation behavior, or hidden-information visibility.
+- Planned Phase 4 UI preference files may configure known overlays, hotkeys, HUD defaults, selected
+  model/unit information affordances, and recognized upcoming behavior settings, but they must not
+  define rules, legal actions, engine decisions, proposal kinds, validation behavior, or
+  hidden-information visibility.
 - Do not add hidden fallback behavior when an engine payload is incomplete; fix the fixture or show
   a typed diagnostic.
 - Keep `docs/plans/` updated as implementation scope changes.
