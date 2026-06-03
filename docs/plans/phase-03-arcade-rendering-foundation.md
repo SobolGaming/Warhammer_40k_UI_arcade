@@ -76,15 +76,28 @@ Passed:
 - `env UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests`
 - `env UV_CACHE_DIR=/tmp/uv-cache uv run pytest`
 
-Additional smoke attempt:
+Additional GUI validation attempts:
 
 - `PYGLET_HEADLESS=true` real-window construction failed before app code could create the window
   because Arcade/pyglet import attempted Linux XInput setup and raised
   `AttributeError: module 'pyglet.window' has no attribute 'xlib'`.
-- Creating an invisible Arcade window without headless mode failed with
+- Before Codex had display access, creating an invisible Arcade window without headless mode failed
+  with
   `NoSuchDisplayException: Cannot connect to "None"` in this display-less container.
+- After Codex was granted desktop display access, real `ArcadeWarhammerWindow` construction, draw,
+  flip, and close succeeded on `DISPLAY=:0` / `WAYLAND_DISPLAY=wayland-0`.
+- Reading pixels directly from `ctx.screen` still returned an all-black buffer. A minimal Arcade
+  render had the same issue, so this is a default-framebuffer readback limitation rather than a
+  Phase 3 rendering failure.
+- Native offscreen framebuffer validation succeeded by rendering into a texture-backed
+  `arcade.gl.Framebuffer`, calling `framebuffer.use()`, drawing the Phase 3 battlefield, synchronizing
+  with `ctx.finish()`, and reading `attachment=0` / `GL_COLOR_ATTACHMENT0` with
+  `framebuffer.read(...)`. The captured PNG at `/tmp/warhammer40k_arcade_phase3_fbo_capture.png`
+  was nonblank and showed the expected HUD, table bounds, deployment zones, terrain, objectives,
+  unit tokens, and model bases.
 
-Manual visual launch should be performed in a desktop environment with a display server.
+Manual visual launch should still be performed in a desktop environment when checking interaction
+feel, but native offscreen framebuffer readback is now available for Codex-side render validation.
 
 ## Follow-up notes
 
