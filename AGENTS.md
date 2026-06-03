@@ -13,6 +13,7 @@ authoritative results or diagnostics returned by the core engine.
 - Core engine repository: `https://github.com/SobolGaming/Warhammer_40k_AI`
 - Core agent rules: `Warhammer_40k_AI/AGENTS.md`
 - Adapter contract: `Warhammer_40k_AI/docs/ADAPTER_DECISION_CONTRACT.md`
+- Core PR review template: `Warhammer_40k_AI/.github/pull_request_template.md`
 - UI planning documents: `docs/plans/`
 
 If this file conflicts with the core adapter contract, stop and ask before coding.
@@ -24,6 +25,54 @@ present, the relevant plan in `docs/plans/`, and relevant tests.
 
 If a request would weaken the UI/core boundary or create a second validation path, stop
 and ask.
+
+## Pull-request mediated development
+
+Feature work should be PR-shaped by default, even when the user is asking for local implementation
+work in this workspace.
+
+Before starting a feature implementation:
+
+1. identify the owning phase plan and acceptance criteria;
+2. state whether the work changes UI/core boundaries, decision submission, preferences, rendering,
+   input, HUD, local UI state, or documentation only;
+3. keep the change scoped to one reviewable behavior slice;
+4. avoid mixing unrelated refactors, dependency churn, and feature work;
+5. call out any required core adapter-contract update before coding.
+
+During implementation:
+
+- preserve the current worktree and never revert unrelated user changes;
+- keep commits/branches PR-ready when the user asks for git operations;
+- until the user enables Codex push/PR creation, keep Codex-made changes local and PR-ready rather
+  than attempting to push branches or open pull requests;
+- update the relevant phase plan, README, architecture docs, or ADR notes in the same work item when
+  behavior, sequencing, boundaries, or acceptance criteria change;
+- add focused tests for the behavior slice instead of relying only on manual launch checks;
+- for GUI/rendering changes, prefer deterministic camera/primitive tests and, when display access is
+  available, native offscreen framebuffer validation before claiming visual rendering was checked.
+
+Before a PR or PR-ready handoff, provide:
+
+- purpose: invariant, module, or behavior changed;
+- scope: docs only, preferences, render, input/state, HUD, core-client boundary, decision flow, or
+  packaging/CI;
+- invariants checked:
+  - no UI-owned authoritative mutation;
+  - no private rules path;
+  - no invented decision IDs, proposal kinds, or option IDs;
+  - no hidden-information leak;
+  - no silent fallback or broad exception handling;
+  - no direct mutable engine imports outside `core_client`;
+  - preference files cannot define rules, legal actions, validation behavior, or visibility
+    exceptions;
+- commands run, including any command that could not be run and why;
+- reviewer notes naming what should be scrutinized most carefully.
+
+When a change adds or changes a player-facing decision, finite option family, proposal kind,
+adapter-visible payload shape, or viewer-visibility behavior, the same PR must update
+`Warhammer_40k_AI/docs/ADAPTER_DECISION_CONTRACT.md`, or explicitly justify why the existing
+contract already covers the change.
 
 ## Build order
 
@@ -144,13 +193,16 @@ Run the commands that exist for the current project stage:
 ```bash
 uv run ruff check .
 uv run ruff format --check .
+uv run mypy src tests
 uv run pyright
 uv run pytest tests/
 uv run pre-commit run --all-files
 ```
 
-If optional gates such as `mypy` or import-boundary checks are configured, run them too. If a
-command cannot be run because the project is not bootstrapped yet, say so. Do not claim it passed.
+If import-boundary checks, GUI smoke checks, or CI-specific gates are configured for the current
+slice, run them too. If a command cannot be run because the project is not bootstrapped, display
+access is unavailable, dependencies are unavailable, or the user has not approved an escalated
+operation, say so. Do not claim it passed.
 
 ## Documentation policy
 
@@ -173,5 +225,5 @@ Stop before coding if the change would:
 - copy legacy code wholesale;
 - weaken a core invariant from `Warhammer_40k_AI/AGENTS.md`.
 
-Agents should prefer small typed modules, visible diagnostics, deterministic fixtures, and plan
-updates over large speculative UI rewrites.
+Agents should prefer reviewable PR-sized slices, small typed modules, visible diagnostics,
+deterministic fixtures, tests, and plan updates over large speculative UI rewrites.
