@@ -18,6 +18,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiGameView,
     UiInvalidDiagnostic,
     UiMovementProposalRequest,
+    UiParameterizedProposalRequest,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "UiGameView",
     "UiInvalidDiagnostic",
     "UiMovementProposalRequest",
+    "UiParameterizedProposalRequest",
 ]

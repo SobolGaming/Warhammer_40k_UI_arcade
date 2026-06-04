@@ -10,6 +10,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiFiniteOption,
     UiGameView,
     UiMovementProposalRequest,
+    UiParameterizedProposalRequest,
 )
 
 
@@ -98,6 +99,47 @@ def test_status_represents_movement_proposal_request() -> None:
     assert status.decision.movement_proposal == UiMovementProposalRequest.from_payload(
         proposal_payload
     )
+    assert status.decision.parameterized_proposal == UiParameterizedProposalRequest.from_payload(
+        proposal_payload
+    )
+
+
+def test_status_represents_generic_parameterized_request_without_movement_shape() -> None:
+    status = UiClientStatus.from_payload(
+        {
+            "stage": "battle",
+            "status_kind": "waiting_for_decision",
+            "decision_request": {
+                "request_id": "decision-request-000009",
+                "decision_type": "submit_stratagem_target_proposal",
+                "actor_id": "player-a",
+                "payload": {
+                    "proposal_request": {
+                        "request_id": "decision-request-000009",
+                        "decision_type": "submit_stratagem_target_proposal",
+                        "actor_id": "player-a",
+                        "proposal_kind": "core:smokescreen",
+                        "trigger_window": "after_unit_selected_as_target",
+                    }
+                },
+                "options": [
+                    {
+                        "option_id": "submit_parameterized_payload",
+                        "label": "Submit Parameterized Payload",
+                        "payload": {"submission_kind": "parameterized"},
+                    }
+                ],
+            },
+            "message": None,
+            "payload": None,
+        }
+    )
+
+    assert status.decision is not None
+    assert status.decision.is_parameterized is True
+    assert status.decision.movement_proposal is None
+    assert status.decision.parameterized_proposal is not None
+    assert status.decision.parameterized_proposal.proposal_kind == "core:smokescreen"
 
 
 def test_invalid_status_represents_proposal_diagnostics() -> None:
@@ -193,6 +235,7 @@ def test_game_view_represents_viewer_projection() -> None:
     assert view.pending_decision is None
     assert view.pending_proposal is not None
     assert view.pending_proposal.request_id == "decision-request-000005"
+    assert view.pending_proposal.proposal_kind == "normal_move"
 
 
 def test_fake_core_client_records_explicit_submission_ids() -> None:

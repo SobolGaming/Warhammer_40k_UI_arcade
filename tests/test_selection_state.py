@@ -55,6 +55,36 @@ def test_selection_cycles_overlapping_bases_when_preference_allows() -> None:
     assert second.selected_model_id == "model_b"
 
 
+def test_cycle_existing_at_does_not_select_from_hover_only() -> None:
+    view = _overlapping_view()
+    preferences = default_preferences()
+    state = SelectionState.initial(preferences)
+
+    cycled = state.cycle_existing_at(
+        view=view,
+        world_point=(10.1, 10.0),
+        preferences=preferences,
+    )
+
+    assert cycled.selected_model_id is None
+    assert cycled.selected_unit_id is None
+
+
+def test_cycle_existing_at_cycles_after_explicit_selection() -> None:
+    view = _overlapping_view()
+    preferences = default_preferences()
+    state = SelectionState.initial(preferences)
+    selected = state.select_at(view=view, world_point=(10.1, 10.0), preferences=preferences)
+
+    cycled = selected.cycle_existing_at(
+        view=view,
+        world_point=(10.1, 10.0),
+        preferences=preferences,
+    )
+
+    assert cycled.selected_model_id == "model_b"
+
+
 def test_selection_uses_nearest_base_when_overlap_cycling_is_disabled() -> None:
     view = _overlapping_view()
     base_preferences = default_preferences()

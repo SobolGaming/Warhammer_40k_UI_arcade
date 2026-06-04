@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from importlib import import_module
+from os import environ
 from typing import Any, Protocol, cast
 
 from warhammer40k_arcade_ui.config import AppConfig
+
+PHASE6_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6"
 
 
 class ArcadeWindow(Protocol):
@@ -70,6 +73,18 @@ def create_window(
     if arcade_runtime is None:
         from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 
+        if _phase6_debug_enabled():
+            from warhammer40k_arcade_ui.debug_fixtures import (
+                phase6_debug_core_client,
+                phase6_debug_pending_decision,
+            )
+
+            return ArcadeWarhammerWindow(
+                config=resolved_config,
+                pending_decision=phase6_debug_pending_decision(),
+                core_client=phase6_debug_core_client(),
+                viewer_player_id="player_1",
+            )
         return ArcadeWarhammerWindow(config=resolved_config)
 
     runtime = arcade_runtime
@@ -97,3 +112,7 @@ def run_app(
     runtime = arcade_runtime
     create_window(config, runtime)
     runtime.run()
+
+
+def _phase6_debug_enabled() -> bool:
+    return environ.get(PHASE6_DEBUG_ENV_VAR) == "1"

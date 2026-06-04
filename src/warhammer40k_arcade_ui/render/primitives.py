@@ -10,6 +10,8 @@ from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
     DebugInspectorView,
+    FiniteDecisionOptionView,
+    FiniteDecisionPanelView,
     UnitPanelView,
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
@@ -109,6 +111,7 @@ def build_hud_primitives(
     mouse_world_position: WorldPoint | None,
     unit_panel: UnitPanelView | None = None,
     context_menu: ContextMenuView | None = None,
+    finite_decision_panel: FiniteDecisionPanelView | None = None,
     debug_inspector: DebugInspectorView | None = None,
 ) -> tuple[TextPrimitive, ...]:
     """Build screen-space HUD primitives that remain fixed during camera movement."""
@@ -142,6 +145,13 @@ def build_hud_primitives(
         )
     if context_menu is not None:
         primitives.extend(_context_menu_primitives(context_menu))
+    if finite_decision_panel is not None:
+        primitives.extend(
+            _finite_decision_panel_primitives(
+                panel=finite_decision_panel,
+                viewport_height_px=viewport_height_px,
+            )
+        )
     if debug_inspector is not None:
         primitives.extend(
             _debug_inspector_primitives(
@@ -375,6 +385,39 @@ def _context_menu_primitives(menu: ContextMenuView) -> tuple[TextPrimitive, ...]
     )
 
 
+def _finite_decision_panel_primitives(
+    *,
+    panel: FiniteDecisionPanelView,
+    viewport_height_px: int,
+) -> tuple[TextPrimitive, ...]:
+    y = viewport_height_px - 126.0
+    lines = [
+        "Decision",
+        f"Status: {panel.status_line}",
+    ]
+    if panel.request_id is not None:
+        lines.append(f"Request: {panel.request_id}")
+    if panel.decision_type is not None:
+        lines.append(f"Type: {panel.decision_type}")
+    if panel.actor_id is not None:
+        lines.append(f"Actor: {panel.actor_id}")
+    if panel.proposal_kind is not None:
+        lines.append(f"Proposal required: {panel.proposal_kind}")
+    lines.extend(_finite_option_line(option) for option in panel.options)
+    lines.extend(f"Invalid: {line}" for line in panel.diagnostic_lines)
+    return tuple(
+        TextPrimitive(
+            layer="finite_decision_panel",
+            text=line,
+            position=(16.0, y - (index * 18.0)),
+            color=HUD_ACCENT if index == 0 else HUD_TEXT,
+            font_size=12.0 if index else 13.0,
+            coordinate_space="screen",
+        )
+        for index, line in enumerate(lines)
+    )
+
+
 def _debug_inspector_primitives(
     *,
     inspector: DebugInspectorView,
@@ -399,6 +442,12 @@ def _context_action_text(action: ContextMenuAction) -> str:
     if action.disabled_reason is None:
         return action.label
     return f"{action.label}: {action.disabled_reason}"
+
+
+def _finite_option_line(option: FiniteDecisionOptionView) -> str:
+    marker = ">" if option.highlighted else " "
+    suffix = "" if option.disabled_reason is None else f" ({option.disabled_reason})"
+    return f"{marker} {option.label} [{option.option_id}]{suffix}"
 
 
 def _player_color(player_id: str) -> Color:

@@ -11,6 +11,7 @@ from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOpti
 from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
     build_debug_inspector,
+    build_finite_decision_panel,
     build_unit_panel,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
@@ -136,6 +137,12 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
             selection=selection,
             pending_decision=decision,
         ),
+        finite_decision_panel=build_finite_decision_panel(
+            pending_decision=decision,
+            highlighted_option_index=0,
+            status_message="Waiting: select_movement_action",
+            diagnostics=(),
+        ),
         debug_inspector=build_debug_inspector(
             selection=selection,
             pending_decision=decision,
@@ -148,6 +155,8 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
     assert "Unit: Intercessors" in texts
     assert "Action: Normal Move" in texts
     assert "Actions: intercessor_squad" in texts
+    assert "Decision" in texts
+    assert "> Normal Move [normal_move]" in texts
     assert "Debug inspector" in texts
 
 

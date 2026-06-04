@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from warhammer40k_arcade_ui.core_client.protocol import JsonValue, UiDecision, UiFiniteOption
+from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonValue,
+    UiDecision,
+    UiFiniteOption,
+    UiInvalidDiagnostic,
+)
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
 from warhammer40k_arcade_ui.state.selection import (
@@ -28,6 +33,29 @@ class ContextMenuAction:
         """Return whether the option is display-enabled."""
 
         return self.disabled_reason is None
+
+
+@dataclass(frozen=True, slots=True)
+class FiniteDecisionOptionView:
+    """HUD display model for one finite option."""
+
+    option_id: str
+    label: str
+    highlighted: bool
+    disabled_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class FiniteDecisionPanelView:
+    """HUD display model for the current finite-decision surface."""
+
+    request_id: str | None
+    decision_type: str | None
+    actor_id: str | None
+    status_line: str
+    proposal_kind: str | None
+    options: tuple[FiniteDecisionOptionView, ...]
+    diagnostic_lines: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +134,60 @@ def build_unit_panel(
             pending_decision.request_id if actions and pending_decision is not None else None
         ),
         available_actions=actions,
+    )
+
+
+def build_finite_decision_panel(
+    *,
+    pending_decision: UiDecision | None,
+    highlighted_option_index: int,
+    status_message: str,
+    diagnostics: tuple[UiInvalidDiagnostic, ...],
+) -> FiniteDecisionPanelView:
+    """Build a generic finite-decision HUD panel from the current client status."""
+
+    if pending_decision is None:
+        return FiniteDecisionPanelView(
+            request_id=None,
+            decision_type=None,
+            actor_id=None,
+            status_line=status_message,
+            proposal_kind=None,
+            options=(),
+            diagnostic_lines=_diagnostic_lines(diagnostics),
+        )
+    if pending_decision.is_parameterized:
+        proposal = pending_decision.parameterized_proposal
+        proposal_kind = (
+            proposal.proposal_kind
+            if proposal is not None and proposal.proposal_kind is not None
+            else pending_decision.decision_type
+        )
+        return FiniteDecisionPanelView(
+            request_id=pending_decision.request_id,
+            decision_type=pending_decision.decision_type,
+            actor_id=pending_decision.actor_id,
+            status_line=status_message,
+            proposal_kind=proposal_kind,
+            options=(),
+            diagnostic_lines=_diagnostic_lines(diagnostics),
+        )
+    return FiniteDecisionPanelView(
+        request_id=pending_decision.request_id,
+        decision_type=pending_decision.decision_type,
+        actor_id=pending_decision.actor_id,
+        status_line=status_message,
+        proposal_kind=None,
+        options=tuple(
+            FiniteDecisionOptionView(
+                option_id=option.option_id,
+                label=option.label,
+                highlighted=index == highlighted_option_index,
+                disabled_reason=_disabled_reason(option.payload),
+            )
+            for index, option in enumerate(pending_decision.options)
+        ),
+        diagnostic_lines=_diagnostic_lines(diagnostics),
     )
 
 
@@ -188,6 +270,10 @@ def _action_from_option(option: UiFiniteOption) -> ContextMenuAction:
         label=option.label,
         disabled_reason=_disabled_reason(option.payload),
     )
+
+
+def _diagnostic_lines(diagnostics: tuple[UiInvalidDiagnostic, ...]) -> tuple[str, ...]:
+    return tuple(f"{diagnostic.violation_code}: {diagnostic.message}" for diagnostic in diagnostics)
 
 
 def _disabled_reason(payload: JsonValue) -> str | None:
