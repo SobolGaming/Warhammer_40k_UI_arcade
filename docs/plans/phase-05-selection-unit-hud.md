@@ -95,3 +95,54 @@ Ran the following checks after implementation:
 - `uv run mypy src tests`
 - `uv run pytest`
 - `uv run pre-commit run --all-files`
+
+## Manual validation checklist
+
+Run the UI:
+
+```bash
+uv run warhammer40k-arcade-ui
+```
+
+Use the default fixture-backed battlefield and validate:
+
+- [x] Left-click an Intercessor model base on the left side of the table.
+  - Expected: the clicked model and owning unit are highlighted.
+  - Expected: the selected-unit panel appears with `Intercessors`, `intercessor_squad`, model
+    count, center position summary, and no available actions for the selected unit.
+- [x] Left-click a Guardian model base on the right side of the table.
+  - Expected: selection moves from Intercessors to Guardians.
+  - Expected: the panel updates to `Guardians` / `guardian_squad`.
+- [x] Left-click empty table space.
+  - Expected: selection highlight clears.
+  - Expected: selected-unit panel disappears.
+- [x] Pan with right- or middle-mouse drag after selecting a unit.
+  - Expected: camera moves while selection remains on the same projected unit.
+- [x] Zoom with the mouse wheel after selecting a unit.
+  - Expected: selection overlay scales with the battlefield and remains aligned to the model/unit.
+- [x] Press `Ctrl+D`.
+  - Expected: debug inspector toggles on/off.
+  - Expected when on: request is `none`, selected unit matches the clicked unit or `none`, proposal
+    kind is `none`, cursor coordinates update as the mouse moves, and event cursor is shown.
+- [x] Press `U` after selecting a unit.
+  - Expected: selected-unit information panel is visible. In the default profile this panel is
+    already enabled, so this is mostly a smoke check that the configured hotkey does not disturb
+    selection.
+- [x] Press `M` after selecting a model.
+  - Expected: selected model information is visible in the panel. In the default profile this is
+    already enabled, so this is mostly a smoke check that the configured hotkey does not disturb
+    selection.
+- [x] Press `Esc` after selecting a unit.
+  - Expected: any open local context menu closes. In the default launch there is no pending finite
+    decision, so this is currently a no-op smoke check.
+
+Automated-only or currently limited manual checks:
+
+- [x] Overlap cycling is covered by `tests/test_selection_state.py` with overlapping model bases.
+  The default launch fixture has no overlapping bases, so there is no quick manual overlap-cycling
+  scenario yet.
+- [x] Context menu option derivation is covered by `tests/test_hud_selection.py` with fake pending
+  finite decisions. The default launch fixture has no pending finite decision, so there are no
+  engine-provided options to show manually yet.
+- [x] Disabled action reasons are covered by `tests/test_hud_selection.py`. Manual validation needs
+  either live pending finite decisions with disabled options or a future debug fixture/harness.

@@ -215,6 +215,10 @@ operation, say so. Do not claim it passed.
 
 - Keep `docs/plans/` aligned with implementation progress.
 - Update the relevant phase plan when scope, acceptance criteria, or sequencing changes.
+- At phase closeout, include both automated verification commands and a manual validation checklist
+  for user-facing features. If GUI interaction or live-engine state makes comprehensive manual
+  validation difficult, say which behaviors are covered by automated tests and which need a future
+  manual/debug harness.
 - Record major architecture choices in `docs/adr/` once ADRs are introduced.
 - Keep README and architecture documentation consistent with the actual module structure.
 
