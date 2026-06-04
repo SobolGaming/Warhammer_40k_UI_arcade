@@ -31,7 +31,6 @@ Does this PR add or change a player-facing decision, finite option family, propo
 adapter-visible payload shape, or viewer-visibility behavior?
 
 - [ ] No
-- [ ] Yes, and `Warhammer_40k_AI/docs/ADAPTER_DECISION_CONTRACT.md` is updated in the same PR
 - [ ] Yes, and the existing contract already covers it
 
 Explanation:
