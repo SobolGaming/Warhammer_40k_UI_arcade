@@ -63,6 +63,11 @@ for WebSocket/network mode.
   pending request ID. Instead they validate stale request drift at the UI boundary and construct
   `FiniteOptionSubmission` or `ParameterizedSubmission` with the explicit request ID before
   submitting through `GameLifecycle.submit_decision(...)`.
+- Contract refresh on 2026-06-04: the current core checkout still exposes inference-based
+  `LocalGameSession.submit_option(...)` / `submit_payload(...)` helpers, while
+  `FiniteOptionSubmission` and `ParameterizedSubmission` remain explicit and the contract text still
+  recommends explicit adapter helper request IDs. The UI facade should continue using the explicit
+  submission objects directly until the core helper API converges.
 - Request-ID drift, no-pending-request submissions, finite submissions against parameterized
   requests, parameterized submissions against finite requests, unsupported parameterized decision
   types, and non-pending finite option IDs are represented as `UiClientStatus.invalid(...)`.

@@ -213,8 +213,9 @@ The first rules-facing vertical slice will be movement:
 ```text
 finite movement action selection
   -> movement proposal request
+  -> preserve movement action/mode context
   -> path drafting
-  -> PathWitness payload
+  -> PathWitness and optional model movement payload
   -> proposal submission
   -> accepted movement or authoritative invalid diagnostics
 ```
@@ -232,6 +233,8 @@ finite movement action selection
   selected-unit panels, context menu derivation from pending finite decisions, finite decision
   submission state, debug inspector content, and selection overlay primitive generation.
 - Future pure state tests for movement draft transitions.
+- Future movement payload tests for exact preservation of engine-issued movement mode and Fall Back
+  mode context.
 - Future static checks to keep direct engine imports isolated to `core_client`.
 
 ## Known deferred work
@@ -239,7 +242,12 @@ finite movement action selection
 - Live projection-to-render-state integration for the local game session.
 - Network transport.
 - Replay inspector.
-- Shooting HUD, charge HUD, fight HUD, and damage-allocation UI.
+- Placement proposal tools for reserves, disembark, Rapid Ingress, and other
+  `submit_placement_proposal` requests.
+- Shooting declaration and ranged attack-resolution UI for `select_shooting_unit`,
+  `select_shooting_type`, `submit_shooting_declaration`, `select_resolve_target_unit`,
+  `select_attack_weapon_group`, defender allocation, save/damage, and reaction decisions.
+- Charge HUD, fight HUD, and damage-allocation UI.
 - Line-of-sight and cover visualization.
 - 3D renderer or full asset loading.
 - Import-boundary audit that enforces direct engine imports only from `core_client`.
@@ -279,3 +287,8 @@ finite movement action selection
   UI result IDs, explicit request/option ID submission through `UiCoreClient`, parameterized
   proposal display without finite submission, viewer-scoped event cursor refresh, visible
   diagnostics, and a Tab regression fix that prevents hover-only selection.
+- 2026-06-04: Refreshed plans against `Warhammer_40k_AI` `main` at `16d0adf`. Phase 7/8 remain
+  movement-only but now explicitly preserve engine-issued `movement_phase_action`,
+  `movement_mode`, and Fall Back `fall_back_mode` context. Placement, shooting declaration,
+  Stratagem target-binding, and ranged attack-resolution decisions are acknowledged as future UI
+  tools behind the same generic decision/proposal boundary.

@@ -523,6 +523,12 @@ The UI can answer engine-provided finite decisions correctly and visibly handles
 
 This is the first major Warhammer-specific interaction. The core repo’s README treats `PathWitness` as mandatory for movement/charge/pile-in/consolidate/disembark/reserves/reactive movement unless a rule explicitly models teleport/setup placement. ([GitHub][1]) The adapter contract also describes normal movement as a parameterized proposal containing model paths and poses. ([GitHub][4])
 
+Contract refresh, 2026-06-04: movement drafting activates only for
+`decision_type: "submit_movement_proposal"`. The draft and payload builder must preserve the
+engine-issued `movement_phase_action`, `movement_mode`, and Fall Back `fall_back_mode` context
+exactly. Placement, shooting declaration, Stratagem target-binding, and other parameterized
+requests remain visible as proposal-required states until their own tools exist.
+
 ### Tasks
 
 * [ ] Add `MovementDraft` state:
@@ -530,9 +536,15 @@ This is the first major Warhammer-specific interaction. The core repo’s README
   * selected unit id
   * proposal request id
   * proposal kind
+  * movement phase action
+  * engine-issued movement mode, if present
+  * engine-issued Fall Back mode, if present
+  * source decision request/result ids
   * per-model path points
   * current cursor preview point
   * local-only validity hints
+* [ ] Activate drafting only when the current pending proposal is a movement proposal for the
+  selected unit.
 * [ ] Implement movement tool modes:
 
   * unit-level simple path mode
@@ -543,7 +555,7 @@ This is the first major Warhammer-specific interaction. The core repo’s README
   * drag endpoint
   * right-click/remove last waypoint
   * Escape cancel draft
-  * Enter submit draft
+  * Enter marks the draft ready and builds the payload preview; engine submission remains Phase 8
 * [ ] Render:
 
   * movement path line
@@ -562,17 +574,23 @@ This is the first major Warhammer-specific interaction. The core repo’s README
   * table bounds estimate
   * obvious self-overlap indicator
   * but engine remains authority
+* [ ] Add a payload builder that emits the core movement payload shape and copies
+  `movement_phase_action`, `movement_mode`, and `fall_back_mode` from the pending proposal request.
+* [ ] Display a clear unsupported-tool state for non-movement parameterized requests.
 
 ### Acceptance criteria
 
 * [ ] Movement proposal request activates movement drafting mode.
+* [ ] Non-movement parameterized requests do not activate movement drafting mode.
 * [ ] User can create, edit, and cancel a path.
 * [ ] Draft path renders in world space and survives camera pan/zoom.
 * [ ] UI can build a JSON-safe movement payload shape.
-* [ ] Payload includes proposal request id, proposal kind, unit id, and witness.
+* [ ] Payload includes proposal request id, proposal kind, unit id, movement phase action, witness,
+  optional model movements, and required mode context.
 * [ ] Client-side warnings are clearly labeled as preview/advisory.
 * [ ] Tests verify movement draft state transitions.
 * [ ] Tests verify generated payload shape from a simple two-point path.
+* [ ] Tests verify Fall Back payload generation preserves the pending `fall_back_mode`.
 * [ ] Tests verify canceling draft does not submit anything.
 
 ### Phase closeout milestone
@@ -589,16 +607,27 @@ A user can select a unit, choose Normal Move, draft a movement path, preview the
 
 The adapter contract distinguishes malformed/stale/context-drift submissions from rule-invalid but well-formed proposals. Malformed or stale proposals leave the pending request unresolved; rule-invalid but well-formed proposals can be recorded and followed by a fresh proposal request with diagnostics. ([GitHub][4])
 
+Contract refresh, 2026-06-04: Phase 8 remains movement-only. It must submit through the
+parameterized path with the current explicit `request_id`, surface movement mode and Fall Back mode
+drift diagnostics, and avoid applying movement retry behavior to placement, shooting, Stratagem, or
+other parameterized proposal families.
+
 ### Tasks
 
 * [ ] Implement `submit_movement_payload`.
+* [ ] Keep `request_id` explicit in the UI submission method and reject stale request drift before
+  constructing an engine-facing result.
+* [ ] Submit through the parameterized path only; never answer `submit_parameterized_payload` as an
+  ordinary finite option.
 * [ ] Add result handling:
 
   * accepted
   * invalid shape
   * stale request
+  * movement mode or Fall Back mode drift
   * rule-invalid movement
   * unsupported proposal kind
+  * unsupported non-movement parameterized request
 * [ ] Add diagnostics panel:
 
   * violation code
@@ -613,7 +642,7 @@ The adapter contract distinguishes malformed/stale/context-drift submissions fro
 
   * retain or reconstruct draft if still relevant
   * show diagnostic
-  * update to new request id if engine emits a fresh proposal request
+  * update to new request id and proposal context if engine emits a fresh movement proposal request
 * [ ] Add “retry from last path” affordance if safe.
 * [ ] Add snapshot tests for representative diagnostic payloads.
 
@@ -622,10 +651,16 @@ The adapter contract distinguishes malformed/stale/context-drift submissions fro
 * [ ] Accepted movement visibly updates model positions after view refresh.
 * [ ] Invalid movement displays authoritative diagnostics.
 * [ ] Stale request errors are obvious to the user.
+* [ ] Movement-mode and Fall Back mode drift diagnostics are obvious to the user.
 * [ ] UI never mutates authoritative model positions before engine acceptance.
+* [ ] UI rejects or displays unsupported non-movement parameterized requests without trying to
+  submit them through the movement payload path.
 * [ ] Tests verify invalid diagnostics are surfaced.
 * [ ] Tests verify accepted movement clears draft state.
 * [ ] Tests verify rejected movement does not locally commit final positions.
+* [ ] Tests verify retry-from-last-path is offered only when the fresh proposal request still
+  targets the same unit, proposal kind, movement action, movement mode, and Fall Back mode context.
+* [ ] Tests verify stale request ID rejection happens at the UI boundary before engine mutation.
 
 ### Phase closeout milestone
 
@@ -718,8 +753,10 @@ The UI is no longer only a technical prototype; it is comfortable enough for rep
 
   * finite movement option request
   * movement proposal request
+  * Fall Back movement proposal request with `fall_back_mode`
   * accepted movement response
   * invalid movement response
+  * unsupported non-movement parameterized request
   * default UI preferences profile
   * invalid UI preferences profile
 * [ ] Add “no direct engine mutation” static check:

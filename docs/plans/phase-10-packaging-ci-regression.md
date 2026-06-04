@@ -17,8 +17,11 @@ Make the UI reliable enough to use during engine development.
 - [ ] Add golden fixtures:
   - finite movement option request
   - movement proposal request
+  - Fall Back movement proposal request with `fall_back_mode`
   - accepted movement response
   - invalid movement response
+  - unsupported non-movement parameterized request, such as shooting declaration or Stratagem target
+    proposal, to prove generic proposal display does not force movement parsing
   - default UI preferences profile
   - invalid UI preferences profile
 - [ ] Add “no direct engine mutation” static check:
