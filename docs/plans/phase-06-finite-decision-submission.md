@@ -157,6 +157,12 @@ This phase did not update the core adapter decision contract because it implemen
 finite decision and parameterized proposal display contracts without adding new option families,
 proposal kinds, payload shapes, or visibility behavior.
 
+Contract refresh on 2026-06-04: `Warhammer_40k_AI` `main` now documents additional finite
+shooting and ranged attack-resolution decisions such as `select_shooting_unit`,
+`select_shooting_type`, `select_resolve_target_unit`, and `select_attack_weapon_group`. The Phase 6
+finite UI should continue treating these as generic engine-enumerated finite options. It must not
+invent target IDs, weapon-group IDs, shooting types, or grouped-attack hashes from option payloads.
+
 ## Verification
 
 Ran after implementation:
