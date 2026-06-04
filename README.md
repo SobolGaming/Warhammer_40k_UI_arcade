@@ -18,6 +18,7 @@ uv python install 3.14.5
 uv lock
 uv sync
 uv run warhammer40k-arcade-ui
+uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
 uv run pytest
 ```
 
@@ -107,6 +108,7 @@ warhammer40k-arcade-ui/
       __init__.py
       app.py
       config.py
+      debug_fixtures.py
       core_client/
         __init__.py
         fake_client.py
@@ -137,6 +139,7 @@ warhammer40k-arcade-ui/
         schema.py
       state/
         __init__.py
+        finite_decision.py
         selection.py
   tests/
     fixtures/
@@ -145,6 +148,7 @@ warhammer40k-arcade-ui/
     test_core_client_protocol.py
     test_config.py
     test_entrypoint.py
+    test_finite_decision_state.py
     test_hud_selection.py
     test_preferences.py
     test_render_camera.py
@@ -193,6 +197,11 @@ surface.
 - UI-facing submission methods keep `request_id` explicit and reject stale request drift before
   constructing engine-facing results.
 - UI displays authoritative invalid diagnostics from the engine instead of silently correcting them.
+- Phase 6 finite-decision UI state generates deterministic `ui-result-*` IDs, submits only the
+  current request's engine-provided finite option IDs, refreshes viewer-scoped event cursors, and
+  displays parameterized requests as proposal-required pending state.
+- Manually validate the current fixture-backed Phase 6 finite flow with
+  `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6=1 uv run warhammer40k-arcade-ui`.
 - UI previews are advisory only; only accepted engine results can update authoritative state.
 - Phase 4 UI preference files may configure known overlays, hotkeys, HUD defaults, selected
   model/unit information affordances, and recognized upcoming behavior settings. They must not
@@ -200,9 +209,12 @@ surface.
   hidden-information visibility.
 - Generate starter preference profiles with `uv run warhammer40k-export-preferences --format yaml`
   or load the documented examples under `docs/preferences/`.
+- Select a profile at launch with `uv run warhammer40k-arcade-ui --ui-prefs path/to/profile.yaml`.
 - Phase 5 selection state is local-only: model-base clicks select projected units, selection
   highlights and panels are advisory, and context menus display engine-provided finite options
   without submitting them.
+- Phase 6 keyboard focus is local-only: Tab cycles finite-option focus when options are pending and
+  otherwise only cycles an existing overlap selection, not a merely hovered model.
 - Do not add hidden fallback behavior when an engine payload is incomplete; fix the fixture or show
   a typed diagnostic.
 - Keep `docs/plans/` updated as implementation scope changes.

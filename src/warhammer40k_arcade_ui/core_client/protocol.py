@@ -182,6 +182,77 @@ class UiMovementProposalRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class UiParameterizedProposalRequest:
+    """Generic UI view of a parameterized proposal request."""
+
+    request_id: str
+    decision_type: str
+    actor_id: str | None
+    proposal_kind: str | None
+    payload: JsonObject
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "request_id", _non_empty_string("request_id", self.request_id))
+        object.__setattr__(
+            self,
+            "decision_type",
+            _non_empty_string("decision_type", self.decision_type),
+        )
+        object.__setattr__(self, "actor_id", _optional_string("actor_id", self.actor_id))
+        object.__setattr__(
+            self,
+            "proposal_kind",
+            _optional_string("proposal_kind", self.proposal_kind),
+        )
+        object.__setattr__(self, "payload", _json_object("parameterized proposal", self.payload))
+
+    @classmethod
+    def from_payload(cls, payload: object) -> Self:
+        proposal = _json_object("parameterized proposal payload", payload)
+        return cls(
+            request_id=_required_string(proposal, "request_id"),
+            decision_type=_required_string(proposal, "decision_type"),
+            actor_id=_optional_string_value(proposal, "actor_id"),
+            proposal_kind=_optional_string_value(proposal, "proposal_kind"),
+            payload=proposal,
+        )
+
+    @classmethod
+    def from_decision_payload(
+        cls,
+        *,
+        payload: JsonValue,
+        fallback_request_id: str,
+        fallback_decision_type: str,
+        fallback_actor_id: str | None,
+    ) -> Self:
+        decision_payload = _json_object("parameterized decision payload", payload)
+        proposal_payload = _json_object(
+            "parameterized proposal request",
+            decision_payload["proposal_request"],
+        )
+        return cls(
+            request_id=_string_or_fallback(
+                proposal_payload,
+                "request_id",
+                fallback_request_id,
+            ),
+            decision_type=_string_or_fallback(
+                proposal_payload,
+                "decision_type",
+                fallback_decision_type,
+            ),
+            actor_id=_optional_string_value_or_fallback(
+                proposal_payload,
+                "actor_id",
+                fallback_actor_id,
+            ),
+            proposal_kind=_optional_string_value(proposal_payload, "proposal_kind"),
+            payload=proposal_payload,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class UiDecision:
     """Current pending decision as a UI-facing view model."""
 
@@ -191,6 +262,7 @@ class UiDecision:
     payload: JsonValue
     options: tuple[UiFiniteOption, ...]
     is_parameterized: bool
+    parameterized_proposal: UiParameterizedProposalRequest | None = None
     movement_proposal: UiMovementProposalRequest | None = None
 
     def __post_init__(self) -> None:
@@ -207,6 +279,13 @@ class UiDecision:
         if type(self.is_parameterized) is not bool:
             raise UiClientProtocolError("is_parameterized must be a bool.")
         if (
+            self.parameterized_proposal is not None
+            and type(self.parameterized_proposal) is not UiParameterizedProposalRequest
+        ):
+            raise UiClientProtocolError(
+                "parameterized_proposal must be a UiParameterizedProposalRequest."
+            )
+        if (
             self.movement_proposal is not None
             and type(self.movement_proposal) is not UiMovementProposalRequest
         ):
@@ -221,19 +300,28 @@ class UiDecision:
         if is_parameterized is None:
             is_parameterized = _options_are_parameterized(options)
         decision_payload = decision["payload"]
-        movement_proposal = (
-            UiMovementProposalRequest.from_decision_payload(decision_payload)
+        request_id = _required_string(decision, "request_id")
+        decision_type = _required_string(decision, "decision_type")
+        actor_id = _optional_string_value(decision, "actor_id")
+        parameterized_proposal = (
+            UiParameterizedProposalRequest.from_decision_payload(
+                payload=decision_payload,
+                fallback_request_id=request_id,
+                fallback_decision_type=decision_type,
+                fallback_actor_id=actor_id,
+            )
             if is_parameterized
             else None
         )
         return cls(
-            request_id=_required_string(decision, "request_id"),
-            decision_type=_required_string(decision, "decision_type"),
-            actor_id=_optional_string_value(decision, "actor_id"),
+            request_id=request_id,
+            decision_type=decision_type,
+            actor_id=actor_id,
             payload=decision_payload,
             options=options,
             is_parameterized=is_parameterized,
-            movement_proposal=movement_proposal,
+            parameterized_proposal=parameterized_proposal,
+            movement_proposal=_movement_proposal_from_parameterized(parameterized_proposal),
         )
 
 
@@ -369,7 +457,7 @@ class UiGameView:
     public_victory_point_ledgers: tuple[JsonValue, ...]
     public_stratagem_use_records: tuple[JsonValue, ...]
     pending_decision: UiDecision | None
-    pending_proposal: UiMovementProposalRequest | None
+    pending_proposal: UiParameterizedProposalRequest | None
     event_count: int
 
     @classmethod
@@ -417,7 +505,7 @@ class UiGameView:
             pending_proposal=(
                 None
                 if pending_proposal_payload is None
-                else UiMovementProposalRequest.from_payload(pending_proposal_payload)
+                else UiParameterizedProposalRequest.from_payload(pending_proposal_payload)
             ),
             event_count=_required_int(view, "event_count"),
         )
@@ -544,6 +632,32 @@ def _invalid_diagnostic_from_violation(
     )
 
 
+def _movement_proposal_from_parameterized(
+    proposal: UiParameterizedProposalRequest | None,
+) -> UiMovementProposalRequest | None:
+    if proposal is None or not _payload_has_movement_proposal_shape(proposal.payload):
+        return None
+    return UiMovementProposalRequest.from_payload(proposal.payload)
+
+
+def _payload_has_movement_proposal_shape(payload: JsonObject) -> bool:
+    required_keys = (
+        "request_id",
+        "decision_type",
+        "actor_id",
+        "game_id",
+        "battle_round",
+        "phase",
+        "unit_instance_id",
+        "proposal_kind",
+        "source_decision_request_id",
+        "source_decision_result_id",
+        "placement_kinds",
+        "context",
+    )
+    return all(key in payload for key in required_keys)
+
+
 def _options_are_parameterized(options: tuple[UiFiniteOption, ...]) -> bool:
     return options == (
         UiFiniteOption(
@@ -573,7 +687,23 @@ def _required_string(payload: JsonObject, key: str) -> str:
 
 
 def _optional_string_value(payload: JsonObject, key: str) -> str | None:
-    return _optional_string(key, payload[key])
+    return _optional_string(key, payload.get(key))
+
+
+def _optional_string_value_or_fallback(
+    payload: JsonObject,
+    key: str,
+    fallback: str | None,
+) -> str | None:
+    if key not in payload:
+        return fallback
+    return _optional_string_value(payload, key)
+
+
+def _string_or_fallback(payload: JsonObject, key: str, fallback: str) -> str:
+    if key not in payload:
+        return fallback
+    return _required_string(payload, key)
 
 
 def _required_int(payload: JsonObject, key: str) -> int:

@@ -121,6 +121,7 @@ def keyboard_heavy_preferences() -> UiPreferences:
                 command_id="toggle_overlay", key="3", overlay_id="objective_control_context"
             ),
             HotkeyBinding(command_id="toggle_measure_mode", key="r"),
+            HotkeyBinding(command_id="toggle_debug_inspector", key="d", modifiers=("ctrl",)),
         ),
         selection=base.selection,
         hud=base.hud,

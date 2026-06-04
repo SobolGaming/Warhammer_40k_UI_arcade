@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+import warhammer40k_arcade_ui.preferences.io as preferences_io
 from warhammer40k_arcade_ui.preferences import (
     PreferenceDiagnostic,
     default_preferences,
@@ -69,7 +72,16 @@ def test_unsupported_explicit_file_format_reports_diagnostic(tmp_path: Path) -> 
     assert _codes(result.diagnostics) == {"preferences_file_format_error"}
 
 
-def test_load_preferences_without_file_uses_builtin_default() -> None:
+def test_load_preferences_without_file_uses_builtin_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        preferences_io,
+        "default_preferences_path",
+        lambda: tmp_path / "ui-preferences.yaml",
+    )
+
     result = load_preferences()
 
     assert result.preferences == default_preferences()

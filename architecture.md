@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-5 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-6 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -40,7 +40,7 @@ under `docs/plans/`.
 | 3 | Complete | Arcade rendering foundation | [phase-03](docs/plans/phase-03-arcade-rendering-foundation.md) |
 | 4 | Complete | Shareable UI preferences framework | [phase-04](docs/plans/phase-04-shareable-ui-preferences.md) |
 | 5 | Complete | Selection and unit information HUD | [phase-05](docs/plans/phase-05-selection-unit-hud.md) |
-| 6 | Planned | Finite decision submission | [phase-06](docs/plans/phase-06-finite-decision-submission.md) |
+| 6 | Complete | Finite decision submission | [phase-06](docs/plans/phase-06-finite-decision-submission.md) |
 | 7 | Planned | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
 | 8 | Planned | Movement proposal diagnostics | [phase-08](docs/plans/phase-08-movement-proposal-diagnostics.md) |
 | 9 | Planned | HUD ergonomics pass | [phase-09](docs/plans/phase-09-hud-ergonomics.md) |
@@ -66,11 +66,13 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-5 provide the runnable shell, core client boundary, inspectable render foundation,
-shareable UI preference framework, and local selection/HUD state:
+Phases 0-6 provide the runnable shell, core client boundary, inspectable render foundation,
+shareable UI preference framework, local selection/HUD state, and finite decision submission:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
+- `warhammer40k_arcade_ui.debug_fixtures` — opt-in deterministic fixtures for manual validation of
+  current UI phases without changing normal launch behavior.
 - `warhammer40k_arcade_ui.app` — Arcade window and event-loop launcher, with fake-runtime support
   for entry-point tests.
 - `warhammer40k_arcade_ui.main` — console-script entry point.
@@ -100,14 +102,17 @@ shareable UI preference framework, and local selection/HUD state:
   profiles.
 - `warhammer40k_arcade_ui.state.selection` — local-only selection state, model-base hit detection,
   overlap cycling, active overlay defaults, panel visibility, and debug/context-menu toggles.
+- `warhammer40k_arcade_ui.state.finite_decision` — local finite-option focus, deterministic UI
+  result-ID generation, UI-boundary no-submit diagnostics, status refresh, and viewer-scoped event
+  cursor state.
 - `warhammer40k_arcade_ui.input.commands` — preference-backed local hotkey matching.
-- `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, and debug inspector
-  view models derived from projection data and current pending finite requests.
+- `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, finite-decision
+  panel, and debug inspector view models derived from projection data and current pending requests.
 
 Planned modules from later phases:
 
 - `input` — movement path tooling and later command flows.
-- `hud` — decision submission panels, diagnostics, and movement workflow controls.
+- `hud` — movement workflow controls and later phase-specific ergonomics.
 - `state` — movement drafts and other local-only workflow state.
 
 ## Shareable Preferences
@@ -156,6 +161,22 @@ payload targets the selected unit.
 This phase remains display-only for decisions: no option is submitted until the finite decision
 submission phase. Selection state, context menu anchors, and debug inspector visibility are local UI
 state and do not mutate authoritative engine state.
+
+## Finite Decision Submission
+
+Phase 6 adds the first user-facing decision submission surface. The UI can highlight and submit one
+engine-provided finite option for the current explicit `request_id`, generate deterministic
+`ui-result-*` result IDs, refresh the pending request and viewer-scoped event cursor through the
+`UiCoreClient`, and display invalid/stale diagnostics returned by the client boundary or engine.
+
+The finite-decision HUD is generic. It does not assume movement-only decision types or option IDs.
+Parameterized requests are displayed as requiring a proposal tool and the fixed
+`submit_parameterized_payload` option is not exposed as a finite action. Movement payload drafting
+and submission remain deferred to Phases 7 and 8.
+
+Tab now cycles finite-option focus when finite options are pending. Without finite options, Tab only
+cycles an already selected overlapping model hit set; it no longer creates a selection from a merely
+hovered model.
 
 ## Runtime modes
 
@@ -208,8 +229,8 @@ finite movement action selection
   conflict detection, future-facing inactive properties, command/overlay registry validation, config
   diagnostics, and documented example profiles.
 - Pure state/HUD tests for selection hit detection, overlap cycling, preference-backed hotkeys,
-  selected-unit panels, context menu derivation from pending finite decisions, debug inspector
-  content, and selection overlay primitive generation.
+  selected-unit panels, context menu derivation from pending finite decisions, finite decision
+  submission state, debug inspector content, and selection overlay primitive generation.
 - Future pure state tests for movement draft transitions.
 - Future static checks to keep direct engine imports isolated to `core_client`.
 
@@ -254,3 +275,7 @@ finite movement action selection
   cycling, selected-unit/model overlays, selected-unit panel view models, context menu display from
   engine-provided finite options, debug inspector view models, preference-backed hotkeys, and tests
   covering state, HUD derivation, and render primitives.
+- 2026-06-03: Phase 6 completed with generic finite-decision focus/submission state, deterministic
+  UI result IDs, explicit request/option ID submission through `UiCoreClient`, parameterized
+  proposal display without finite submission, viewer-scoped event cursor refresh, visible
+  diagnostics, and a Tab regression fix that prevents hover-only selection.

@@ -87,6 +87,26 @@ class SelectionState:
             last_hit_index=hit_index,
         )
 
+    def cycle_existing_at(
+        self,
+        *,
+        view: BattlefieldView,
+        world_point: WorldPoint,
+        preferences: UiPreferences,
+    ) -> SelectionState:
+        """Cycle only when the cursor is still over the last selected hit set."""
+
+        hits = model_hits_at(view=view, world_point=world_point)
+        hit_keys = tuple(hit.hit_key for hit in hits)
+        if not hit_keys or hit_keys != self.last_hit_keys:
+            return self
+        return self.select_at(
+            view=view,
+            world_point=world_point,
+            preferences=preferences,
+            force_cycle=True,
+        )
+
     def clear_selection(self, preferences: UiPreferences) -> SelectionState:
         """Clear selected model/unit and return to active default overlays."""
 

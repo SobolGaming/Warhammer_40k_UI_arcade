@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from pathlib import Path
+
 import arcade
 
 from warhammer40k_arcade_ui.config import AppConfig
-from warhammer40k_arcade_ui.core_client.protocol import UiDecision
+from warhammer40k_arcade_ui.core_client.protocol import UiCoreClient, UiDecision
 from warhammer40k_arcade_ui.hud.view_models import (
+    ContextMenuAction,
+    ContextMenuView,
     build_context_menu,
     build_debug_inspector,
+    build_finite_decision_panel,
     build_unit_panel,
 )
 from warhammer40k_arcade_ui.input.commands import command_for_key
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.diagnostics import PreferenceDiagnostic
-from warhammer40k_arcade_ui.preferences.io import load_preferences
+from warhammer40k_arcade_ui.preferences.io import PreferencesLoadResult, load_preferences
 from warhammer40k_arcade_ui.preferences.schema import UiPreferences
 from warhammer40k_arcade_ui.render.camera import WorldCamera, WorldPoint
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
@@ -27,9 +33,16 @@ from warhammer40k_arcade_ui.render.primitives import (
     build_world_primitives,
 )
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView
+from warhammer40k_arcade_ui.state.finite_decision import (
+    FiniteDecisionUiState,
+    submit_finite_option,
+)
 from warhammer40k_arcade_ui.state.selection import SelectionState, selected_unit, unit_center
 
 MOUSE_ZOOM_BASE = 1.12
+CONTEXT_MENU_LINE_HEIGHT_WORLD = 1.1
+CONTEXT_MENU_ACTION_WIDTH_WORLD = 18.0
+CONTEXT_MENU_LINE_TOLERANCE_WORLD = 0.55
 
 
 class ArcadeWarhammerWindow(arcade.Window):
@@ -41,7 +54,10 @@ class ArcadeWarhammerWindow(arcade.Window):
         config: AppConfig | None = None,
         battlefield_view: BattlefieldView | None = None,
         preferences: UiPreferences | None = None,
+        preferences_path: Path | None = None,
         pending_decision: UiDecision | None = None,
+        core_client: UiCoreClient | None = None,
+        viewer_player_id: str = "player_1",
         event_cursor: int = 0,
     ) -> None:
         resolved_config = config or AppConfig()
@@ -54,15 +70,24 @@ class ArcadeWarhammerWindow(arcade.Window):
         self.background_color = arcade.color.DARK_SLATE_GRAY
         self._battlefield_view = battlefield_view or default_battlefield_view()
         if preferences is None:
-            loaded_preferences = load_preferences()
+            loaded_preferences = load_preferences(preferences_path)
             self._preferences = loaded_preferences.preferences or default_preferences()
             self._preference_diagnostics = loaded_preferences.diagnostics
+            self._preference_source_label = _preference_source_label(loaded_preferences)
         else:
             self._preferences = preferences
             self._preference_diagnostics = ()
+            self._preference_source_label = "injected preferences"
         self._selection_state = SelectionState.initial(self._preferences)
-        self._pending_decision = pending_decision
-        self._event_cursor = event_cursor
+        self._core_client = core_client
+        self._viewer_player_id = viewer_player_id
+        self._finite_state = FiniteDecisionUiState(
+            pending_decision=pending_decision,
+            event_cursor=event_cursor,
+            event_log_lines=self._battlefield_view.hud.event_log_lines,
+        )
+        self._pending_decision = self._finite_state.pending_decision
+        self._event_cursor = self._finite_state.event_cursor
         self._camera = WorldCamera.fit_table(
             viewport_width_px=resolved_config.window_width,
             viewport_height_px=resolved_config.window_height,
@@ -95,6 +120,12 @@ class ArcadeWarhammerWindow(arcade.Window):
 
         return self._preference_diagnostics
 
+    @property
+    def preference_source_label(self) -> str:
+        """Display label for the active UI preferences source."""
+
+        return self._preference_source_label
+
     def on_draw(self) -> None:
         """Render the battlefield and fixed HUD."""
 
@@ -114,11 +145,18 @@ class ArcadeWarhammerWindow(arcade.Window):
             pending_decision=self._pending_decision,
             fallback_anchor_world=self._mouse_world_position,
         )
+        finite_decision_panel = build_finite_decision_panel(
+            pending_decision=self._finite_state.pending_decision,
+            highlighted_option_index=self._finite_state.highlighted_option_index,
+            status_message=self._finite_state.status_message,
+            diagnostics=self._finite_state.diagnostics,
+        )
         debug_inspector = build_debug_inspector(
             selection=self._selection_state,
             pending_decision=self._pending_decision,
             cursor_position=self._mouse_world_position,
             event_cursor=self._event_cursor,
+            preference_source_label=self._preference_source_label,
         )
         world_primitives = build_world_primitives(self._battlefield_view, self._selection_state)
         hud_primitives = build_hud_primitives(
@@ -128,6 +166,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             mouse_world_position=self._mouse_world_position,
             unit_panel=unit_panel,
             context_menu=context_menu,
+            finite_decision_panel=finite_decision_panel,
             debug_inspector=debug_inspector,
         )
         _draw_world_primitives(world_primitives, self._camera)
@@ -151,6 +190,20 @@ class ArcadeWarhammerWindow(arcade.Window):
         del modifiers
         self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
         if _mouse_button_name(button) != self._preferences.selection.default_mouse_button:
+            return
+        selected_action = self._context_menu_action_at(self._mouse_world_position)
+        if selected_action is not None:
+            if selected_action.enabled:
+                self._submit_finite_option(selected_action.option_id)
+            else:
+                self._set_finite_state(
+                    self._finite_state.with_local_invalid(
+                        violation_code="disabled_finite_option",
+                        message=selected_action.disabled_reason
+                        or "Finite option is disabled by the engine payload.",
+                        field="selected_option_id",
+                    )
+                )
             return
         self._selection_state = self._selection_state.select_at(
             view=self._battlefield_view,
@@ -209,15 +262,63 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._selection_state = self._selection_state.open_context_menu(
                 self._context_anchor_world()
             )
-        elif invocation.command_id == "cycle_selection" and self._mouse_world_position is not None:
-            self._selection_state = self._selection_state.select_at(
-                view=self._battlefield_view,
-                world_point=self._mouse_world_position,
-                preferences=self._preferences,
-                force_cycle=True,
-            )
+        elif invocation.command_id == "cycle_selection":
+            if self._finite_state.finite_options:
+                self._set_finite_state(self._finite_state.cycle_option())
+            elif self._mouse_world_position is not None:
+                self._selection_state = self._selection_state.cycle_existing_at(
+                    view=self._battlefield_view,
+                    world_point=self._mouse_world_position,
+                    preferences=self._preferences,
+                )
+        elif invocation.command_id == "confirm":
+            self._submit_finite_option(None)
         elif invocation.command_id == "cancel":
             self._selection_state = self._selection_state.close_context_menu()
+
+    def _submit_finite_option(self, selected_option_id: str | None) -> None:
+        if self._core_client is None:
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="no_core_client",
+                    message="Finite submission requires a configured core client.",
+                    field="client",
+                )
+            )
+            return
+        self._set_finite_state(
+            submit_finite_option(
+                state=self._finite_state,
+                client=self._core_client,
+                selected_option_id=selected_option_id,
+                viewer_player_id=self._viewer_player_id,
+            )
+        )
+
+    def _set_finite_state(self, state: FiniteDecisionUiState) -> None:
+        self._finite_state = state
+        self._pending_decision = state.pending_decision
+        self._event_cursor = state.event_cursor
+        hud = replace(
+            self._battlefield_view.hud,
+            pending_decision_summary=_pending_decision_summary(state.pending_decision),
+            event_log_lines=_hud_event_lines(
+                current_lines=self._battlefield_view.hud.event_log_lines,
+                state_lines=state.event_log_lines,
+            ),
+        )
+        self._battlefield_view = replace(self._battlefield_view, hud=hud)
+
+    def _context_menu_action_at(self, world_point: WorldPoint) -> ContextMenuAction | None:
+        menu = build_context_menu(
+            view=self._battlefield_view,
+            selection=self._selection_state,
+            pending_decision=self._pending_decision,
+            fallback_anchor_world=self._mouse_world_position,
+        )
+        if menu is None:
+            return None
+        return _context_menu_action_at(menu=menu, world_point=world_point)
 
     def _context_anchor_world(self) -> WorldPoint:
         if self._mouse_world_position is not None:
@@ -226,6 +327,62 @@ class ArcadeWarhammerWindow(arcade.Window):
         if unit is not None:
             return unit_center(unit)
         return (0.0, 0.0)
+
+
+def _context_menu_action_at(
+    *,
+    menu: ContextMenuView,
+    world_point: WorldPoint,
+) -> ContextMenuAction | None:
+    anchor_x, anchor_y = menu.anchor_world
+    world_x, world_y = world_point
+    menu_x = anchor_x + 1.0
+    if not menu_x - 0.25 <= world_x <= menu_x + CONTEXT_MENU_ACTION_WIDTH_WORLD:
+        return None
+    relative_y = (anchor_y + 1.0) - world_y
+    line_index = round(relative_y / CONTEXT_MENU_LINE_HEIGHT_WORLD)
+    if abs(relative_y - (line_index * CONTEXT_MENU_LINE_HEIGHT_WORLD)) > (
+        CONTEXT_MENU_LINE_TOLERANCE_WORLD
+    ):
+        return None
+    action_index = line_index - 1
+    if action_index < 0 or action_index >= len(menu.actions):
+        return None
+    return menu.actions[action_index]
+
+
+def _pending_decision_summary(pending_decision: UiDecision | None) -> str:
+    if pending_decision is None:
+        return "No pending engine decision"
+    if pending_decision.is_parameterized:
+        proposal = pending_decision.parameterized_proposal
+        label = (
+            proposal.proposal_kind
+            if proposal is not None and proposal.proposal_kind is not None
+            else pending_decision.decision_type
+        )
+        return f"Proposal required: {label}"
+    return f"{pending_decision.decision_type}: {len(pending_decision.options)} options"
+
+
+def _hud_event_lines(
+    *,
+    current_lines: tuple[str, ...],
+    state_lines: tuple[str, ...],
+) -> tuple[str, ...]:
+    if state_lines:
+        return state_lines
+    return current_lines
+
+
+def _preference_source_label(result: PreferencesLoadResult) -> str:
+    if result.source_path is not None:
+        if result.has_errors:
+            return f"{result.source_path.name} (load diagnostics)"
+        return result.source_path.name
+    if result.used_builtin_default:
+        return "built-in default"
+    return "unknown preferences"
 
 
 def _draw_world_primitives(

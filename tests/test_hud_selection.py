@@ -6,6 +6,7 @@ from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOpti
 from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
     build_debug_inspector,
+    build_finite_decision_panel,
     build_unit_panel,
     decision_targets_unit,
 )
@@ -81,6 +82,88 @@ def test_context_menu_ignores_non_targeted_and_parameterized_decisions() -> None
     assert parameterized is None
 
 
+def test_finite_decision_panel_is_generic_and_highlights_option() -> None:
+    decision = UiDecision(
+        request_id="decision-request-000021",
+        decision_type="select_reaction",
+        actor_id="player_2",
+        payload={"trigger_window": "after_normal_move"},
+        options=(
+            UiFiniteOption(
+                option_id="decline_reaction",
+                label="Decline",
+                payload={},
+            ),
+            UiFiniteOption(
+                option_id="core:fire-overwatch",
+                label="Fire Overwatch",
+                payload={"stratagem_id": "core:fire-overwatch"},
+            ),
+        ),
+        is_parameterized=False,
+    )
+
+    panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=1,
+        status_message="Waiting: select_reaction",
+        diagnostics=(),
+    )
+
+    assert panel.request_id == "decision-request-000021"
+    assert panel.decision_type == "select_reaction"
+    assert panel.actor_id == "player_2"
+    assert [option.option_id for option in panel.options] == [
+        "decline_reaction",
+        "core:fire-overwatch",
+    ]
+    assert panel.options[1].highlighted is True
+
+
+def test_finite_decision_panel_hides_parameterized_fixed_submit_option() -> None:
+    decision = UiDecision.from_payload(
+        {
+            "request_id": "decision-request-000005",
+            "decision_type": "submit_movement_proposal",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-000005",
+                    "decision_type": "submit_movement_proposal",
+                    "actor_id": "player_1",
+                    "game_id": "phase6-game",
+                    "battle_round": 1,
+                    "phase": "movement",
+                    "unit_instance_id": "intercessor_squad",
+                    "proposal_kind": "normal_move",
+                    "source_decision_request_id": "decision-request-000004",
+                    "source_decision_result_id": "ui-result-000001",
+                    "movement_phase_action": "normal_move",
+                    "placement_kinds": [],
+                    "context": {"source_selected_option_id": "normal_move"},
+                }
+            },
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )
+
+    panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=0,
+        status_message="Proposal required: normal_move",
+        diagnostics=(),
+    )
+
+    assert panel.proposal_kind == "normal_move"
+    assert panel.options == ()
+
+
 def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> None:
     selection = _selected_intercessors().toggle_debug_inspector()
     decision = _finite_decision_for("intercessor_squad")
@@ -90,6 +173,7 @@ def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> 
         pending_decision=decision,
         cursor_position=(12.0, 13.5),
         event_cursor=7,
+        preference_source_label="keyboard-heavy.yaml",
     )
 
     assert inspector is not None
@@ -99,6 +183,7 @@ def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> 
         "Proposal kind: none",
         "Cursor: 12.00, 13.50 in",
         "Event cursor: 7",
+        "UI prefs: keyboard-heavy.yaml",
     )
 
 

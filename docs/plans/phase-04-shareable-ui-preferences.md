@@ -33,7 +33,7 @@ distinguish between:
   - reject unknown top-level keys unless they are under a clearly named experimental/extension
     section.
 - [x] Support loading preferences from:
-  - an explicit config path, planned for a future CLI flag;
+  - an explicit config path through `warhammer40k-arcade-ui --ui-prefs`;
   - a platform default path via `platformdirs`;
   - built-in defaults when no user file exists.
 - [x] Support hand-editable JSON and YAML files:
@@ -125,6 +125,8 @@ Implemented in `warhammer40k_arcade_ui.preferences`:
 - `io.py` supports explicit-path loading, platform-default lookup via `platformdirs`, built-in
   defaults when no user file exists, deterministic JSON export, and deterministic YAML export.
 - `export_profile.py` exposes `warhammer40k-export-preferences` for generating starter profiles.
+- `warhammer40k-arcade-ui --ui-prefs path/to/profile.yaml` loads a selected profile for the running
+  Arcade app, and the debug inspector displays the active preferences file name.
 
 Documented example profiles live under `docs/preferences/`, and the file format/ID policy is
 documented in `docs/ui-configuration.md`.

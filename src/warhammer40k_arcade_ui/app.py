@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from importlib import import_module
+from os import environ
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 from warhammer40k_arcade_ui.config import AppConfig
+
+PHASE6_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6"
 
 
 class ArcadeWindow(Protocol):
@@ -63,6 +67,7 @@ def _load_arcade() -> ArcadeRuntime:
 def create_window(
     config: AppConfig | None = None,
     arcade_runtime: ArcadeRuntime | None = None,
+    ui_prefs_path: Path | None = None,
 ) -> ArcadeWindow:
     """Create the application window without entering Arcade's event loop."""
 
@@ -70,7 +75,20 @@ def create_window(
     if arcade_runtime is None:
         from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 
-        return ArcadeWarhammerWindow(config=resolved_config)
+        if _phase6_debug_enabled():
+            from warhammer40k_arcade_ui.debug_fixtures import (
+                phase6_debug_core_client,
+                phase6_debug_pending_decision,
+            )
+
+            return ArcadeWarhammerWindow(
+                config=resolved_config,
+                preferences_path=ui_prefs_path,
+                pending_decision=phase6_debug_pending_decision(),
+                core_client=phase6_debug_core_client(),
+                viewer_player_id="player_1",
+            )
+        return ArcadeWarhammerWindow(config=resolved_config, preferences_path=ui_prefs_path)
 
     runtime = arcade_runtime
     window = runtime.Window(
@@ -86,14 +104,19 @@ def create_window(
 def run_app(
     config: AppConfig | None = None,
     arcade_runtime: ArcadeRuntime | None = None,
+    ui_prefs_path: Path | None = None,
 ) -> None:
     """Create the Arcade window and start the event loop."""
 
     if arcade_runtime is None:
-        create_window(config)
+        create_window(config, ui_prefs_path=ui_prefs_path)
         _load_arcade().run()
         return
 
     runtime = arcade_runtime
-    create_window(config, runtime)
+    create_window(config, runtime, ui_prefs_path=ui_prefs_path)
     runtime.run()
+
+
+def _phase6_debug_enabled() -> bool:
+    return environ.get(PHASE6_DEBUG_ENV_VAR) == "1"

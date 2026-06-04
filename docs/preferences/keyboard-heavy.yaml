@@ -45,6 +45,10 @@ hotkeys:
 - command_id: toggle_measure_mode
   key: r
   modifiers: []
+- command_id: toggle_debug_inspector
+  key: d
+  modifiers:
+  - ctrl
 selection:
   default_mouse_button: left
   cycle_overlapping_bases: true
