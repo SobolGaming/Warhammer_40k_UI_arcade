@@ -1,6 +1,6 @@
 # Arcade UI Architecture Build Order
 
-Last updated: 2026-06-03
+Last updated: 2026-06-04
 
 This document is the build-order roadmap for the Arcade UI client that drives the
 [`Warhammer_40k_AI`](https://github.com/SobolGaming/Warhammer_40k_AI) core engine.
@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-6 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-7 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -41,7 +41,7 @@ under `docs/plans/`.
 | 4 | Complete | Shareable UI preferences framework | [phase-04](docs/plans/phase-04-shareable-ui-preferences.md) |
 | 5 | Complete | Selection and unit information HUD | [phase-05](docs/plans/phase-05-selection-unit-hud.md) |
 | 6 | Complete | Finite decision submission | [phase-06](docs/plans/phase-06-finite-decision-submission.md) |
-| 7 | Planned | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
+| 7 | Complete | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
 | 8 | Planned | Movement proposal diagnostics | [phase-08](docs/plans/phase-08-movement-proposal-diagnostics.md) |
 | 9 | Planned | HUD ergonomics pass | [phase-09](docs/plans/phase-09-hud-ergonomics.md) |
 | 10 | Planned | Packaging, CI, and regression hardening | [phase-10](docs/plans/phase-10-packaging-ci-regression.md) |
@@ -66,8 +66,9 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-6 provide the runnable shell, core client boundary, inspectable render foundation,
-shareable UI preference framework, local selection/HUD state, and finite decision submission:
+Phases 0-7 provide the runnable shell, core client boundary, inspectable render foundation,
+shareable UI preference framework, local selection/HUD state, finite decision submission, and local
+movement path drafting:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
@@ -105,15 +106,19 @@ shareable UI preference framework, local selection/HUD state, and finite decisio
 - `warhammer40k_arcade_ui.state.finite_decision` — local finite-option focus, deterministic UI
   result-ID generation, UI-boundary no-submit diagnostics, status refresh, and viewer-scoped event
   cursor state.
+- `warhammer40k_arcade_ui.state.movement_draft` — local-only movement proposal draft state,
+  waypoint management, advisory measurement/hint generation, and JSON-safe payload preview
+  construction that preserves engine-issued movement context.
 - `warhammer40k_arcade_ui.input.commands` — preference-backed local hotkey matching.
 - `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, finite-decision
-  panel, and debug inspector view models derived from projection data and current pending requests.
+  panel, movement draft panel, and debug inspector view models derived from projection data and
+  current pending requests.
 
 Planned modules from later phases:
 
-- `input` — movement path tooling and later command flows.
-- `hud` — movement workflow controls and later phase-specific ergonomics.
-- `state` — movement drafts and other local-only workflow state.
+- `input` — later command flows beyond finite decisions and movement drafting.
+- `hud` — movement submission diagnostics and later phase-specific ergonomics.
+- `state` — other local-only workflow state beyond movement drafts.
 
 ## Shareable Preferences
 
@@ -178,6 +183,23 @@ Tab now cycles finite-option focus when finite options are pending. Without fini
 cycles an already selected overlapping model hit set; it no longer creates a selection from a merely
 hovered model.
 
+## Movement Path Drafting
+
+Phase 7 adds the first movement-specific local workflow. When the current pending request is a
+`submit_movement_proposal` parameterized request for the selected unit, the UI opens a local
+movement draft. The draft records the proposal request ID, proposal kind, selected unit,
+`movement_phase_action`, optional `movement_mode`, optional Fall Back `fall_back_mode`, source
+decision IDs, anchor model poses, waypoints, cursor preview, and advisory hints.
+
+The renderer displays active movement-path and movement-budget overlays in world space: path lines,
+waypoints, endpoint preview, final ghost bases, and budget rings. The HUD displays proposal context,
+segment and total measurements, remaining budget estimates, ready state, and preview-only warnings.
+
+This phase prepares a JSON-safe movement payload preview, including `witness.model_paths` and
+optional `model_movements`, but does not submit the parameterized request. Phase 8 owns actual
+movement proposal submission, authoritative diagnostics, accepted-state refresh, and retry
+behavior.
+
 ## Runtime modes
 
 - **Local in-process session** — initial wrapper implemented in `core_client`; later phases will
@@ -232,14 +254,21 @@ finite movement action selection
 - Pure state/HUD tests for selection hit detection, overlap cycling, preference-backed hotkeys,
   selected-unit panels, context menu derivation from pending finite decisions, finite decision
   submission state, debug inspector content, and selection overlay primitive generation.
-- Future pure state tests for movement draft transitions.
-- Future movement payload tests for exact preservation of engine-issued movement mode and Fall Back
-  mode context.
+- Pure movement draft tests for activation gates, waypoint transitions, payload preview shape,
+  Fall Back mode preservation, and unsupported parameterized requests.
+- Render/HUD tests for movement path primitives, ghost bases, movement budget overlays, and
+  movement draft panel content.
+- Manual validation checklists for user-facing graphical workflows because live GUI interaction is
+  only partially automatable.
+- Future movement submission tests for exact preservation of engine-issued movement mode and Fall
+  Back mode context through parameterized engine submission.
 - Future static checks to keep direct engine imports isolated to `core_client`.
 
 ## Known deferred work
 
 - Live projection-to-render-state integration for the local game session.
+- Movement proposal submission, accepted-state refresh, authoritative movement diagnostics, and
+  retry-from-last-path behavior.
 - Network transport.
 - Replay inspector.
 - Placement proposal tools for reserves, disembark, Rapid Ingress, and other
@@ -292,3 +321,8 @@ finite movement action selection
   `movement_mode`, and Fall Back `fall_back_mode` context. Placement, shooting declaration,
   Stratagem target-binding, and ranged attack-resolution decisions are acknowledged as future UI
   tools behind the same generic decision/proposal boundary.
+- 2026-06-04: Phase 7 completed with local movement draft state, movement proposal activation
+  gates, advisory path/measurement overlays, movement draft HUD content, payload preview generation,
+  active movement preference overlays, and tests covering draft transitions, payload shape, Fall
+  Back mode preservation, unsupported parameterized requests, HUD view models, and render
+  primitives. Engine submission remains Phase 8.

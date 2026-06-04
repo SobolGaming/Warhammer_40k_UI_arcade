@@ -12,6 +12,10 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
+from warhammer40k_arcade_ui.state.movement_draft import (
+    MovementDraft,
+    unsupported_parameterized_tool_label,
+)
 from warhammer40k_arcade_ui.state.selection import (
     SelectionState,
     selected_model,
@@ -56,6 +60,24 @@ class FiniteDecisionPanelView:
     proposal_kind: str | None
     options: tuple[FiniteDecisionOptionView, ...]
     diagnostic_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MovementDraftPanelView:
+    """HUD display model for the local movement draft preview."""
+
+    status_line: str
+    request_id: str | None
+    unit_id: str | None
+    proposal_kind: str | None
+    movement_phase_action: str | None
+    movement_mode: str | None
+    fall_back_mode: str | None
+    current_segment_inches: float | None
+    total_path_inches: float | None
+    remaining_budget_inches: float | None
+    ready: bool
+    hint_lines: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +212,65 @@ def build_finite_decision_panel(
             for index, option in enumerate(pending_decision.options)
         ),
         diagnostic_lines=_diagnostic_lines(diagnostics),
+    )
+
+
+def build_movement_draft_panel(
+    *,
+    movement_draft: MovementDraft | None,
+    pending_decision: UiDecision | None,
+) -> MovementDraftPanelView | None:
+    """Build movement draft HUD content without treating previews as authoritative."""
+
+    if movement_draft is not None:
+        return MovementDraftPanelView(
+            status_line="Movement draft ready"
+            if movement_draft.is_ready
+            else "Movement draft preview",
+            request_id=movement_draft.proposal_request_id,
+            unit_id=movement_draft.selected_unit_id,
+            proposal_kind=movement_draft.proposal_kind,
+            movement_phase_action=movement_draft.movement_phase_action,
+            movement_mode=movement_draft.movement_mode,
+            fall_back_mode=movement_draft.fall_back_mode,
+            current_segment_inches=movement_draft.current_segment_length,
+            total_path_inches=movement_draft.total_path_length,
+            remaining_budget_inches=movement_draft.remaining_budget_inches,
+            ready=movement_draft.is_ready,
+            hint_lines=movement_draft.local_hint_lines,
+        )
+    unsupported_label = unsupported_parameterized_tool_label(pending_decision)
+    if unsupported_label is not None:
+        return MovementDraftPanelView(
+            status_line=f"Unsupported proposal tool: {unsupported_label}",
+            request_id=None if pending_decision is None else pending_decision.request_id,
+            unit_id=None,
+            proposal_kind=unsupported_label,
+            movement_phase_action=None,
+            movement_mode=None,
+            fall_back_mode=None,
+            current_segment_inches=None,
+            total_path_inches=None,
+            remaining_budget_inches=None,
+            ready=False,
+            hint_lines=("Proposal visible; movement draft tool is not applicable.",),
+        )
+    movement_proposal = None if pending_decision is None else pending_decision.movement_proposal
+    if movement_proposal is None:
+        return None
+    return MovementDraftPanelView(
+        status_line="Movement proposal pending",
+        request_id=movement_proposal.request_id,
+        unit_id=movement_proposal.unit_instance_id,
+        proposal_kind=movement_proposal.proposal_kind,
+        movement_phase_action=movement_proposal.movement_phase_action,
+        movement_mode=None,
+        fall_back_mode=None,
+        current_segment_inches=None,
+        total_path_inches=None,
+        remaining_budget_inches=None,
+        ready=False,
+        hint_lines=("Requested unit is not selected.",),
     )
 
 

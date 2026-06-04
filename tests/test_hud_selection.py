@@ -7,11 +7,13 @@ from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
     build_debug_inspector,
     build_finite_decision_panel,
+    build_movement_draft_panel,
     build_unit_panel,
     decision_targets_unit,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
+from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
 
@@ -164,6 +166,43 @@ def test_finite_decision_panel_hides_parameterized_fixed_submit_option() -> None
     assert panel.options == ()
 
 
+def test_movement_draft_panel_shows_measurements_and_ready_state() -> None:
+    view = default_battlefield_view()
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=_movement_proposal_decision(),
+    )
+    assert draft is not None
+    ready_draft = draft.add_waypoint(view=view, world_point=(10.0, 22.0)).mark_ready(view=view)
+
+    panel = build_movement_draft_panel(
+        movement_draft=ready_draft,
+        pending_decision=_movement_proposal_decision(),
+    )
+
+    assert panel is not None
+    assert panel.status_line == "Movement draft ready"
+    assert panel.request_id == "decision-request-000005"
+    assert panel.unit_id == "intercessor_squad"
+    assert panel.movement_phase_action == "normal_move"
+    assert panel.movement_mode == "normal"
+    assert panel.total_path_inches == 3.0
+    assert panel.remaining_budget_inches == 3.0
+    assert panel.ready is True
+
+
+def test_movement_draft_panel_reports_unsupported_parameterized_request() -> None:
+    panel = build_movement_draft_panel(
+        movement_draft=None,
+        pending_decision=_shooting_proposal_decision(),
+    )
+
+    assert panel is not None
+    assert panel.status_line == "Unsupported proposal tool: shooting_declaration"
+    assert panel.proposal_kind == "shooting_declaration"
+
+
 def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> None:
     selection = _selected_intercessors().toggle_debug_inspector()
     decision = _finite_decision_for("intercessor_squad")
@@ -226,4 +265,67 @@ def _finite_decision_for(unit_id: str) -> UiDecision:
             ),
         ),
         is_parameterized=False,
+    )
+
+
+def _movement_proposal_decision() -> UiDecision:
+    return UiDecision.from_payload(
+        {
+            "request_id": "decision-request-000005",
+            "decision_type": "submit_movement_proposal",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-000005",
+                    "decision_type": "submit_movement_proposal",
+                    "actor_id": "player_1",
+                    "game_id": "phase7-game",
+                    "battle_round": 1,
+                    "phase": "movement",
+                    "unit_instance_id": "intercessor_squad",
+                    "proposal_kind": "normal_move",
+                    "source_decision_request_id": "decision-request-000004",
+                    "source_decision_result_id": "ui-result-000001",
+                    "movement_phase_action": "normal_move",
+                    "placement_kinds": [],
+                    "context": {
+                        "source_selected_option_id": "normal_move",
+                        "movement_mode": "normal",
+                        "movement_budget_inches": 6.0,
+                    },
+                }
+            },
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )
+
+
+def _shooting_proposal_decision() -> UiDecision:
+    return UiDecision.from_payload(
+        {
+            "request_id": "decision-request-000009",
+            "decision_type": "submit_shooting_declaration",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-000009",
+                    "decision_type": "submit_shooting_declaration",
+                    "actor_id": "player_1",
+                    "proposal_kind": "shooting_declaration",
+                }
+            },
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
     )

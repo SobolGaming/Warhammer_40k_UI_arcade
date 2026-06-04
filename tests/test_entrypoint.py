@@ -93,3 +93,10 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
     parsed = main.parse_args(["--ui-prefs", "/tmp/profile.yaml"])
 
     assert parsed.ui_prefs_path == Path("/tmp/profile.yaml")
+
+
+def test_phase7_debug_env_alias_enables_debug_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(app.PHASE6_DEBUG_ENV_VAR, raising=False)
+    monkeypatch.setenv(app.PHASE7_DEBUG_ENV_VAR, "1")
+
+    assert app.phase_debug_enabled() is True

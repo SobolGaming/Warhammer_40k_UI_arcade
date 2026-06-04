@@ -33,7 +33,7 @@ Reviewed against `Warhammer_40k_AI` `main` at `16d0adf` on 2026-06-04.
 
 ## Tasks
 
-- [ ] Add `MovementDraft` state:
+- [x] Add `MovementDraft` state:
   - selected unit id
   - proposal request id
   - proposal kind
@@ -44,55 +44,55 @@ Reviewed against `Warhammer_40k_AI` `main` at `16d0adf` on 2026-06-04.
   - per-model path points
   - current cursor preview point
   - local-only validity hints
-- [ ] Activate drafting only when the current pending proposal is a movement proposal for the
+- [x] Activate drafting only when the current pending proposal is a movement proposal for the
   selected unit.
-- [ ] Implement movement tool modes:
+- [x] Implement movement tool modes:
   - unit-level simple path mode
   - model-level edit mode, deferred if too large
-- [ ] Add path interactions:
+- [x] Add path interactions:
   - click to add waypoint
   - drag endpoint
   - right-click/remove last waypoint
   - Escape cancel draft
   - Enter marks the draft ready and builds the payload preview; it must not call the engine until
     Phase 8 wires submission.
-- [ ] Render:
+- [x] Render:
   - movement path line
   - waypoints
   - final ghost base positions
   - movement budget ring/overlay
   - warning color/style for advisory local violations
-- [ ] Add measurement overlay:
+- [x] Add measurement overlay:
   - segment length
   - total path length
   - remaining budget estimate
-- [ ] Keep local validation advisory:
+- [x] Keep local validation advisory:
   - endpoint distance estimate
   - table bounds estimate
   - obvious self-overlap indicator
   - engine remains authority
-- [ ] Add a payload builder for the current draft that emits the core contract shape and copies
+- [x] Add a payload builder for the current draft that emits the core contract shape and copies
   `movement_phase_action`, `movement_mode`, and `fall_back_mode` from the pending proposal request.
-- [ ] Display a clear unsupported-tool state for non-movement parameterized requests rather than
+- [x] Display a clear unsupported-tool state for non-movement parameterized requests rather than
   attempting to draft a movement path for them.
 
 ## Acceptance criteria
 
-- [ ] Movement proposal request activates movement drafting mode.
-- [ ] Non-movement parameterized requests do not activate movement drafting mode.
-- [ ] User can create, edit, and cancel a path.
-- [ ] Draft path renders in world space and survives camera pan/zoom.
-- [ ] UI can build a JSON-safe movement payload shape.
-- [ ] Payload includes proposal request id, proposal kind, unit id, movement phase action, witness,
+- [x] Movement proposal request activates movement drafting mode.
+- [x] Non-movement parameterized requests do not activate movement drafting mode.
+- [x] User can create, edit, and cancel a path.
+- [x] Draft path renders in world space and survives camera pan/zoom.
+- [x] UI can build a JSON-safe movement payload shape.
+- [x] Payload includes proposal request id, proposal kind, unit id, movement phase action, witness,
   and optional model movements.
-- [ ] Payload preserves engine-issued `movement_mode` and Fall Back `fall_back_mode` values when the
+- [x] Payload preserves engine-issued `movement_mode` and Fall Back `fall_back_mode` values when the
   pending request requires them.
-- [ ] Client-side warnings are clearly labeled as preview/advisory.
-- [ ] Tests verify movement draft state transitions.
-- [ ] Tests verify generated payload shape from a simple two-point path.
-- [ ] Tests verify Fall Back payload generation preserves the pending `fall_back_mode`.
-- [ ] Tests verify canceling draft does not submit anything.
-- [ ] Tests verify unsupported parameterized requests remain visible but do not create movement
+- [x] Client-side warnings are clearly labeled as preview/advisory.
+- [x] Tests verify movement draft state transitions.
+- [x] Tests verify generated payload shape from a simple two-point path.
+- [x] Tests verify Fall Back payload generation preserves the pending `fall_back_mode`.
+- [x] Tests verify canceling draft does not submit anything.
+- [x] Tests verify unsupported parameterized requests remain visible but do not create movement
   drafts.
 
 ## Closeout milestone
@@ -101,3 +101,83 @@ Reviewed against `Warhammer_40k_AI` `main` at `16d0adf` on 2026-06-04.
 
 A user can select a unit, choose Normal Move, draft a movement path, preview the result, and prepare
 an engine-compatible movement proposal payload.
+
+## Implementation notes
+
+Implemented on 2026-06-04.
+
+- Added `state.movement_draft.MovementDraft` as local-only draft state for movement proposals.
+  Draft activation is gated by the pending `submit_movement_proposal` request and selected unit.
+- Added JSON-safe movement payload preview generation. The builder preserves
+  `movement_phase_action`, `movement_mode`, and Fall Back `fall_back_mode` exactly as issued by the
+  engine proposal request.
+- Added movement draft world primitives for path lines, waypoints, endpoint preview, final ghost
+  bases, and advisory movement-budget rings.
+- Added a movement draft HUD panel with proposal context, segment/total/remaining measurements,
+  ready state, and preview-only hints.
+- Added input handling for waypoint creation, endpoint preview, right-click waypoint removal,
+  Escape cancel, and Enter ready-state/payload-preview generation. Phase 7 does not submit the
+  parameterized payload to the engine.
+- Activated the `movement_path_draft` and `movement_budget` overlays in the preferences registry so
+  users can bind and exchange them in YAML/JSON profiles.
+- Added `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1` as an alias for the deterministic debug fixture used
+  to manually exercise movement action selection and draft activation.
+
+Known limitations deferred to Phase 8:
+
+- Ready movement payloads are previewed locally but not submitted to the engine.
+- Accepted movement does not update authoritative model positions until Phase 8 wires
+  parameterized submission and projection refresh.
+- Local hints are intentionally advisory and incomplete; the engine remains the only authority for
+  legal movement.
+- Model-level edit mode is represented as a draft mode but remains deferred for larger units.
+
+## Verification
+
+Focused validation completed during implementation:
+
+```bash
+UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest tests/test_movement_draft.py \
+  tests/test_hud_selection.py tests/test_render_primitives.py tests/test_selection_state.py \
+  tests/test_debug_fixtures.py tests/test_entrypoint.py
+UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest tests/test_preferences.py
+```
+
+Full repository gates completed during PR preparation:
+
+```bash
+UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
+UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .
+UV_CACHE_DIR=/tmp/uv-cache uv run pyright
+UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests
+UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest
+UV_CACHE_DIR=/tmp/uv-cache PRE_COMMIT_HOME=/tmp/pre-commit-cache uv run pre-commit run --all-files
+```
+
+Result: all commands passed. The full pytest run collected 75 tests and passed them all.
+
+## Manual validation checklist
+
+Use the deterministic debug fixture:
+
+```bash
+WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 uv run warhammer40k-arcade-ui \
+  --ui-prefs docs/preferences/default.yaml
+```
+
+- [ ] Select a model from the visible infantry unit.
+- [ ] Open the selected-unit actions menu with Space.
+- [ ] Choose the Normal Move finite option.
+- [ ] Confirm the finite choice with Enter.
+- [ ] Verify the HUD changes to a movement draft/proposal-required panel for the selected unit.
+- [ ] Left-click on the table to add movement waypoints.
+- [ ] Move the mouse and verify the endpoint preview follows the cursor.
+- [ ] Verify movement path, waypoint, final ghost base, and movement budget overlays render in world
+  space.
+- [ ] Pan or zoom the camera and verify the path remains anchored to the table.
+- [ ] Right-click without dragging to remove the last waypoint.
+- [ ] Press Enter and verify the panel reports the draft as ready; no authoritative model movement
+  should occur in Phase 7.
+- [ ] Press Escape and verify the local draft clears.
+- [ ] Try a non-movement parameterized request, if available in a later fixture, and verify it is
+  shown as unsupported by the movement draft tool rather than activating movement drafting.

@@ -10,6 +10,7 @@ from typing import Any, Protocol, cast
 from warhammer40k_arcade_ui.config import AppConfig
 
 PHASE6_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6"
+PHASE7_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7"
 
 
 class ArcadeWindow(Protocol):
@@ -75,7 +76,7 @@ def create_window(
     if arcade_runtime is None:
         from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 
-        if _phase6_debug_enabled():
+        if phase_debug_enabled():
             from warhammer40k_arcade_ui.debug_fixtures import (
                 phase6_debug_core_client,
                 phase6_debug_pending_decision,
@@ -118,5 +119,7 @@ def run_app(
     runtime.run()
 
 
-def _phase6_debug_enabled() -> bool:
-    return environ.get(PHASE6_DEBUG_ENV_VAR) == "1"
+def phase_debug_enabled() -> bool:
+    """Return whether any deterministic phase debug fixture is enabled."""
+
+    return environ.get(PHASE6_DEBUG_ENV_VAR) == "1" or environ.get(PHASE7_DEBUG_ENV_VAR) == "1"

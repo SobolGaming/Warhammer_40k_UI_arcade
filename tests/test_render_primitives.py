@@ -12,17 +12,21 @@ from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
     build_debug_inspector,
     build_finite_decision_panel,
+    build_movement_draft_panel,
     build_unit_panel,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
     PolygonPrimitive,
+    PolylinePrimitive,
     TextPrimitive,
     build_hud_primitives,
     build_world_primitives,
 )
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, RenderViewModelError
+from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "phase03_battlefield_view.json"
@@ -84,6 +88,37 @@ def test_selected_unit_builds_selection_overlay_primitives() -> None:
     assert "selected_model_overlay" in circle_layers
 
 
+def test_movement_draft_builds_path_waypoint_ghost_and_budget_primitives() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    selection = selection.with_movement_draft_overlays(preferences)
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=_movement_proposal_decision(),
+    )
+    assert draft is not None
+    draft = draft.add_waypoint(view=view, world_point=(10.0, 22.0))
+
+    primitives = build_world_primitives(view, selection, draft)
+
+    line_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is PolylinePrimitive
+    ]
+    circle_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is CirclePrimitive
+    ]
+    assert line_layers.count("movement_path") == 3
+    assert circle_layers.count("movement_ghost_base") == 3
+    assert "movement_waypoint" in circle_layers
+    assert "movement_budget_ring" in circle_layers
+
+
 def test_hud_primitives_are_screen_space_and_include_mouse_coordinates() -> None:
     payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     view = BattlefieldView.from_payload(payload)
@@ -143,6 +178,10 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
             status_message="Waiting: select_movement_action",
             diagnostics=(),
         ),
+        movement_draft_panel=build_movement_draft_panel(
+            movement_draft=None,
+            pending_decision=None,
+        ),
         debug_inspector=build_debug_inspector(
             selection=selection,
             pending_decision=decision,
@@ -162,9 +201,80 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
     assert "UI prefs: built-in default" in texts
 
 
+def test_hud_primitives_include_movement_draft_panel() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=_movement_proposal_decision(),
+    )
+    assert draft is not None
+    draft = draft.add_waypoint(view=view, world_point=(10.0, 22.0)).mark_ready(view=view)
+
+    primitives = build_hud_primitives(
+        view=view,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+        mouse_world_position=(10.0, 22.0),
+        movement_draft_panel=build_movement_draft_panel(
+            movement_draft=draft,
+            pending_decision=_movement_proposal_decision(),
+        ),
+    )
+
+    texts = [primitive.text for primitive in primitives]
+    assert "Movement draft" in texts
+    assert "Payload preview: ready" in texts
+    assert "Mode: normal" in texts
+
+
 def test_render_view_model_rejects_incomplete_payload() -> None:
     payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     del payload["table"]["width"]
 
     with pytest.raises(RenderViewModelError, match="width is required"):
         BattlefieldView.from_payload(payload)
+
+
+def _movement_proposal_decision() -> UiDecision:
+    return UiDecision.from_payload(
+        {
+            "request_id": "decision-request-000005",
+            "decision_type": "submit_movement_proposal",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-000005",
+                    "decision_type": "submit_movement_proposal",
+                    "actor_id": "player_1",
+                    "game_id": "phase7-game",
+                    "battle_round": 1,
+                    "phase": "movement",
+                    "unit_instance_id": "intercessor_squad",
+                    "proposal_kind": "normal_move",
+                    "source_decision_request_id": "decision-request-000004",
+                    "source_decision_result_id": "ui-result-000001",
+                    "movement_phase_action": "normal_move",
+                    "placement_kinds": [],
+                    "context": {
+                        "source_selected_option_id": "normal_move",
+                        "movement_mode": "normal",
+                        "movement_budget_inches": 6.0,
+                    },
+                }
+            },
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )

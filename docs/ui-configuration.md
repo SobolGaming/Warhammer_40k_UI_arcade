@@ -87,14 +87,14 @@ Active command IDs:
 Active overlay IDs:
 
 - `debug_coordinates`
+- `movement_budget`
+- `movement_path_draft`
 - `selected_model`
 - `selected_unit`
 
 Recognized planned overlay IDs are accepted and preserved, but emit inactive diagnostics until later
 phases wire them to render, HUD, projection, or local-state data:
 
-- `movement_budget`
-- `movement_path_draft`
 - `objective_control_context`
 - `engagement_range`
 - `coherency`
