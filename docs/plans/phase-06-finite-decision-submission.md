@@ -110,7 +110,7 @@ WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6=1 uv run warhammer40k-arcade-ui
 - [x] Confirm the parameterized movement proposal request is displayed as requiring a proposal tool,
   not as a clickable finite action.
 - [x] Confirm event log lines advance with the viewer-scoped `decision_recorded` event summary.
-- [ ] Launch with
+- [x] Launch with
   `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml`,
   select the Intercessors, press Space to open selected-unit actions, and click a context-menu
   action.
