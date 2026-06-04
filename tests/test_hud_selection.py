@@ -173,6 +173,7 @@ def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> 
         pending_decision=decision,
         cursor_position=(12.0, 13.5),
         event_cursor=7,
+        preference_source_label="keyboard-heavy.yaml",
     )
 
     assert inspector is not None
@@ -182,6 +183,7 @@ def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> 
         "Proposal kind: none",
         "Cursor: 12.00, 13.50 in",
         "Event cursor: 7",
+        "UI prefs: keyboard-heavy.yaml",
     )
 
 

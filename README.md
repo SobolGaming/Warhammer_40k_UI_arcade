@@ -18,6 +18,7 @@ uv python install 3.14.5
 uv lock
 uv sync
 uv run warhammer40k-arcade-ui
+uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
 uv run pytest
 ```
 
@@ -208,6 +209,7 @@ surface.
   hidden-information visibility.
 - Generate starter preference profiles with `uv run warhammer40k-export-preferences --format yaml`
   or load the documented examples under `docs/preferences/`.
+- Select a profile at launch with `uv run warhammer40k-arcade-ui --ui-prefs path/to/profile.yaml`.
 - Phase 5 selection state is local-only: model-base clicks select projected units, selection
   highlights and panels are advisory, and context menus display engine-provided finite options
   without submitting them.

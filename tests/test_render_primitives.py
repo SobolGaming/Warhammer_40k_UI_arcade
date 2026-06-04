@@ -148,6 +148,7 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
             pending_decision=decision,
             cursor_position=(7.0, 18.0),
             event_cursor=3,
+            preference_source_label="built-in default",
         ),
     )
 
@@ -158,6 +159,7 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
     assert "Decision" in texts
     assert "> Normal Move [normal_move]" in texts
     assert "Debug inspector" in texts
+    assert "UI prefs: built-in default" in texts
 
 
 def test_render_view_model_rejects_incomplete_payload() -> None:

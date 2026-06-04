@@ -14,6 +14,10 @@ Generate a starter profile:
 ```bash
 uv run warhammer40k-export-preferences --format yaml
 uv run warhammer40k-export-preferences --format json --output ui-preferences.json
+uv run warhammer40k-export-preferences \
+  --profile keyboard-heavy \
+  --format yaml \
+  --output ui-preferences.yaml
 ```
 
 Available built-in profiles:
@@ -21,6 +25,26 @@ Available built-in profiles:
 - `default`
 - `dense-debug`
 - `keyboard-heavy`
+
+## Use A Profile
+
+Launch with a specific JSON or YAML profile:
+
+```bash
+uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
+```
+
+If `--ui-prefs` is omitted, the app looks for the platform default preferences file:
+
+```text
+~/.config/warhammer40k-arcade-ui/ui-preferences.yaml
+```
+
+If that file is not present, the app uses the built-in `default` profile.
+
+When the debug inspector is visible, it displays the active UI preferences file name, such as
+`default.yaml`, `keyboard-heavy.yaml`, or `built-in default` when no file was loaded.
 
 ## File Shape
 

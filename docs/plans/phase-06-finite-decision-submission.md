@@ -86,9 +86,9 @@ Normal launch remains fixture-backed and has no pending engine request:
 uv run warhammer40k-arcade-ui
 ```
 
-- [ ] Confirm the app still launches to the fixture battlefield.
-- [ ] Confirm the decision panel shows a ready/no-pending state and the existing fixture event lines.
-- [ ] Hover over a model without selecting it and press Tab.
+- [x] Confirm the app still launches to the fixture battlefield.
+- [x] Confirm the decision panel shows a ready/no-pending state and the existing fixture event lines.
+- [x] Hover over a model without selecting it and press Tab.
   - Expected: no model is selected from hover alone.
 
 Use the opt-in Phase 6 debug fixture for finite-decision manual validation:
@@ -97,21 +97,23 @@ Use the opt-in Phase 6 debug fixture for finite-decision manual validation:
 WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6=1 uv run warhammer40k-arcade-ui
 ```
 
-- [ ] Confirm a finite pending request appears in the HUD with request ID, decision type, actor, and
+- [x] Confirm a finite pending request appears in the HUD with request ID, decision type, actor, and
   options.
-- [ ] Press Tab.
+- [x] Press Tab.
   - Expected: option focus moves between Normal Move and Advance.
   - Expected: no model is selected merely because the mouse is hovering over a model.
-- [ ] Press Enter while Normal Move is highlighted.
+- [x] Press Enter while Normal Move is highlighted.
   - Expected: the UI submits `decision-request-phase6-debug-000001` /
     `normal_move` / `ui-result-000001` through the fake UI client.
   - Expected: the HUD refreshes to a parameterized movement proposal state and does not move
     fixture model positions.
-- [ ] Confirm the parameterized movement proposal request is displayed as requiring a proposal tool,
+- [x] Confirm the parameterized movement proposal request is displayed as requiring a proposal tool,
   not as a clickable finite action.
-- [ ] Confirm event log lines advance with the viewer-scoped `decision_recorded` event summary.
-- [ ] Select the Intercessors, open selected-unit actions with a profile that binds
-  `open_selected_unit_actions`, and click a context-menu action.
+- [x] Confirm event log lines advance with the viewer-scoped `decision_recorded` event summary.
+- [ ] Launch with
+  `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml`,
+  select the Intercessors, press Space to open selected-unit actions, and click a context-menu
+  action.
   - Expected: enabled actions submit through the same finite path.
 
 Stale/invalid engine-result display is covered by automated tests with fake and local clients. A

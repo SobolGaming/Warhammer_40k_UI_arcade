@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import arcade
 
@@ -19,7 +20,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
 from warhammer40k_arcade_ui.input.commands import command_for_key
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.diagnostics import PreferenceDiagnostic
-from warhammer40k_arcade_ui.preferences.io import load_preferences
+from warhammer40k_arcade_ui.preferences.io import PreferencesLoadResult, load_preferences
 from warhammer40k_arcade_ui.preferences.schema import UiPreferences
 from warhammer40k_arcade_ui.render.camera import WorldCamera, WorldPoint
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
@@ -53,6 +54,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         config: AppConfig | None = None,
         battlefield_view: BattlefieldView | None = None,
         preferences: UiPreferences | None = None,
+        preferences_path: Path | None = None,
         pending_decision: UiDecision | None = None,
         core_client: UiCoreClient | None = None,
         viewer_player_id: str = "player_1",
@@ -68,12 +70,14 @@ class ArcadeWarhammerWindow(arcade.Window):
         self.background_color = arcade.color.DARK_SLATE_GRAY
         self._battlefield_view = battlefield_view or default_battlefield_view()
         if preferences is None:
-            loaded_preferences = load_preferences()
+            loaded_preferences = load_preferences(preferences_path)
             self._preferences = loaded_preferences.preferences or default_preferences()
             self._preference_diagnostics = loaded_preferences.diagnostics
+            self._preference_source_label = _preference_source_label(loaded_preferences)
         else:
             self._preferences = preferences
             self._preference_diagnostics = ()
+            self._preference_source_label = "injected preferences"
         self._selection_state = SelectionState.initial(self._preferences)
         self._core_client = core_client
         self._viewer_player_id = viewer_player_id
@@ -116,6 +120,12 @@ class ArcadeWarhammerWindow(arcade.Window):
 
         return self._preference_diagnostics
 
+    @property
+    def preference_source_label(self) -> str:
+        """Display label for the active UI preferences source."""
+
+        return self._preference_source_label
+
     def on_draw(self) -> None:
         """Render the battlefield and fixed HUD."""
 
@@ -146,6 +156,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             pending_decision=self._pending_decision,
             cursor_position=self._mouse_world_position,
             event_cursor=self._event_cursor,
+            preference_source_label=self._preference_source_label,
         )
         world_primitives = build_world_primitives(self._battlefield_view, self._selection_state)
         hud_primitives = build_hud_primitives(
@@ -362,6 +373,16 @@ def _hud_event_lines(
     if state_lines:
         return state_lines
     return current_lines
+
+
+def _preference_source_label(result: PreferencesLoadResult) -> str:
+    if result.source_path is not None:
+        if result.has_errors:
+            return f"{result.source_path.name} (load diagnostics)"
+        return result.source_path.name
+    if result.used_builtin_default:
+        return "built-in default"
+    return "unknown preferences"
 
 
 def _draw_world_primitives(

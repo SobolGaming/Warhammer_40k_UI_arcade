@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from warhammer40k_arcade_ui import app, main
@@ -48,26 +50,29 @@ class FakeArcadeRuntime:
 
 
 def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[str] = []
+    calls: list[tuple[str, Path | None]] = []
 
     def fake_configure_logging() -> None:
-        calls.append("configure_logging")
+        calls.append(("configure_logging", None))
 
-    def fake_run_app() -> None:
-        calls.append("run_app")
+    def fake_run_app(*, ui_prefs_path: Path | None = None) -> None:
+        calls.append(("run_app", ui_prefs_path))
 
     monkeypatch.setattr(main, "configure_logging", fake_configure_logging)
     monkeypatch.setattr(main, "run_app", fake_run_app)
 
-    main.main()
+    main.main(["--ui-prefs", "docs/preferences/keyboard-heavy.yaml"])
 
-    assert calls == ["configure_logging", "run_app"]
+    assert calls == [
+        ("configure_logging", None),
+        ("run_app", Path("docs/preferences/keyboard-heavy.yaml")),
+    ]
 
 
 def test_run_app_creates_window_then_starts_arcade() -> None:
     runtime = FakeArcadeRuntime()
 
-    app.run_app(arcade_runtime=runtime)
+    app.run_app(arcade_runtime=runtime, ui_prefs_path=Path("docs/preferences/default.yaml"))
 
     assert runtime.calls == ["Window", "run"]
     assert runtime.window is not None
@@ -82,3 +87,9 @@ def test_create_window_accepts_explicit_config() -> None:
 
     assert runtime.calls == ["Window"]
     assert created_window is runtime.window
+
+
+def test_parse_args_accepts_optional_ui_preferences_path() -> None:
+    parsed = main.parse_args(["--ui-prefs", "/tmp/profile.yaml"])
+
+    assert parsed.ui_prefs_path == Path("/tmp/profile.yaml")

@@ -90,6 +90,7 @@ class DebugInspectorView:
     proposal_kind: str | None
     cursor_position: WorldPoint | None
     event_cursor: int
+    preference_source_label: str
 
     @property
     def lines(self) -> tuple[str, ...]:
@@ -106,6 +107,7 @@ class DebugInspectorView:
             f"Proposal kind: {self.proposal_kind or 'none'}",
             f"Cursor: {cursor}",
             f"Event cursor: {self.event_cursor}",
+            f"UI prefs: {self.preference_source_label}",
         )
 
 
@@ -224,6 +226,7 @@ def build_debug_inspector(
     pending_decision: UiDecision | None,
     cursor_position: WorldPoint | None,
     event_cursor: int,
+    preference_source_label: str,
 ) -> DebugInspectorView | None:
     """Build debug inspector content when enabled by state/preferences."""
 
@@ -236,6 +239,7 @@ def build_debug_inspector(
         proposal_kind=None if proposal is None else proposal.proposal_kind,
         cursor_position=cursor_position,
         event_cursor=event_cursor,
+        preference_source_label=preference_source_label,
     )
 
 
