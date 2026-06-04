@@ -15,6 +15,8 @@ authoritative results or diagnostics returned by the core engine.
 - Adapter contract: `Warhammer_40k_AI/docs/ADAPTER_DECISION_CONTRACT.md`
 - Core PR review template: `Warhammer_40k_AI/.github/pull_request_template.md`
 - UI planning documents: `docs/plans/`
+- Workspace PR credentials: `../github_token` for GitHub CLI authentication when the user asks
+  Codex to perform pull request actions.
 
 If this file conflicts with the core adapter contract, stop and ask before coding.
 
@@ -44,8 +46,13 @@ During implementation:
 
 - preserve the current worktree and never revert unrelated user changes;
 - keep commits/branches PR-ready when the user asks for git operations;
-- until the user enables Codex push/PR creation, keep Codex-made changes local and PR-ready rather
-  than attempting to push branches or open pull requests;
+- use `gh` as the GitHub pull request tool when the user asks Codex to create, inspect, update,
+  push for, or otherwise manage pull requests;
+- authenticate `gh` with the access token stored in the workspace-level `../github_token` file when
+  PR actions require GitHub access. Do not print, log, commit, or paste the token; pass it through
+  `GH_TOKEN` or `gh auth login --with-token` as appropriate for the requested operation;
+- until the user explicitly asks Codex to push or open a pull request, keep Codex-made changes local
+  and PR-ready rather than attempting to push branches or open pull requests;
 - update the relevant phase plan, README, architecture docs, or ADR notes in the same work item when
   behavior, sequencing, boundaries, or acceptance criteria change;
 - add focused tests for the behavior slice instead of relying only on manual launch checks;
