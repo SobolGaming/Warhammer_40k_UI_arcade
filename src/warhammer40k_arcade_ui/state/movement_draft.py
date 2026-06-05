@@ -568,6 +568,8 @@ class MovementDraft:
     ) -> MovementDraft:
         """Update the current local endpoint preview."""
 
+        if self.ready_payload is not None:
+            return self
         return replace(
             self,
             cursor_preview_point=_validate_world_point("world_point", world_point),
