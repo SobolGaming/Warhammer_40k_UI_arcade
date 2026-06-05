@@ -130,6 +130,13 @@ decision path is trustworthy end to end.
   advisory presentation only; they must not create engine decisions, legal actions, proposal kinds,
   validation behavior, or hidden-information visibility.
 
+## Bugfixes
+
+- For every bugix made, a regression test should be created if there is not already
+  a test to cover that case where possible.
+  - If a regression test is not possible, the agent should announce it to the developer and ask for
+    guidance.
+
 ## Exception and fallback policy
 
 Forbidden by default:
