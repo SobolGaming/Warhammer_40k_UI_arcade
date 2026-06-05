@@ -84,7 +84,11 @@ def phase6_debug_parameterized_decision() -> UiDecision:
                     "source_decision_result_id": "ui-result-000001",
                     "movement_phase_action": "normal_move",
                     "placement_kinds": [],
-                    "context": {"source_selected_option_id": "normal_move"},
+                    "context": {
+                        "source_selected_option_id": "normal_move",
+                        "movement_mode": "normal",
+                        "movement_budget_inches": 6.0,
+                    },
                 }
             },
             "options": [

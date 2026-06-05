@@ -109,12 +109,12 @@ def overlay_registry() -> dict[str, OverlayDefinition]:
         "movement_budget": OverlayDefinition(
             overlay_id="movement_budget",
             label="Movement budget overlay",
-            status="planned",
+            status="active",
         ),
         "movement_path_draft": OverlayDefinition(
             overlay_id="movement_path_draft",
             label="Movement path draft overlay",
-            status="planned",
+            status="active",
         ),
         "objective_control_context": OverlayDefinition(
             overlay_id="objective_control_context",

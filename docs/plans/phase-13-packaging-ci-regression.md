@@ -1,4 +1,4 @@
-# Phase 10 — Packaging, CI, and regression hardening
+# Phase 13 - Packaging, CI, and regression hardening
 
 ## Goal
 
@@ -24,7 +24,7 @@ Make the UI reliable enough to use during engine development.
     proposal, to prove generic proposal display does not force movement parsing
   - default UI preferences profile
   - invalid UI preferences profile
-- [ ] Add “no direct engine mutation” static check:
+- [ ] Add "no direct engine mutation" static check:
   - prohibit imports or calls into known mutable engine state APIs outside `core_client`
   - enforce via custom script if needed
 - [ ] Add changelog.
@@ -41,7 +41,7 @@ Make the UI reliable enough to use during engine development.
 
 ## Closeout milestone
 
-**Milestone 10: “Development-Ready UI Repo”**
+**Milestone 13: "Development-Ready UI Repo"**
 
 The UI repo is stable enough to use as a companion project while the core engine continues evolving.
 

@@ -147,6 +147,32 @@ class SelectionState:
             active_ids.append(overlay_id)
         return replace(self, active_overlay_ids=tuple(active_ids))
 
+    def with_movement_draft_overlays(self, preferences: UiPreferences) -> SelectionState:
+        """Enable preference-backed overlays while a local movement draft is active."""
+
+        return replace(
+            self,
+            active_overlay_ids=_active_overlay_ids(
+                (
+                    *self.active_overlay_ids,
+                    *preferences.overlays.default_on_movement_draft,
+                )
+            ),
+        )
+
+    def without_movement_draft_overlays(self, preferences: UiPreferences) -> SelectionState:
+        """Remove movement-draft default overlays after canceling or losing the draft."""
+
+        movement_overlay_ids = set(preferences.overlays.default_on_movement_draft)
+        return replace(
+            self,
+            active_overlay_ids=tuple(
+                overlay_id
+                for overlay_id in self.active_overlay_ids
+                if overlay_id not in movement_overlay_ids
+            ),
+        )
+
     def open_context_menu(self, anchor_world: WorldPoint) -> SelectionState:
         """Open the selected-unit context menu near the given world-space anchor."""
 

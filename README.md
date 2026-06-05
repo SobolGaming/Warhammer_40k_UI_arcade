@@ -140,6 +140,7 @@ warhammer40k-arcade-ui/
       state/
         __init__.py
         finite_decision.py
+        movement_draft.py
         selection.py
   tests/
     fixtures/
@@ -150,6 +151,7 @@ warhammer40k-arcade-ui/
     test_entrypoint.py
     test_finite_decision_state.py
     test_hud_selection.py
+    test_movement_draft.py
     test_preferences.py
     test_render_camera.py
     test_render_primitives.py
@@ -202,6 +204,11 @@ surface.
   displays parameterized requests as proposal-required pending state.
 - Manually validate the current fixture-backed Phase 6 finite flow with
   `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6=1 uv run warhammer40k-arcade-ui`.
+- Phase 7 movement drafting activates only for selected-unit `submit_movement_proposal` requests,
+  renders advisory path/measurement overlays, and builds JSON-safe payload previews while leaving
+  actual engine submission to a later movement proposal submission phase.
+- Manually validate the current fixture-backed Phase 7 movement draft flow with
+  `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`.
 - UI previews are advisory only; only accepted engine results can update authoritative state.
 - Phase 4 UI preference files may configure known overlays, hotkeys, HUD defaults, selected
   model/unit information affordances, and recognized upcoming behavior settings. They must not

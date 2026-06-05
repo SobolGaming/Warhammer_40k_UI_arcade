@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from itertools import pairwise
 from pathlib import Path
 
 import arcade
@@ -15,6 +16,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
     build_debug_inspector,
     build_finite_decision_panel,
+    build_movement_draft_panel,
     build_unit_panel,
 )
 from warhammer40k_arcade_ui.input.commands import command_for_key
@@ -27,6 +29,7 @@ from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_vi
 from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
     PolygonPrimitive,
+    PolylinePrimitive,
     RenderPrimitive,
     TextPrimitive,
     build_hud_primitives,
@@ -37,12 +40,14 @@ from warhammer40k_arcade_ui.state.finite_decision import (
     FiniteDecisionUiState,
     submit_finite_option,
 )
+from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState, selected_unit, unit_center
 
 MOUSE_ZOOM_BASE = 1.12
 CONTEXT_MENU_LINE_HEIGHT_WORLD = 1.1
 CONTEXT_MENU_ACTION_WIDTH_WORLD = 18.0
 CONTEXT_MENU_LINE_TOLERANCE_WORLD = 0.55
+RIGHT_CLICK_REMOVE_DRAG_TOLERANCE_PX = 3.0
 
 
 class ArcadeWarhammerWindow(arcade.Window):
@@ -95,6 +100,9 @@ class ArcadeWarhammerWindow(arcade.Window):
             table_height=self._battlefield_view.table.height,
         )
         self._mouse_world_position: WorldPoint | None = None
+        self._movement_draft: MovementDraft | None = None
+        self._right_mouse_press_screen: tuple[float, float] | None = None
+        self._right_mouse_drag_distance_px = 0.0
 
     @property
     def camera(self) -> WorldCamera:
@@ -151,6 +159,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             status_message=self._finite_state.status_message,
             diagnostics=self._finite_state.diagnostics,
         )
+        movement_draft_panel = build_movement_draft_panel(
+            movement_draft=self._movement_draft,
+            pending_decision=self._pending_decision,
+        )
         debug_inspector = build_debug_inspector(
             selection=self._selection_state,
             pending_decision=self._pending_decision,
@@ -158,7 +170,11 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_cursor=self._event_cursor,
             preference_source_label=self._preference_source_label,
         )
-        world_primitives = build_world_primitives(self._battlefield_view, self._selection_state)
+        world_primitives = build_world_primitives(
+            self._battlefield_view,
+            self._selection_state,
+            self._movement_draft,
+        )
         hud_primitives = build_hud_primitives(
             view=self._battlefield_view,
             viewport_width_px=self.width,
@@ -167,6 +183,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             unit_panel=unit_panel,
             context_menu=context_menu,
             finite_decision_panel=finite_decision_panel,
+            movement_draft_panel=movement_draft_panel,
             debug_inspector=debug_inspector,
         )
         _draw_world_primitives(world_primitives, self._camera)
@@ -183,12 +200,21 @@ class ArcadeWarhammerWindow(arcade.Window):
 
         del dx, dy
         self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+        if self._movement_draft is not None:
+            self._movement_draft = self._movement_draft.with_cursor_preview(
+                view=self._battlefield_view,
+                world_point=self._mouse_world_position,
+            )
 
     def on_mouse_press(self, x: int, y: int, button: int, modifiers: int) -> None:
         """Select models with the configured default mouse button."""
 
         del modifiers
         self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+        if button == arcade.MOUSE_BUTTON_RIGHT and self._movement_draft is not None:
+            self._right_mouse_press_screen = (float(x), float(y))
+            self._right_mouse_drag_distance_px = 0.0
+            return
         if _mouse_button_name(button) != self._preferences.selection.default_mouse_button:
             return
         selected_action = self._context_menu_action_at(self._mouse_world_position)
@@ -205,11 +231,18 @@ class ArcadeWarhammerWindow(arcade.Window):
                     )
                 )
             return
+        if self._movement_draft is not None:
+            self._movement_draft = self._movement_draft.add_waypoint(
+                view=self._battlefield_view,
+                world_point=self._mouse_world_position,
+            )
+            return
         self._selection_state = self._selection_state.select_at(
             view=self._battlefield_view,
             world_point=self._mouse_world_position,
             preferences=self._preferences,
         )
+        self._sync_movement_draft()
 
     def on_mouse_drag(
         self,
@@ -227,6 +260,32 @@ class ArcadeWarhammerWindow(arcade.Window):
         if buttons & pan_buttons:
             self._camera = self._camera.pan_screen(float(dx), float(dy))
             self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+            if buttons & arcade.MOUSE_BUTTON_RIGHT:
+                self._right_mouse_drag_distance_px += abs(float(dx)) + abs(float(dy))
+        elif buttons & arcade.MOUSE_BUTTON_LEFT and self._movement_draft is not None:
+            self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+            self._movement_draft = self._movement_draft.with_cursor_preview(
+                view=self._battlefield_view,
+                world_point=self._mouse_world_position,
+            )
+
+    def on_mouse_release(self, x: int, y: int, button: int, modifiers: int) -> None:
+        """Use a right-click release to remove the last movement waypoint."""
+
+        del modifiers
+        self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+        if button != arcade.MOUSE_BUTTON_RIGHT:
+            return
+        if (
+            self._movement_draft is not None
+            and self._right_mouse_press_screen is not None
+            and self._right_mouse_drag_distance_px <= RIGHT_CLICK_REMOVE_DRAG_TOLERANCE_PX
+        ):
+            self._movement_draft = self._movement_draft.remove_last_waypoint(
+                view=self._battlefield_view
+            )
+        self._right_mouse_press_screen = None
+        self._right_mouse_drag_distance_px = 0.0
 
     def on_mouse_scroll(self, x: int, y: int, scroll_x: float, scroll_y: float) -> None:
         """Zoom the camera around the mouse cursor."""
@@ -272,8 +331,12 @@ class ArcadeWarhammerWindow(arcade.Window):
                     preferences=self._preferences,
                 )
         elif invocation.command_id == "confirm":
-            self._submit_finite_option(None)
+            if self._movement_draft is not None:
+                self._movement_draft = self._movement_draft.mark_ready(view=self._battlefield_view)
+            else:
+                self._submit_finite_option(None)
         elif invocation.command_id == "cancel":
+            self._cancel_movement_draft()
             self._selection_state = self._selection_state.close_context_menu()
 
     def _submit_finite_option(self, selected_option_id: str | None) -> None:
@@ -308,6 +371,40 @@ class ArcadeWarhammerWindow(arcade.Window):
             ),
         )
         self._battlefield_view = replace(self._battlefield_view, hud=hud)
+        self._sync_movement_draft()
+
+    def _sync_movement_draft(self) -> None:
+        current = self._movement_draft
+        if current is not None and current.is_for(
+            selection=self._selection_state,
+            pending_decision=self._pending_decision,
+        ):
+            self._movement_draft = current.with_recomputed_hints(view=self._battlefield_view)
+            return
+        next_draft = MovementDraft.start_for_pending(
+            view=self._battlefield_view,
+            selection=self._selection_state,
+            pending_decision=self._pending_decision,
+        )
+        if next_draft is not None:
+            self._movement_draft = next_draft
+            self._selection_state = self._selection_state.with_movement_draft_overlays(
+                self._preferences
+            )
+            return
+        if current is not None:
+            self._movement_draft = None
+            self._selection_state = self._selection_state.without_movement_draft_overlays(
+                self._preferences
+            )
+
+    def _cancel_movement_draft(self) -> None:
+        if self._movement_draft is None:
+            return
+        self._movement_draft = None
+        self._selection_state = self._selection_state.without_movement_draft_overlays(
+            self._preferences
+        )
 
     def _context_menu_action_at(self, world_point: WorldPoint) -> ContextMenuAction | None:
         menu = build_context_menu(
@@ -394,6 +491,8 @@ def _draw_world_primitives(
             _draw_polygon_primitive(primitive, camera)
         elif type(primitive) is CirclePrimitive:
             _draw_circle_primitive(primitive, camera)
+        elif type(primitive) is PolylinePrimitive:
+            _draw_polyline_primitive(primitive, camera)
         elif type(primitive) is TextPrimitive:
             _draw_text_primitive(primitive, camera)
 
@@ -431,6 +530,21 @@ def _draw_circle_primitive(primitive: CirclePrimitive, camera: WorldCamera) -> N
         primitive.outline_color,
         primitive.line_width,
     )
+
+
+def _draw_polyline_primitive(primitive: PolylinePrimitive, camera: WorldCamera) -> None:
+    points = tuple(
+        _screen_point(point, primitive.coordinate_space, camera) for point in primitive.points
+    )
+    for start, end in pairwise(points):
+        arcade.draw_line(
+            start[0],
+            start[1],
+            end[0],
+            end[1],
+            primitive.color,
+            primitive.line_width,
+        )
 
 
 def _draw_text_primitive(primitive: TextPrimitive, camera: WorldCamera) -> None:

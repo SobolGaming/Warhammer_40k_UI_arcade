@@ -12,15 +12,17 @@ from warhammer40k_arcade_ui.hud.view_models import (
     DebugInspectorView,
     FiniteDecisionOptionView,
     FiniteDecisionPanelView,
+    MovementDraftPanelView,
     UnitPanelView,
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
+from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState, selected_model, selected_unit
 
 type Color = tuple[int, int, int, int]
 type CoordinateSpace = Literal["world", "screen"]
-type RenderPrimitive = PolygonPrimitive | CirclePrimitive | TextPrimitive
+type RenderPrimitive = PolygonPrimitive | CirclePrimitive | PolylinePrimitive | TextPrimitive
 
 PLAYER_1_COLOR: Color = (80, 155, 235, 255)
 PLAYER_2_COLOR: Color = (235, 110, 95, 255)
@@ -33,6 +35,10 @@ SELECTION_UNIT_FILL: Color = (255, 225, 96, 28)
 HUD_TEXT: Color = (238, 241, 233, 255)
 HUD_ACCENT: Color = (255, 222, 135, 255)
 HUD_MUTED: Color = (178, 190, 184, 255)
+MOVEMENT_PATH: Color = (102, 220, 180, 255)
+MOVEMENT_PREVIEW: Color = (102, 220, 180, 150)
+MOVEMENT_WARNING: Color = (255, 168, 94, 255)
+MOVEMENT_GHOST_FILL: Color = (102, 220, 180, 54)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +67,17 @@ class CirclePrimitive:
 
 
 @dataclass(frozen=True, slots=True)
+class PolylinePrimitive:
+    """Polyline primitive in either world or screen coordinates."""
+
+    layer: str
+    points: tuple[WorldPoint, ...]
+    color: Color
+    line_width: float
+    coordinate_space: CoordinateSpace = "world"
+
+
+@dataclass(frozen=True, slots=True)
 class TextPrimitive:
     """Text primitive in either world or screen coordinates."""
 
@@ -77,6 +94,7 @@ class TextPrimitive:
 def build_world_primitives(
     view: BattlefieldView,
     selection_state: SelectionState | None = None,
+    movement_draft: MovementDraft | None = None,
 ) -> tuple[RenderPrimitive, ...]:
     """Build deterministic world-space primitives from a battlefield view model."""
 
@@ -100,6 +118,8 @@ def build_world_primitives(
     primitives.extend(_unit_primitives(view))
     if selection_state is not None:
         primitives.extend(_selection_primitives(view, selection_state))
+        if movement_draft is not None:
+            primitives.extend(_movement_draft_primitives(selection_state, movement_draft))
     return tuple(primitives)
 
 
@@ -112,6 +132,7 @@ def build_hud_primitives(
     unit_panel: UnitPanelView | None = None,
     context_menu: ContextMenuView | None = None,
     finite_decision_panel: FiniteDecisionPanelView | None = None,
+    movement_draft_panel: MovementDraftPanelView | None = None,
     debug_inspector: DebugInspectorView | None = None,
 ) -> tuple[TextPrimitive, ...]:
     """Build screen-space HUD primitives that remain fixed during camera movement."""
@@ -149,6 +170,13 @@ def build_hud_primitives(
         primitives.extend(
             _finite_decision_panel_primitives(
                 panel=finite_decision_panel,
+                viewport_height_px=viewport_height_px,
+            )
+        )
+    if movement_draft_panel is not None:
+        primitives.extend(
+            _movement_draft_panel_primitives(
+                panel=movement_draft_panel,
                 viewport_height_px=viewport_height_px,
             )
         )
@@ -366,6 +394,85 @@ def _unit_panel_primitives(
     )
 
 
+def _movement_draft_primitives(
+    selection_state: SelectionState,
+    movement_draft: MovementDraft,
+) -> tuple[RenderPrimitive, ...]:
+    primitives: list[RenderPrimitive] = []
+    warning = any("warning" in hint.lower() for hint in movement_draft.local_hint_lines)
+    line_color = MOVEMENT_WARNING if warning else MOVEMENT_PATH
+    if "movement_path_draft" in selection_state.active_overlay_ids:
+        for path in movement_draft.preview_model_paths():
+            if len(path.points) > 1:
+                primitives.append(
+                    PolylinePrimitive(
+                        layer="movement_path",
+                        points=path.points,
+                        color=line_color,
+                        line_width=1.3,
+                    )
+                )
+            primitives.append(
+                CirclePrimitive(
+                    layer="movement_ghost_base",
+                    center=path.final_point,
+                    radius=path.base_radius,
+                    fill_color=MOVEMENT_GHOST_FILL,
+                    outline_color=line_color,
+                    line_width=1.0,
+                )
+            )
+        for index, point in enumerate(movement_draft.anchor_points[1:], start=1):
+            primitives.append(
+                CirclePrimitive(
+                    layer="movement_waypoint",
+                    center=point,
+                    radius=0.24,
+                    fill_color=line_color,
+                    outline_color=(248, 250, 246, 255),
+                    line_width=0.8,
+                )
+            )
+            primitives.append(
+                TextPrimitive(
+                    layer="movement_waypoint_label",
+                    text=str(index),
+                    position=(point[0], point[1] + 0.42),
+                    color=line_color,
+                    font_size=8.5,
+                    coordinate_space="world",
+                    anchor_x="center",
+                    anchor_y="center",
+                )
+            )
+        if movement_draft.cursor_preview_point is not None:
+            primitives.append(
+                CirclePrimitive(
+                    layer="movement_preview_endpoint",
+                    center=movement_draft.cursor_preview_point,
+                    radius=0.18,
+                    fill_color=MOVEMENT_PREVIEW,
+                    outline_color=line_color,
+                    line_width=0.8,
+                )
+            )
+    if (
+        "movement_budget" in selection_state.active_overlay_ids
+        and movement_draft.movement_budget_inches is not None
+    ):
+        primitives.append(
+            CirclePrimitive(
+                layer="movement_budget_ring",
+                center=movement_draft.anchor_points[0],
+                radius=movement_draft.movement_budget_inches,
+                fill_color=(0, 0, 0, 0),
+                outline_color=MOVEMENT_PREVIEW,
+                line_width=1.0,
+            )
+        )
+    return tuple(primitives)
+
+
 def _context_menu_primitives(menu: ContextMenuView) -> tuple[TextPrimitive, ...]:
     lines = (
         f"Actions: {menu.unit_id}",
@@ -410,6 +517,50 @@ def _finite_decision_panel_primitives(
             layer="finite_decision_panel",
             text=line,
             position=(16.0, y - (index * 18.0)),
+            color=HUD_ACCENT if index == 0 else HUD_TEXT,
+            font_size=12.0 if index else 13.0,
+            coordinate_space="screen",
+        )
+        for index, line in enumerate(lines)
+    )
+
+
+def _movement_draft_panel_primitives(
+    *,
+    panel: MovementDraftPanelView,
+    viewport_height_px: int,
+) -> tuple[TextPrimitive, ...]:
+    y = viewport_height_px - 330.0
+    lines = [
+        "Movement draft",
+        f"Status: {panel.status_line}",
+    ]
+    if panel.request_id is not None:
+        lines.append(f"Request: {panel.request_id}")
+    if panel.unit_id is not None:
+        lines.append(f"Unit: {panel.unit_id}")
+    if panel.proposal_kind is not None:
+        lines.append(f"Proposal: {panel.proposal_kind}")
+    if panel.movement_phase_action is not None:
+        lines.append(f"Action: {panel.movement_phase_action}")
+    if panel.movement_mode is not None:
+        lines.append(f"Mode: {panel.movement_mode}")
+    if panel.fall_back_mode is not None:
+        lines.append(f"Fall Back: {panel.fall_back_mode}")
+    if panel.current_segment_inches is not None:
+        lines.append(f"Segment: {panel.current_segment_inches:.2f} in")
+    if panel.total_path_inches is not None:
+        lines.append(f"Total: {panel.total_path_inches:.2f} in")
+    if panel.remaining_budget_inches is not None:
+        lines.append(f"Remaining: {panel.remaining_budget_inches:.2f} in")
+    if panel.ready:
+        lines.append("Payload preview: ready")
+    lines.extend(panel.hint_lines)
+    return tuple(
+        TextPrimitive(
+            layer="movement_draft_panel",
+            text=line,
+            position=(16.0, y - (index * 17.0)),
             color=HUD_ACCENT if index == 0 else HUD_TEXT,
             font_size=12.0 if index else 13.0,
             coordinate_space="screen",

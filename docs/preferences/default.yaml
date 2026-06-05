@@ -26,6 +26,9 @@ hotkeys:
 - command_id: show_selected_model
   key: m
   modifiers: []
+- command_id: open_selected_unit_actions
+  key: space
+  modifiers: []
 - command_id: toggle_overlay
   key: b
   modifiers: []
