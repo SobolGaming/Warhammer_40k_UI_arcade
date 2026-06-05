@@ -29,6 +29,24 @@ hotkeys:
 - command_id: open_selected_unit_actions
   key: space
   modifiers: []
+- command_id: cycle_entity_layer
+  key: l
+  modifiers: []
+- command_id: select_current_entity_group
+  key: g
+  modifiers: []
+- command_id: add_entity_selection
+  key: a
+  modifiers:
+  - shift
+- command_id: subtract_entity_selection
+  key: s
+  modifiers:
+  - shift
+- command_id: toggle_entity_selection
+  key: t
+  modifiers:
+  - shift
 - command_id: toggle_overlay
   key: b
   modifiers: []

@@ -79,6 +79,31 @@ def command_registry() -> dict[str, CommandDefinition]:
             label="Cycle selectable units or models",
             status="active",
         ),
+        "add_entity_selection": CommandDefinition(
+            command_id="add_entity_selection",
+            label="Add entity to request selection",
+            status="active",
+        ),
+        "subtract_entity_selection": CommandDefinition(
+            command_id="subtract_entity_selection",
+            label="Remove entity from request selection",
+            status="active",
+        ),
+        "toggle_entity_selection": CommandDefinition(
+            command_id="toggle_entity_selection",
+            label="Toggle request-scoped entity selection",
+            status="active",
+        ),
+        "cycle_entity_layer": CommandDefinition(
+            command_id="cycle_entity_layer",
+            label="Cycle active request-selection layer",
+            status="active",
+        ),
+        "select_current_entity_group": CommandDefinition(
+            command_id="select_current_entity_group",
+            label="Select current entity group",
+            status="active",
+        ),
         "toggle_debug_inspector": CommandDefinition(
             command_id="toggle_debug_inspector",
             label="Toggle debug inspector",
