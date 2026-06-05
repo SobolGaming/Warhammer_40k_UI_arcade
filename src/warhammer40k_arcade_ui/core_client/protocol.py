@@ -465,11 +465,6 @@ class UiGameView:
         view = _json_object("game view payload", payload)
         pending_decision_payload = view["pending_decision"]
         pending_proposal_payload = view["pending_proposal"]
-        pending_decision = (
-            None
-            if pending_decision_payload is None
-            else UiDecision.from_payload(pending_decision_payload)
-        )
         return cls(
             viewer_player_id=_required_string(view, "viewer_player_id"),
             game_id=_required_string(view, "game_id"),
@@ -502,10 +497,15 @@ class UiGameView:
             public_stratagem_use_records=tuple(
                 _json_list("public_stratagem_use_records", view["public_stratagem_use_records"])
             ),
-            pending_decision=pending_decision,
-            pending_proposal=_pending_proposal_from_view_payload(
-                pending_proposal_payload=pending_proposal_payload,
-                pending_decision=pending_decision,
+            pending_decision=(
+                None
+                if pending_decision_payload is None
+                else UiDecision.from_payload(pending_decision_payload)
+            ),
+            pending_proposal=(
+                None
+                if pending_proposal_payload is None
+                else UiParameterizedProposalRequest.from_payload(pending_proposal_payload)
             ),
             event_count=_required_int(view, "event_count"),
         )
@@ -640,23 +640,6 @@ def _movement_proposal_from_parameterized(
     return UiMovementProposalRequest.from_payload(proposal.payload)
 
 
-def _pending_proposal_from_view_payload(
-    *,
-    pending_proposal_payload: JsonValue,
-    pending_decision: UiDecision | None,
-) -> UiParameterizedProposalRequest | None:
-    if pending_proposal_payload is None:
-        return None
-    if pending_decision is None:
-        return UiParameterizedProposalRequest.from_payload(pending_proposal_payload)
-    return UiParameterizedProposalRequest.from_decision_payload(
-        payload={"proposal_request": pending_proposal_payload},
-        fallback_request_id=pending_decision.request_id,
-        fallback_decision_type=pending_decision.decision_type,
-        fallback_actor_id=pending_decision.actor_id,
-    )
-
-
 def _payload_has_movement_proposal_shape(payload: JsonObject) -> bool:
     required_keys = (
         "request_id",
@@ -700,7 +683,7 @@ def _json_list(field_name: str, value: object) -> list[JsonValue]:
 
 
 def _required_string(payload: JsonObject, key: str) -> str:
-    return _non_empty_string(key, payload[key])
+    return _non_empty_string(key, _required_value(payload, key))
 
 
 def _optional_string_value(payload: JsonObject, key: str) -> str | None:
@@ -724,10 +707,16 @@ def _string_or_fallback(payload: JsonObject, key: str, fallback: str) -> str:
 
 
 def _required_int(payload: JsonObject, key: str) -> int:
-    value = payload[key]
+    value = _required_value(payload, key)
     if type(value) is not int:
         raise UiClientProtocolError(f"{key} must be an integer.")
     return value
+
+
+def _required_value(payload: JsonObject, key: str) -> JsonValue:
+    if key not in payload:
+        raise UiClientProtocolError(f"{key} is required.")
+    return payload[key]
 
 
 def _optional_bool(payload: JsonObject, key: str) -> bool | None:
