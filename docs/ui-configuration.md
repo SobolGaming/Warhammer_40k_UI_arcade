@@ -78,9 +78,18 @@ Active command IDs:
 - `confirm`
 - `cancel`
 - `cycle_selection`
+- `add_entity_selection`
+- `subtract_entity_selection`
+- `toggle_entity_selection`
+- `cycle_entity_layer`
+- `select_current_entity_group`
 - `toggle_debug_inspector`
 
 `toggle_overlay` bindings must include an `overlay_id`.
+
+The entity-selection commands are Phase 8 request-scoped selection commands. They are registered
+and preference-bindable in this build so profiles can be shared early; the movement assignment UI
+will wire them into live model-subset movement behavior in the next movement phases.
 
 ## Overlay IDs
 

@@ -75,7 +75,7 @@ current answer.
 
 ## Tasks
 
-- [ ] Add a typed `EntityRef` model:
+- [x] Add a typed `EntityRef` model:
   - entity kind;
   - stable ID;
   - optional owner player ID;
@@ -83,7 +83,7 @@ current answer.
   - optional display label;
   - optional visual anchor point when the current projection/request exposes one;
   - typed diagnostic when no safe visual anchor exists.
-- [ ] Add an `EntityLayer` registry:
+- [x] Add an `EntityLayer` registry:
   - model;
   - model group;
   - unit;
@@ -91,7 +91,7 @@ current answer.
   - army;
   - objective;
   - request-specific custom layers.
-- [ ] Add `EntitySelectionProfile`:
+- [x] Add `EntitySelectionProfile`:
   - request ID;
   - decision type;
   - actor ID;
@@ -102,18 +102,18 @@ current answer.
   - cardinality;
   - additive/subtractive support;
   - unsupported reason.
-- [ ] Add `EntitySelectionState`:
+- [x] Add `EntitySelectionState`:
   - selected refs;
   - focused ref;
   - active layer;
   - deterministic selection order;
   - diagnostics.
-- [ ] Add profile builders for current UI-supported request families:
+- [x] Add profile builders for current UI-supported request families:
   - no pending request / inspection fallback;
   - finite unit-selection style requests, when candidate IDs can be read from payload/options;
   - `submit_movement_proposal`;
   - unsupported parameterized requests.
-- [ ] Add selection operations:
+- [x] Add selection operations:
   - replace;
   - add;
   - subtract;
@@ -122,19 +122,19 @@ current answer.
   - cycle within active layer;
   - cycle active layer;
   - apply allowed alias rules.
-- [ ] Add preference-backed command IDs and default bindings for additive/subtractive/layer actions:
+- [x] Add preference-backed command IDs and default bindings for additive/subtractive/layer actions:
   - add selection;
   - subtract selection;
   - toggle selection;
   - cycle entity layer;
   - select current group / expand selection.
-- [ ] Keep existing ordinary selection state intact for inspection and selected-unit panels.
-- [ ] Add visible diagnostics for:
+- [x] Keep existing ordinary selection state intact for inspection and selected-unit panels.
+- [x] Add visible diagnostics for:
   - unsupported request profiles;
   - unavailable entity layers;
   - candidate IDs that no longer exist in the refreshed projection;
   - selection cardinality violations.
-- [ ] Preserve summary-friendly selection metadata for later phases:
+- [x] Preserve summary-friendly selection metadata for later phases:
   - stable display labels;
   - selected entity visual anchors;
   - parent/child relationships safe for the viewer;
@@ -142,44 +142,57 @@ current answer.
 
 ## Acceptance Criteria
 
-- [ ] A model click can select the model itself when the active profile allows model selection.
-- [ ] A model click can alias to its owning unit when the active profile asks for units and allows
+- [x] A model click can select the model itself when the active profile allows model selection.
+- [x] A model click can alias to its owning unit when the active profile asks for units and allows
   that alias.
-- [ ] Additive, subtractive, and toggle selection are deterministic and preserve stable ordering.
-- [ ] Layer cycling only visits layers allowed by the current profile.
-- [ ] Request-scoped selections clear or reconcile when the pending request ID changes.
-- [ ] Unsupported parameterized requests produce typed UI diagnostics rather than pretending to be
+- [x] Additive, subtractive, and toggle selection are deterministic and preserve stable ordering.
+- [x] Layer cycling only visits layers allowed by the current profile.
+- [x] Request-scoped selections clear or reconcile when the pending request ID changes.
+- [x] Unsupported parameterized requests produce typed UI diagnostics rather than pretending to be
   movement or shooting tools.
-- [ ] Existing inspect selection and selected-unit HUD behavior keep working.
-- [ ] Preferences can bind the new selection commands without defining legal actions or rules.
-- [ ] Entity refs provide enough safe metadata for later visual summary overlays to draw selected
+- [x] Existing inspect selection and selected-unit HUD behavior keep working.
+- [x] Preferences can bind the new selection commands without defining legal actions or rules.
+- [x] Entity refs provide enough safe metadata for later visual summary overlays to draw selected
   entities without reinterpreting game rules.
+
+Note: Phase 8 implements these behaviors in the request-scoped local state layer using
+projection-derived entity refs. Live Arcade mouse/modifier wiring and separate visual
+request-selection highlights are intentionally deferred to Phase 9 so movement assignment can
+consume this foundation in one reviewable interaction slice.
 
 ## Tests
 
-- [ ] Unit tests for `EntityRef` validation.
-- [ ] Unit tests for profile construction from movement proposal fixtures.
-- [ ] Unit tests for unsupported parameterized request profiles.
-- [ ] Unit tests for replace/add/subtract/toggle selection transitions.
-- [ ] Unit tests for model-to-unit aliasing when allowed.
-- [ ] Unit tests for rejecting aliasing when not allowed.
-- [ ] Unit tests for layer cycling with unavailable layers filtered out.
-- [ ] Regression tests that Tab still prioritizes finite-option focus when finite options are
+- [x] Unit tests for `EntityRef` validation.
+- [x] Unit tests for profile construction from movement proposal fixtures.
+- [x] Unit tests for unsupported parameterized request profiles.
+- [x] Unit tests for replace/add/subtract/toggle selection transitions.
+- [x] Unit tests for model-to-unit aliasing when allowed.
+- [x] Unit tests for rejecting aliasing when not allowed.
+- [x] Unit tests for layer cycling with unavailable layers filtered out.
+- [x] Regression tests that Tab still prioritizes finite-option focus when finite options are
   pending.
-- [ ] Preference tests for the new command IDs and hotkey conflict diagnostics.
-- [ ] Tests for visual-anchor presence and unavailable-anchor diagnostics.
+- [x] Preference tests for the new command IDs and hotkey conflict diagnostics.
+- [x] Tests for visual-anchor presence and unavailable-anchor diagnostics.
 
 ## Manual Validation Checklist
 
-- [ ] Start the Phase 7/8 debug fixture.
+- [ ] Export the default profile with `uv run warhammer40k-export-preferences --format yaml` and
+  confirm the entity-selection command IDs are present:
+  - `add_entity_selection`
+  - `subtract_entity_selection`
+  - `toggle_entity_selection`
+  - `cycle_entity_layer`
+  - `select_current_entity_group`
+- [ ] Start the Phase 7/8 debug fixture with
+  `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`.
 - [ ] Select a model for ordinary inspection and confirm the selected-unit panel still behaves.
-- [ ] Enter a movement proposal and confirm the request-scoped selection highlights the active
-  model separately from the ordinary inspection highlight.
-- [ ] Shift-click another model in the same unit and confirm both are selected for the active
-  request.
-- [ ] Remove one model from request selection and confirm ordinary inspection does not reset.
-- [ ] Cycle model -> unit layer and confirm the visible request-selection state changes.
-- [ ] Open an unsupported parameterized request fixture and confirm it displays as unsupported.
+- [ ] Press `space` with a selected unit and confirm the selected-unit action context menu still
+  opens when finite actions are available.
+- [ ] Begin the existing movement draft flow and confirm movement path drafting still opens for the
+  selected unit.
+- [ ] Note that separate request-scoped selection highlights, Shift-click subset selection, and
+  visible model/unit layer cycling are not expected to appear until Phase 9 wires this foundation
+  into live movement assignment input.
 
 ## Closeout Milestone
 
@@ -187,3 +200,36 @@ current answer.
 
 The UI has a reusable, request-scoped way to select and group engine-projected entities without
 answering requests or implementing rules locally.
+
+## Implementation Closeout
+
+Completed on 2026-06-04.
+
+Implemented:
+
+- `state.entity_selection` with `EntityRef`, `EntitySelectionProfile`, `EntitySelectionState`,
+  `EntityAliasRule`, `SelectionCardinality`, the entity layer registry, and visual-anchor
+  diagnostics.
+- Profile builders for inspection fallback, movement proposals, finite unit-candidate requests, and
+  unsupported parameterized requests.
+- Deterministic replace/add/subtract/toggle selection transitions, focus cycling, active-layer
+  cycling, current-group expansion, request drift reconciliation, and cardinality diagnostics.
+- Active preference command IDs and default/example profile bindings for request-scoped entity
+  selection commands.
+- Architecture, README, and UI configuration documentation updates.
+
+Verification during implementation:
+
+- `UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest tests/test_entity_selection_state.py`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest tests/test_preferences.py`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check src/warhammer40k_arcade_ui/state/entity_selection.py tests/test_entity_selection_state.py tests/test_preferences.py`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check src/warhammer40k_arcade_ui/state/entity_selection.py tests/test_entity_selection_state.py tests/test_preferences.py`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run mypy src/warhammer40k_arcade_ui/state/entity_selection.py tests/test_entity_selection_state.py`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run pyright src/warhammer40k_arcade_ui/state/entity_selection.py tests/test_entity_selection_state.py`
+
+Reviewer notes:
+
+- This phase intentionally does not submit proposals, validate game rules, mutate authoritative
+  state, or create new engine option/proposal IDs.
+- Live GUI modifier input for additive/subtractive selection is deferred to Phase 9; this PR
+  provides the tested local state and preference command vocabulary that Phase 9 will consume.

@@ -148,6 +148,20 @@ def test_future_facing_settings_round_trip_and_report_inactive() -> None:
     assert _codes(result.diagnostics).issuperset({"inactive_planned_setting"})
 
 
+def test_entity_selection_commands_are_active_and_default_bindable() -> None:
+    result = parse_preferences_payload(default_preferences().to_payload())
+
+    assert result.preferences is not None
+    assert {
+        "add_entity_selection",
+        "subtract_entity_selection",
+        "toggle_entity_selection",
+        "cycle_entity_layer",
+        "select_current_entity_group",
+    }.issubset({binding.command_id for binding in result.preferences.hotkeys})
+    assert "unknown_command_id" not in _codes(result.diagnostics)
+
+
 def test_unknown_top_level_key_is_diagnostic_but_extensions_are_preserved() -> None:
     payload = default_preferences().to_payload()
     payload["unknown"] = True

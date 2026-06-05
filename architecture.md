@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-7 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-8 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -42,7 +42,7 @@ under `docs/plans/`.
 | 5 | Complete | Selection and unit information HUD | [phase-05](docs/plans/phase-05-selection-unit-hud.md) |
 | 6 | Complete | Finite decision submission | [phase-06](docs/plans/phase-06-finite-decision-submission.md) |
 | 7 | Complete | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
-| 8 | Planned | Entity selection profile foundation | [phase-08](docs/plans/phase-08-entity-selection-profile-foundation.md) |
+| 8 | Complete | Entity selection profile foundation | [phase-08](docs/plans/phase-08-entity-selection-profile-foundation.md) |
 | 9 | Planned | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
 | 10 | Planned | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
 | 11 | Planned | Generic assignment HUD | [phase-11](docs/plans/phase-11-generic-assignment-hud.md) |
@@ -70,9 +70,9 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-7 provide the runnable shell, core client boundary, inspectable render foundation,
-shareable UI preference framework, local selection/HUD state, finite decision submission, and local
-movement path drafting:
+Phases 0-8 provide the runnable shell, core client boundary, inspectable render foundation,
+shareable UI preference framework, local selection/HUD state, finite decision submission, local
+movement path drafting, and request-scoped entity-selection foundation:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
@@ -113,6 +113,9 @@ movement path drafting:
 - `warhammer40k_arcade_ui.state.movement_draft` — local-only movement proposal draft state,
   waypoint management, advisory measurement/hint generation, and JSON-safe payload preview
   construction that preserves engine-issued movement context.
+- `warhammer40k_arcade_ui.state.entity_selection` — request-scoped entity refs, layer registry,
+  profile builders, alias rules, local add/subtract/toggle state transitions, request drift
+  reconciliation, and visual-anchor diagnostics for movement and finite unit-selection profiles.
 - `warhammer40k_arcade_ui.input.commands` — preference-backed local hotkey matching.
 - `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, finite-decision
   panel, movement draft panel, and debug inspector view models derived from projection data and
@@ -125,8 +128,8 @@ Planned modules from later phases:
   diagnostics, and later phase-specific ergonomics.
 - `render` — action visual summary primitives for movement paths, source-to-target links, icons,
   and review/dim summary states.
-- `state` — request-scoped entity selection, assignment workspaces, and other local-only workflow
-  state beyond movement drafts.
+- `state` — assignment workspaces and other local-only workflow state beyond movement drafts and
+  entity selection.
 
 ## Shareable Preferences
 
@@ -210,20 +213,22 @@ movement assignments before Phase 10 submits movement proposals to the engine.
 
 ## Entity Selection And Assignment Workspace
 
-The next movement work introduces a reusable workspace for answering request-scoped engine
-questions. In plain terms, the workspace is temporary local scratch space for one pending request:
-what entities are selected now, what has already been assigned, what remains incomplete, and what
-payload preview is being assembled.
+Phase 8 introduces the reusable entity-selection foundation for answering request-scoped engine
+questions. In plain terms, the later workspace is temporary local scratch space for one pending
+request: what entities are selected now, what has already been assigned, what remains incomplete,
+and what payload preview is being assembled.
 
 The workspace is separate from ordinary inspect selection. A player can inspect a model or unit
 while the active request-selection state tracks the entities that will actually be used to answer
 the current request. This prevents accidental behaviors such as moving every model merely because
 one model was selected for inspection.
 
-The first concrete use is movement: selecting one model moves one model, selecting a subset moves
-that subset, and selecting the whole unit must be an explicit action. Later shooting and Stratagem
-tools should reuse the same selection and assignment foundation when the engine request exposes
-safe candidate metadata.
+The first concrete use is movement. Phase 8 defines typed `EntityRef` values, active entity layers,
+movement and finite unit-selection profiles, explicit alias rules such as model-to-unit, and
+deterministic add/subtract/toggle transitions. Phase 9 wires that foundation into movement drafting
+so selecting one model moves one model, selecting a subset moves that subset, and selecting the
+whole unit must be an explicit action. Later shooting and Stratagem tools should reuse the same
+selection and assignment foundation when the engine request exposes safe candidate metadata.
 
 The Generic Assignment HUD is the visible review surface for that workspace. It should show what
 request is being answered, which entities are selected, which entities are assigned, which entities

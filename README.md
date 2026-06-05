@@ -139,6 +139,7 @@ warhammer40k-arcade-ui/
         schema.py
       state/
         __init__.py
+        entity_selection.py
         finite_decision.py
         movement_draft.py
         selection.py
@@ -147,6 +148,7 @@ warhammer40k-arcade-ui/
       phase03_battlefield_view.json
     test_core_client_local_session.py
     test_core_client_protocol.py
+    test_entity_selection_state.py
     test_config.py
     test_entrypoint.py
     test_finite_decision_state.py
@@ -209,6 +211,11 @@ surface.
   actual engine submission to a later movement proposal submission phase.
 - Manually validate the current fixture-backed Phase 7 movement draft flow with
   `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`.
+- Phase 8 entity-selection state is request-scoped and local-only: it builds typed selectable
+  entity profiles from viewer projections and pending requests, supports explicit alias rules such
+  as model-to-owning-unit, preserves deterministic selection order, and emits typed diagnostics for
+  unsupported request profiles, missing candidates, cardinality violations, and unavailable visual
+  anchors.
 - UI previews are advisory only; only accepted engine results can update authoritative state.
 - Phase 4 UI preference files may configure known overlays, hotkeys, HUD defaults, selected
   model/unit information affordances, and recognized upcoming behavior settings. They must not
