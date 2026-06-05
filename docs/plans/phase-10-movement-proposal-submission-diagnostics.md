@@ -160,9 +160,12 @@ WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 \
   movement draft opens for only the proposal unit.
 - Move one model and press Enter once. Confirm the movement panel shows `Payload preview: ready`
   and model positions have not authoritatively changed.
-- Press Enter a second time. With the current fake debug client, expect a client-status response;
-  with a live movement-capable core client, accepted movement should clear the draft and update
-  model bases from the refreshed projection.
+- Press Enter a second time. With the debug fake client, confirm the status changes to
+  `Debug movement accepted.`, the event log includes `movement_proposal_submitted`,
+  `movement_proposal_accepted`, and `battlefield_projection_refreshed`, the movement draft clears,
+  and model bases update from the submitted final poses. With a live movement-capable core client,
+  accepted movement should clear the draft and update model bases from the refreshed engine
+  projection.
 - Trigger or simulate an invalid movement response and confirm the movement panel shows
   `Invalid: <violation_code> [<field>]: <message>`.
 - For invalid movement that emits a same-context retry request, confirm the drafted paths remain

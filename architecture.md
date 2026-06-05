@@ -45,10 +45,11 @@ under `docs/plans/`.
 | 8 | Complete | Entity selection profile foundation | [phase-08](docs/plans/phase-08-entity-selection-profile-foundation.md) |
 | 9 | Complete | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
 | 10 | Complete | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
-| 11 | Planned | Generic assignment HUD | [phase-11](docs/plans/phase-11-generic-assignment-hud.md) |
-| 12 | Planned | Action visual summary overlays | [phase-12](docs/plans/phase-12-action-visual-summary-overlays.md) |
-| 13 | Planned | HUD ergonomics pass | [phase-13](docs/plans/phase-13-hud-ergonomics.md) |
-| 14 | Planned | Packaging, CI, and regression hardening | [phase-14](docs/plans/phase-14-packaging-ci-regression.md) |
+| 11 | Planned | Live core manual smoke path | [phase-11](docs/plans/phase-11-live-core-manual-smoke.md) |
+| 12 | Planned | Generic assignment HUD | [phase-12](docs/plans/phase-12-generic-assignment-hud.md) |
+| 13 | Planned | Action visual summary overlays | [phase-13](docs/plans/phase-13-action-visual-summary-overlays.md) |
+| 14 | Planned | HUD ergonomics pass | [phase-14](docs/plans/phase-14-hud-ergonomics.md) |
+| 15 | Planned | Packaging, CI, and regression hardening | [phase-15](docs/plans/phase-15-packaging-ci-regression.md) |
 
 ## Cross-cutting architectural rules
 
@@ -132,6 +133,8 @@ assignments with authoritative movement proposal submission:
 
 Planned modules from later phases:
 
+- `core_client` / launch — live local-session smoke harness for thin manual end-to-end testing
+  against the real core engine.
 - `input` — later command flows beyond finite decisions and movement drafting.
 - `hud` — generic assignment review, action visual summary controls, movement submission
   diagnostics, and later phase-specific ergonomics.
@@ -251,12 +254,16 @@ reuse the last drafted paths only when the engine emits a fresh movement proposa
 same unit, proposal kind, source movement action IDs, movement action, `movement_mode`, and Fall
 Back `fall_back_mode`.
 
+Phase 11 adds the next bridge: an opt-in live-core smoke launch path that uses the real local
+session for thin manual movement testing while keeping fake debug fixtures available for
+deterministic UI tests.
+
 The Generic Assignment HUD is the visible review surface for that workspace. It should show what
 request is being answered, which entities are selected, which entities are assigned, which entities
 are still unassigned, whether the payload preview is ready, and whether messages are local preview
 hints or authoritative engine diagnostics.
 
-Phase 12 adds a battlefield-level visual summary for the same workspace. If the assignment HUD is
+Phase 13 adds a battlefield-level visual summary for the same workspace. If the assignment HUD is
 the checklist, the visual summary is the map overlay: dim green/grey paths for movement, future red
 source-to-target lines for shooting, and future Stratagem markers with lines to affected units. The
 summary is togglable and preference-backed. A subdued summary may remain visible while working, and
@@ -399,9 +406,13 @@ finite movement action selection
   primitives. Engine submission remains a later movement phase.
 - 2026-06-04: Replanned post-Phase 7 movement work to insert a cross-cutting entity selection and
   assignment workspace before movement submission. The updated flow makes per-model movement
-  assignment explicit, moves movement submission to Phase 10, adds a generic assignment HUD in
-  Phase 11, and keeps shooting/Stratagem assignment plans preliminary until their core contracts
-  stabilize.
-- 2026-06-04: Added Phase 12 action visual summary overlays so the assignment workspace can also
+  assignment explicit, moves movement submission to Phase 10, adds a generic assignment HUD after
+  live-core smoke work, and keeps shooting/Stratagem assignment plans preliminary until their core
+  contracts stabilize.
+- 2026-06-04: Added action visual summary overlays so the assignment workspace can also
   drive togglable battlefield summaries, such as dim/review movement paths, future shooting target
   lines, and future Stratagem affected-unit markers.
+- 2026-06-05: Inserted Phase 11 live core manual smoke path so the Phase 10 movement submission UI
+  can be tested against the real local core before the generic assignment HUD and later polish
+  phases. Generic assignment HUD, action visual summaries, HUD ergonomics, and packaging shifted to
+  Phases 12-15.
