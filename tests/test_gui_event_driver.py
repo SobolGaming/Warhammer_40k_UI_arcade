@@ -12,7 +12,7 @@ from tests.support.gui_driver import GuiTestDriver
 
 @pytest.fixture
 def driver() -> Iterator[GuiTestDriver]:
-    harness = GuiTestDriver.phase6_debug()
+    harness = GuiTestDriver.launch(core_mode="phase6_debug")
     try:
         yield harness
     finally:
@@ -93,3 +93,27 @@ def test_movement_workflow_marks_ready_survives_hover_and_submits(
     assert driver.pending_decision_type is None
     assert not driver.movement_payload_ready
     assert driver.finite_status_message == "Debug movement accepted."
+
+
+def test_driver_can_launch_live_core_smoke_and_submit_real_finite_choice() -> None:
+    driver = GuiTestDriver.launch(core_mode="live_core_smoke")
+    try:
+        assert driver.core_mode == "live_core_smoke"
+        assert driver.viewer_player_id == "player-a"
+        assert driver.pending_decision_type == "select_movement_unit"
+        assert driver.battlefield_unit_ids == (
+            "army-alpha:intercessor-unit-1",
+            "army-beta:intercessor-unit-2",
+        )
+
+        unit_position = driver.first_model_position_for_unit("army-alpha:intercessor-unit-1")
+        driver.click_world(unit_position)
+
+        assert driver.selected_unit_id == "army-alpha:intercessor-unit-1"
+
+        driver.press_key(arcade.key.ENTER)
+
+        assert driver.pending_decision_type == "select_movement_action"
+        assert driver.finite_status_kind == "waiting_for_decision"
+    finally:
+        driver.close()

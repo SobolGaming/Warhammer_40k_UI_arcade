@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import arcade
 
@@ -12,7 +13,7 @@ from warhammer40k_arcade_ui.core_client.fake_client import (
     SubmittedFiniteDecision,
     SubmittedMovementPayload,
 )
-from warhammer40k_arcade_ui.core_client.protocol import JsonObject
+from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiCoreClient
 from warhammer40k_arcade_ui.debug_fixtures import (
     phase6_debug_core_client,
     phase6_debug_pending_decision,
@@ -24,6 +25,7 @@ from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 
+type GuiCoreMode = Literal["phase6_debug", "live_core_smoke"]
 type ScreenPoint = tuple[int, int]
 
 
@@ -32,7 +34,22 @@ class GuiTestDriver:
     """Drive a real `ArcadeWarhammerWindow` through deterministic event calls."""
 
     window: ArcadeWarhammerWindow
-    core_client: FakeCoreClient | None = None
+    core_client: UiCoreClient | None = None
+    core_mode: GuiCoreMode | Literal["custom"] = "custom"
+    viewer_player_id: str = "player_1"
+
+    @classmethod
+    def launch(
+        cls,
+        *,
+        core_mode: GuiCoreMode = "phase6_debug",
+        preferences: UiPreferences | None = None,
+    ) -> GuiTestDriver:
+        """Launch a driver against the selected UI-facing core mode."""
+
+        if core_mode == "phase6_debug":
+            return cls.phase6_debug(preferences=preferences)
+        return cls.live_core_smoke(preferences=preferences)
 
     @classmethod
     def phase6_debug(
@@ -51,7 +68,39 @@ class GuiTestDriver:
             core_client=core_client,
             viewer_player_id="player_1",
         )
-        return cls(window=window, core_client=core_client)
+        return cls(
+            window=window,
+            core_client=core_client,
+            core_mode="phase6_debug",
+            viewer_player_id="player_1",
+        )
+
+    @classmethod
+    def live_core_smoke(
+        cls,
+        *,
+        preferences: UiPreferences | None = None,
+    ) -> GuiTestDriver:
+        """Create a driver backed by the real local core smoke session."""
+
+        from warhammer40k_arcade_ui.core_client.live_smoke import build_live_core_smoke_startup
+
+        startup = build_live_core_smoke_startup()
+        window = ArcadeWarhammerWindow(
+            config=AppConfig(window_width=1280, window_height=800, resizable=False),
+            battlefield_view=startup.battlefield_view,
+            preferences=preferences or default_preferences(),
+            initial_status=startup.status,
+            core_client=startup.core_client,
+            viewer_player_id=startup.viewer_player_id,
+            event_cursor=startup.event_cursor,
+        )
+        return cls(
+            window=window,
+            core_client=startup.core_client,
+            core_mode="live_core_smoke",
+            viewer_player_id=startup.viewer_player_id,
+        )
 
     def close(self) -> None:
         """Close the underlying headless Arcade window."""
@@ -132,6 +181,20 @@ class GuiTestDriver:
         """Return the currently selected model ID."""
 
         return self.window.selection_state.selected_model_id
+
+    @property
+    def battlefield_unit_ids(self) -> tuple[str, ...]:
+        """Return unit IDs in the current battlefield projection."""
+
+        return tuple(unit.unit_id for unit in self.window.battlefield_view.units)
+
+    def first_model_position_for_unit(self, unit_id: str) -> WorldPoint:
+        """Return the first projected model position for a unit."""
+
+        for unit in self.window.battlefield_view.units:
+            if unit.unit_id == unit_id:
+                return unit.models[0].position
+        raise ValueError(f"Unit is not projected: {unit_id}")
 
     @property
     def active_overlay_ids(self) -> tuple[str, ...]:
@@ -245,7 +308,7 @@ class GuiTestDriver:
     def finite_submissions(self) -> tuple[SubmittedFiniteDecision, ...]:
         """Return finite submissions recorded by the fake client."""
 
-        if self.core_client is None:
+        if not isinstance(self.core_client, FakeCoreClient):
             return ()
         return tuple(self.core_client.finite_submissions)
 
@@ -253,6 +316,6 @@ class GuiTestDriver:
     def movement_submissions(self) -> tuple[SubmittedMovementPayload, ...]:
         """Return movement submissions recorded by the fake client."""
 
-        if self.core_client is None:
+        if not isinstance(self.core_client, FakeCoreClient):
             return ()
         return tuple(self.core_client.movement_submissions)

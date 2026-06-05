@@ -102,6 +102,8 @@ After implementation:
 
 - Added `GuiTestDriver.phase6_debug()` as a deterministic headless Arcade window factory for the
   current finite-decision and movement-draft debug workflow.
+- Added `GuiTestDriver.launch(core_mode=...)` with `phase6_debug` and `live_core_smoke` modes so
+  the same event driver can triage fake-fixture issues and real local core smoke issues.
 - Driver actions call the production `ArcadeWarhammerWindow` event handlers directly, except key
   release, which routes through pyglet `dispatch_event(...)` because the window currently has no
   custom release handler.
@@ -110,6 +112,8 @@ After implementation:
 - Added event-harness regression coverage for model click selection, selected-unit action hotkey
   opening/canceling, keyboard finite submission, movement waypoint drafting, movement-ready
   preview creation, the mouse-hover ready-state regression, and fake-client movement submission.
+- Added live-core event-harness coverage that launches the real local smoke session, selects the
+  projected movement unit, and submits the first finite choice through the window key handler.
 - GitHub Actions installs `libegl1` and `libgl1-mesa-dri` in the test job so pyglet/Arcade can
   create headless OpenGL contexts on Ubuntu runners.
 - Future GUI-visible bugs should usually get a short pytest script that starts from
