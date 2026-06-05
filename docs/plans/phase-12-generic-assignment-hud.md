@@ -1,4 +1,4 @@
-# Phase 11 - Generic assignment HUD
+# Phase 12 - Generic assignment HUD
 
 ## Goal
 
@@ -36,7 +36,7 @@ The HUD is "generic" because the layout and review behavior are reusable. The pa
 remain operation-specific so this HUD does not become a private rules engine.
 
 The same backing data should also be usable by later visual action summaries. The HUD is the list
-view of the workspace; Phase 12 adds the battlefield picture view of the same workspace.
+view of the workspace; Phase 13 adds the battlefield picture view of the same workspace.
 
 ## Workspace Concept In Plain Language
 
@@ -127,7 +127,7 @@ state. The engine remains the only authority after submission.
 - [ ] The HUD can show request-scoped state without clearing ordinary inspect selection.
 - [ ] Preference settings can hide or compact the HUD without changing behavior or legality.
 - [ ] Unsupported workspaces produce visible diagnostics rather than blank panels.
-- [ ] The HUD view model contains enough stable group/ref data for Phase 12 to build visual summary
+- [ ] The HUD view model contains enough stable group/ref data for Phase 13 to build visual summary
   overlays from the same workspace state.
 
 ## Tests
@@ -152,7 +152,7 @@ state. The engine remains the only authority after submission.
 
 ## Closeout Milestone
 
-**Milestone 11: "Assignment Review HUD"**
+**Milestone 12: "Assignment Review HUD"**
 
 The UI has a reusable review surface for request-scoped selections and assignments, starting with
 movement and ready to be adapted for shooting and Stratagem tools later.

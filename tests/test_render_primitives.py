@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
+from warhammer40k_arcade_ui.core_client.protocol import (
+    UiDecision,
+    UiFiniteOption,
+    UiInvalidDiagnostic,
+)
 from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
     build_debug_inspector,
@@ -25,7 +30,11 @@ from warhammer40k_arcade_ui.render.primitives import (
     build_hud_primitives,
     build_world_primitives,
 )
-from warhammer40k_arcade_ui.render.view_models import BattlefieldView, RenderViewModelError
+from warhammer40k_arcade_ui.render.view_models import (
+    BattlefieldView,
+    RenderViewModelError,
+    UnitView,
+)
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
@@ -238,12 +247,176 @@ def test_hud_primitives_include_movement_draft_panel() -> None:
     assert "Assignments: 1/3 moved, 2 no-op" in texts
 
 
+def test_movement_draft_panel_renders_invalid_diagnostic_lines() -> None:
+    view = default_battlefield_view()
+
+    primitives = build_hud_primitives(
+        view=view,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+        mouse_world_position=None,
+        movement_draft_panel=build_movement_draft_panel(
+            movement_draft=None,
+            pending_decision=None,
+            status_message="Movement proposal is invalid.",
+            diagnostics=(
+                UiInvalidDiagnostic(
+                    violation_code="proposal_payload_missing_field",
+                    message="Proposal payload missing required field.",
+                    field="witness",
+                ),
+            ),
+        ),
+    )
+
+    texts = [primitive.text for primitive in primitives]
+    assert (
+        "Invalid: proposal_payload_missing_field [witness]: "
+        "Proposal payload missing required field."
+    ) in texts
+
+
+def test_battlefield_view_refreshes_matching_core_runtime_model_positions() -> None:
+    view = default_battlefield_view()
+
+    refreshed = view.refreshed_from_projection(
+        battlefield_state={
+            "battlefield_id": "battlefield-1",
+            "placed_armies": [
+                {
+                    "army_id": "army-player-1",
+                    "player_id": "player_1",
+                    "unit_placements": [
+                        {
+                            "army_id": "army-player-1",
+                            "player_id": "player_1",
+                            "unit_instance_id": "intercessor_squad",
+                            "model_placements": [
+                                {
+                                    "army_id": "army-player-1",
+                                    "player_id": "player_1",
+                                    "unit_instance_id": "intercessor_squad",
+                                    "model_instance_id": "intercessor_1",
+                                    "pose": {
+                                        "position": {"x": 10.0, "y": 18.0, "z": 0.0},
+                                        "facing": {"degrees": 0.0},
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "removed_model_ids": [],
+        },
+        phase_label="movement",
+        active_player_id="player_1",
+        pending_decision_summary="No pending engine decision",
+        event_log_lines=("movement_proposal_accepted: player_1",),
+    )
+
+    intercessors = next(unit for unit in refreshed.units if unit.unit_id == "intercessor_squad")
+    moved_model = next(model for model in intercessors.models if model.model_id == "intercessor_1")
+    unchanged_model = next(
+        model for model in intercessors.models if model.model_id == "intercessor_2"
+    )
+    assert moved_model.position == (10.0, 18.0)
+    assert unchanged_model.position == (7.0, 22.0)
+    assert refreshed.hud.event_log_lines == ("movement_proposal_accepted: player_1",)
+
+
+def test_battlefield_view_refreshes_from_render_payload_shape() -> None:
+    view = default_battlefield_view()
+    moved_unit = replace(
+        view.units[0],
+        models=(
+            replace(view.units[0].models[0], position=(11.0, 18.0)),
+            *view.units[0].models[1:],
+        ),
+    )
+    render_payload = {
+        "table": {
+            "width": view.table.width,
+            "height": view.table.height,
+            "label": view.table.label,
+        },
+        "deployment_zones": [
+            {
+                "zone_id": zone.zone_id,
+                "player_id": zone.player_id,
+                "label": zone.label,
+                "polygon": list(zone.polygon),
+                "visible": zone.visible,
+            }
+            for zone in view.deployment_zones
+        ],
+        "objectives": [
+            {
+                "objective_id": objective.objective_id,
+                "label": objective.label,
+                "position": objective.position,
+                "radius": objective.radius,
+            }
+            for objective in view.objectives
+        ],
+        "terrain": [
+            {
+                "terrain_id": terrain.terrain_id,
+                "label": terrain.label,
+                "footprint": list(terrain.footprint),
+            }
+            for terrain in view.terrain
+        ],
+        "units": [
+            _unit_payload(moved_unit),
+            *(_unit_payload(unit) for unit in view.units[1:]),
+        ],
+        "hud": {
+            "phase_label": "fixture phase",
+            "active_player_id": "player_1",
+            "pending_decision_summary": "fixture pending",
+            "event_log_lines": ["fixture event"],
+        },
+    }
+
+    refreshed = view.refreshed_from_projection(
+        battlefield_state=render_payload,
+        phase_label="movement",
+        active_player_id="player_1",
+        pending_decision_summary="No pending engine decision",
+        event_log_lines=("movement_proposal_accepted: player_1",),
+    )
+
+    intercessors = next(unit for unit in refreshed.units if unit.unit_id == "intercessor_squad")
+    moved_model = next(model for model in intercessors.models if model.model_id == "intercessor_1")
+    assert moved_model.position == (11.0, 18.0)
+    assert refreshed.hud.phase_label == "movement"
+    assert refreshed.hud.pending_decision_summary == "No pending engine decision"
+
+
 def test_render_view_model_rejects_incomplete_payload() -> None:
     payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     del payload["table"]["width"]
 
     with pytest.raises(RenderViewModelError, match="width is required"):
         BattlefieldView.from_payload(payload)
+
+
+def _unit_payload(unit: UnitView) -> dict[str, object]:
+    return {
+        "unit_id": unit.unit_id,
+        "player_id": unit.player_id,
+        "label": unit.label,
+        "models": [
+            {
+                "model_id": model.model_id,
+                "label": model.label,
+                "position": model.position,
+                "base_radius": model.base_radius,
+            }
+            for model in unit.models
+        ],
+    }
 
 
 def _movement_proposal_decision() -> UiDecision:

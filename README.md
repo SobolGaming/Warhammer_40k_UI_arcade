@@ -142,6 +142,7 @@ warhammer40k-arcade-ui/
         entity_selection.py
         finite_decision.py
         movement_draft.py
+        movement_submission.py
         selection.py
   tests/
     fixtures/
@@ -221,6 +222,11 @@ surface.
   table space to add a waypoint for that subset, and press `g` to select the current model group.
   Payload previews include every proposal-unit model in both `witness.model_paths` and
   `model_movements`; unchanged models are explicit start/end no-op paths.
+- Phase 10 movement submission uses Enter as a two-step flow: the first Enter marks a movement
+  draft ready, and the second Enter submits the ready payload through the explicit
+  `submit_movement_payload(request_id=..., payload=..., result_id=...)` UI/core boundary. Accepted
+  movement clears local draft state after a refreshed projection; invalid movement displays
+  authoritative diagnostics and keeps same-context retry paths local-only.
 - UI previews are advisory only; only accepted engine results can update authoritative state.
 - Phase 4 UI preference files may configure known overlays, hotkeys, HUD defaults, selected
   model/unit information affordances, and recognized upcoming behavior settings. They must not

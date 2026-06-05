@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from warhammer40k_arcade_ui.core_client.protocol import (
@@ -51,11 +52,17 @@ class FakeCoreClient:
     movement_submissions: list[SubmittedMovementPayload] = field(
         default_factory=_new_movement_submissions
     )
+    advance_call_count: int = 0
+    movement_status: UiClientStatus | None = None
+    movement_view: UiGameView | None = None
+    movement_event_delta: UiEventDelta | None = None
+    movement_view_from_payload: Callable[[JsonValue], UiGameView] | None = None
 
     def start_game(self, config: object) -> UiClientStatus:
         return self.status
 
     def advance_until_decision_or_terminal(self) -> UiClientStatus:
+        self.advance_call_count += 1
         return self.status
 
     def get_view(self, viewer_player_id: str) -> UiGameView:
@@ -98,4 +105,12 @@ class FakeCoreClient:
                 result_id=result_id,
             )
         )
+        if self.movement_status is not None:
+            self.status = self.movement_status
+        if self.movement_view_from_payload is not None:
+            self.view = self.movement_view_from_payload(payload)
+        elif self.movement_view is not None:
+            self.view = self.movement_view
+        if self.movement_event_delta is not None:
+            self.event_delta = self.movement_event_delta
         return self.status

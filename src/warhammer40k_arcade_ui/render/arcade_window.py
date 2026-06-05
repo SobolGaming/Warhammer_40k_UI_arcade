@@ -9,7 +9,7 @@ from pathlib import Path
 import arcade
 
 from warhammer40k_arcade_ui.config import AppConfig
-from warhammer40k_arcade_ui.core_client.protocol import UiCoreClient, UiDecision
+from warhammer40k_arcade_ui.core_client.protocol import UiCoreClient, UiDecision, UiGameView
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
@@ -42,6 +42,7 @@ from warhammer40k_arcade_ui.state.finite_decision import (
     submit_finite_option,
 )
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
+from warhammer40k_arcade_ui.state.movement_submission import submit_movement_draft
 from warhammer40k_arcade_ui.state.selection import (
     SelectionState,
     model_hits_at,
@@ -168,6 +169,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         movement_draft_panel = build_movement_draft_panel(
             movement_draft=self._movement_draft,
             pending_decision=self._pending_decision,
+            status_message=self._finite_state.status_message,
+            diagnostics=self._finite_state.diagnostics,
         )
         debug_inspector = build_debug_inspector(
             selection=self._selection_state,
@@ -384,7 +387,12 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
         elif invocation.command_id == "confirm":
             if self._movement_draft is not None:
-                self._movement_draft = self._movement_draft.mark_ready(view=self._battlefield_view)
+                if self._movement_draft.is_ready:
+                    self._submit_movement_draft()
+                else:
+                    self._movement_draft = self._movement_draft.mark_ready(
+                        view=self._battlefield_view
+                    )
             else:
                 self._submit_finite_option(None)
         elif invocation.command_id == "cancel":
@@ -410,6 +418,25 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
         )
 
+    def _submit_movement_draft(self) -> None:
+        result = submit_movement_draft(
+            state=self._finite_state,
+            movement_draft=self._movement_draft,
+            client=self._core_client,
+            viewer_player_id=self._viewer_player_id,
+        )
+        if result.refreshed_view is not None:
+            self._apply_refreshed_game_view(
+                view=result.refreshed_view,
+                state=result.finite_state,
+            )
+        if result.clear_movement_draft:
+            self._movement_draft = None
+            self._selection_state = self._selection_state.without_movement_draft_overlays(
+                self._preferences
+            )
+        self._set_finite_state(result.finite_state)
+
     def _set_finite_state(self, state: FiniteDecisionUiState) -> None:
         self._finite_state = state
         self._pending_decision = state.pending_decision
@@ -432,6 +459,20 @@ class ArcadeWarhammerWindow(arcade.Window):
             pending_decision=self._pending_decision,
         ):
             self._movement_draft = current.with_recomputed_hints(view=self._battlefield_view)
+            return
+        if (
+            current is not None
+            and self._pending_decision is not None
+            and self._selection_state.selected_unit_id == current.selected_unit_id
+            and current.can_retry_for(pending_decision=self._pending_decision)
+        ):
+            self._movement_draft = current.with_retry_request(
+                view=self._battlefield_view,
+                pending_decision=self._pending_decision,
+            )
+            self._selection_state = self._selection_state.with_movement_draft_overlays(
+                self._preferences
+            )
             return
         next_draft = MovementDraft.start_for_pending(
             view=self._battlefield_view,
@@ -517,6 +558,23 @@ class ArcadeWarhammerWindow(arcade.Window):
         if unit is not None:
             return unit_center(unit)
         return (0.0, 0.0)
+
+    def _apply_refreshed_game_view(
+        self,
+        *,
+        view: UiGameView,
+        state: FiniteDecisionUiState,
+    ) -> None:
+        self._battlefield_view = self._battlefield_view.refreshed_from_projection(
+            battlefield_state=view.battlefield_state,
+            phase_label=view.current_battle_phase or view.stage,
+            active_player_id=view.active_player_id or "none",
+            pending_decision_summary=_pending_decision_summary(state.pending_decision),
+            event_log_lines=_hud_event_lines(
+                current_lines=self._battlefield_view.hud.event_log_lines,
+                state_lines=state.event_log_lines,
+            ),
+        )
 
 
 def _context_menu_action_at(

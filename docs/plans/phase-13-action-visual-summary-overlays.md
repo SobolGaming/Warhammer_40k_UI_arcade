@@ -1,4 +1,4 @@
-# Phase 12 - Action visual summary overlays
+# Phase 13 - Action visual summary overlays
 
 ## Goal
 
@@ -36,7 +36,7 @@ exists.
 
 ## Placement In Roadmap
 
-This phase comes after Phase 11 because it depends on the Generic Assignment HUD and the workspace
+This phase comes after Phase 12 because it depends on the Generic Assignment HUD and the workspace
 data structures that describe selected entities, assignment groups, readiness, and diagnostics.
 
 Earlier phases should prepare for this by preserving visual summary-friendly data, but they should
@@ -74,7 +74,7 @@ Phase 9 should make movement assignments summary-friendly:
 - preserve enough grouping information to draw one path per model or one bundled path per selected
   subset.
 
-Phase 11 should make the Generic Assignment HUD export summary data:
+Phase 12 should make the Generic Assignment HUD export summary data:
 
 - assignment group IDs;
 - assigned entity refs;
@@ -220,7 +220,7 @@ Preliminary:
 
 ## Closeout Milestone
 
-**Milestone 12: "Action Summary Overlays"**
+**Milestone 13: "Action Summary Overlays"**
 
 The UI can show a battlefield-level visual summary of the current request workspace, starting with
 movement and ready for later shooting, Stratagem, and placement tools.

@@ -95,8 +95,11 @@ Build bottom-up:
 8. finite decision display and submission
 9. movement draft state and path witness payloads
 10. proposal submission diagnostics
-11. HUD ergonomics
-12. packaging, CI, regression fixtures, and import-boundary audits
+11. live local core smoke path for thin manual end-to-end testing
+12. generic assignment HUD
+13. action visual summary overlays
+14. HUD ergonomics
+15. packaging, CI, regression fixtures, and import-boundary audits
 
 Do not add shooting, fight, charge, AI, training, or private rule logic before the movement
 decision path is trustworthy end to end.
