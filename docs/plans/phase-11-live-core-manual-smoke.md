@@ -171,6 +171,18 @@ Implemented on 2026-06-05.
   Arcade window boundary. The HUD shows `Fatal game engine error`, logs the traceback, and closes the
   window cleanly after a short delay instead of allowing the exception to unwind through Pyglet.
 
+## Post-Implementation Core Impact Review
+
+Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
+
+- The core projection now includes normalized `pending_proposal` metadata for parameterized
+  requests. The earlier missing-`request_id` follow-up projection issue should now be treated as
+  resolved in the engine contract; the UI should keep treating a missing request ID as a fatal
+  contract error rather than adding fallback submission behavior.
+- New live-core features after the movement smoke path include Charge Move proposals and Fight
+  phase finite activation/interrupt decisions. They are outside this phase's manual smoke scope,
+  but later live smoke scripts should add coverage for them once their UI tools exist.
+
 ## Automated Verification
 
 ```bash

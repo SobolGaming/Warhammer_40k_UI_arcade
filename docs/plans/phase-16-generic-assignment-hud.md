@@ -62,12 +62,33 @@ state. The engine remains the only authority after submission.
 - Phase 10 movement submission diagnostics can be implemented before or after this phase, but this
   HUD should consume the same movement assignment data model.
 
+## Core Update Impact Notes
+
+Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
+
+- `GameViewPayload.pending_proposal` now projects normalized request metadata for parameterized
+  requests: `request_id`, `decision_type`, `actor_id`, and proposal-family fields. The assignment
+  HUD should treat `pending_proposal` as the primary source for request identity and should only use
+  nested request payload details for operation-specific content.
+- Charge movement is now a first-class `submit_movement_proposal` family with proposal kind
+  `charge_move`. It is not a normal Move Units proposal: the request carries charge target context,
+  `movement_mode: "charge"`, and a no-move path where empty targets/no witness can be a deliberate
+  answer. Phase 16 should show unsupported `charge_move` workspaces clearly until a charge-specific
+  adapter exists.
+- Fight order now exposes finite decisions for `select_fight_activation` and
+  `resolve_fight_interrupt`. These are not assignment workspaces yet, but the generic request header
+  and finite review surfaces should preserve the engine payload so later HUD work can display
+  ordering band, fight type, pass/decline choices, and interrupt context without inferring
+  eligibility.
+
 ## Tasks
 
 - [ ] Add generic assignment HUD view models:
   - request ID;
+  - decision type;
   - actor ID;
   - operation kind;
+  - proposal kind, when present;
   - active layer;
   - active selection refs;
   - assignment groups;
@@ -85,6 +106,12 @@ state. The engine remains the only authority after submission.
   - model path assignment groups;
   - per-group path length summaries;
   - unassigned/unchanged model hints.
+- [ ] Add finite-decision request summaries for assignment-adjacent decisions that do not yet have
+  a full workspace:
+  - fight activation options;
+  - fight interrupt decline/activation options;
+  - ordering band or reaction context when the engine exposes it;
+  - selected finite option context without local eligibility inference.
 - [ ] Add render primitives for multi-selection and assignment states:
   - ordinary inspect selection;
   - request-selected entities;
@@ -115,6 +142,7 @@ state. The engine remains the only authority after submission.
 - [ ] Keep all warnings marked as preview/advisory unless they are engine-returned diagnostics.
 - [ ] Ensure the HUD can represent unsupported workspaces without failing:
   - unsupported proposal tool;
+  - unsupported `charge_move` proposal until a charge-specific assignment adapter is added;
   - missing candidate metadata;
   - request changed while local assignments existed.
 
@@ -129,6 +157,10 @@ state. The engine remains the only authority after submission.
 - [ ] Unsupported workspaces produce visible diagnostics rather than blank panels.
 - [ ] The HUD view model contains enough stable group/ref data for Phase 17 to build visual summary
   overlays from the same workspace state.
+- [ ] Normalized `pending_proposal` metadata is displayed and preserved for supported and
+  unsupported parameterized request families.
+- [ ] Fight activation and fight interrupt finite requests remain selectable through the finite
+  decision path while exposing enough request context for richer future HUD summaries.
 
 ## Tests
 
@@ -139,6 +171,10 @@ state. The engine remains the only authority after submission.
 - [ ] Regression tests proving authoritative diagnostics are visually distinct from local hints.
 - [ ] Fake-client chained request tests for the optional chain breadcrumb display.
 - [ ] Tests that assignment HUD summary groups remain stable across selection focus changes.
+- [ ] Protocol/HUD tests using normalized `pending_proposal` metadata from the core projection.
+- [ ] Unsupported-workspace tests for `charge_move` proving the HUD displays the request instead of
+  routing it through the normal movement adapter.
+- [ ] Finite request summary tests for `select_fight_activation` and `resolve_fight_interrupt`.
 
 ## Manual Validation Checklist
 

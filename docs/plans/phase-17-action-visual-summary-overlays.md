@@ -42,6 +42,20 @@ data structures that describe selected entities, assignment groups, readiness, a
 Earlier phases should prepare for this by preserving visual summary-friendly data, but they should
 not implement the full overlay system before the HUD/workspace is stable.
 
+## Core Update Impact Notes
+
+Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
+
+- Normalized `pending_proposal` metadata gives every parameterized summary a stable request anchor.
+  Summary overlays should key request drift and trace/debug labels from `pending_proposal.request_id`
+  and `pending_proposal.decision_type`.
+- Charge Move is now a separate movement proposal family. Its summary must include target context
+  and the deliberate no-move state when supported; until then, the summary layer should draw no
+  guessed charge paths and should rely on the Phase 16 HUD diagnostic.
+- Fight activation and fight interrupt are finite decisions. Their future visual summaries should
+  highlight engine-provided eligible options, ordering band, pass/decline status, and interrupt
+  context. They should not infer engagement eligibility, pass distance, or interrupt availability.
+
 ## Design Principles
 
 1. **One data source.** The visual summary derives from the assignment workspace/HUD view model, not
@@ -127,6 +141,29 @@ in operation-specific modules.
 - Use warning color only for advisory local hints or authoritative invalid diagnostics.
 - Support grouped display when several models share the same translated path.
 
+### Charge Move
+
+Preliminary until the charge move tool is concrete:
+
+- Draw charge move paths only from a supported `charge_move` workspace.
+- Draw charge target links or highlights from engine-provided target context.
+- Represent the no-move choice explicitly instead of drawing a path.
+- Preserve the rolled charge distance and reachable target context as labels only when the request
+  exposes them.
+- Do not reuse Normal Move/Fall Back summaries without a charge-specific adapter.
+
+### Fight Activation And Interrupt
+
+Preliminary finite-decision summaries:
+
+- Highlight the units represented by `fight:<fight_type>:<unit_instance_id>` options.
+- Show the ordering band, such as Fights First or Remaining Combats, when the request payload
+  exposes it.
+- Show `eligible_to_fight_pass` and `decline_fight_interrupt` as explicit non-movement choices.
+- Use a distinct interrupt review treatment when the request is a reaction-window interrupt.
+- Do not draw pile-in, consolidation, or attack links until the engine exposes the relevant
+  request-specific data.
+
 ### Shooting
 
 Preliminary until the shooting assignment tool is concrete:
@@ -186,6 +223,11 @@ Preliminary:
   - no summary for unsupported proposal tools;
   - visible diagnostic in the assignment HUD;
   - no guessed lines or icons.
+- [ ] Add preliminary adapters or explicit unsupported diagnostics for newly projected core
+  request families:
+  - `charge_move` proposal summaries;
+  - `select_fight_activation` finite summaries;
+  - `resolve_fight_interrupt` finite summaries.
 
 ## Acceptance Criteria
 
@@ -196,6 +238,8 @@ Preliminary:
 - [ ] Summary overlays do not mutate authoritative state.
 - [ ] Unsupported operations fail visibly in the HUD and do not draw guessed summaries.
 - [ ] Preferences can configure summary defaults without defining legal actions or validation.
+- [ ] Charge Move and fight-order request families are either summarized from explicit workspace
+  data or visibly unsupported; neither silently reuses normal movement rendering.
 
 ## Tests
 
@@ -207,6 +251,8 @@ Preliminary:
 - [ ] Request-drift tests proving summary state is cleared or reconciled.
 - [ ] Diagnostics tests proving local advisory warnings and authoritative invalid diagnostics are
   visually distinct.
+- [ ] Unsupported/placeholder summary tests for `charge_move`, `select_fight_activation`, and
+  `resolve_fight_interrupt`.
 
 ## Manual Validation Checklist
 

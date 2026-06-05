@@ -15,10 +15,13 @@ there" before submitting one shooting declaration to the engine.
 
 ## Current Contract Assumptions
 
-Based on the local core checkout reviewed on 2026-06-04:
+Based on the local core checkout reviewed on 2026-06-04 and follow-up impact review on
+2026-06-05:
 
 - Shooting declaration uses `submit_shooting_declaration` with proposal kind
   `shooting_declaration`.
+- The projected `pending_proposal` object should provide the request identity metadata:
+  `request_id`, `decision_type`, `actor_id`, and `proposal_kind`.
 - The request payload includes `available_weapons` with model, wargear, profile, and optional
   Firing Deck source identity.
 - The request payload includes `target_candidates` with engine-provided target legality,
