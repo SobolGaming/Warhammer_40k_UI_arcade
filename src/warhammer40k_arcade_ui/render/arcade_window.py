@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
@@ -9,7 +11,13 @@ from pathlib import Path
 import arcade
 
 from warhammer40k_arcade_ui.config import AppConfig
-from warhammer40k_arcade_ui.core_client.protocol import UiCoreClient, UiDecision, UiGameView
+from warhammer40k_arcade_ui.core_client.protocol import (
+    UiClientProtocolError,
+    UiClientStatus,
+    UiCoreClient,
+    UiDecision,
+    UiGameView,
+)
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
@@ -35,14 +43,17 @@ from warhammer40k_arcade_ui.render.primitives import (
     build_hud_primitives,
     build_world_primitives,
 )
-from warhammer40k_arcade_ui.render.view_models import BattlefieldView
+from warhammer40k_arcade_ui.render.view_models import BattlefieldView, RenderViewModelError
 from warhammer40k_arcade_ui.state.entity_selection import entity_ref_for_model
 from warhammer40k_arcade_ui.state.finite_decision import (
     FiniteDecisionUiState,
     submit_finite_option,
 )
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
-from warhammer40k_arcade_ui.state.movement_submission import submit_movement_draft
+from warhammer40k_arcade_ui.state.movement_submission import (
+    MovementSubmissionError,
+    submit_movement_draft,
+)
 from warhammer40k_arcade_ui.state.selection import (
     SelectionState,
     model_hits_at,
@@ -55,6 +66,13 @@ CONTEXT_MENU_LINE_HEIGHT_WORLD = 1.1
 CONTEXT_MENU_ACTION_WIDTH_WORLD = 18.0
 CONTEXT_MENU_LINE_TOLERANCE_WORLD = 0.55
 RIGHT_CLICK_REMOVE_DRAG_TOLERANCE_PX = 3.0
+FATAL_ENGINE_EXIT_DELAY_SECONDS = 4.0
+
+logger = logging.getLogger(__name__)
+
+type FatalGameEngineException = (
+    UiClientProtocolError | RenderViewModelError | MovementSubmissionError | KeyError
+)
 
 
 class ArcadeWarhammerWindow(arcade.Window):
@@ -68,6 +86,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         preferences: UiPreferences | None = None,
         preferences_path: Path | None = None,
         pending_decision: UiDecision | None = None,
+        initial_status: UiClientStatus | None = None,
         core_client: UiCoreClient | None = None,
         viewer_player_id: str = "player_1",
         event_cursor: int = 0,
@@ -93,10 +112,18 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._selection_state = SelectionState.initial(self._preferences)
         self._core_client = core_client
         self._viewer_player_id = viewer_player_id
-        self._finite_state = FiniteDecisionUiState(
-            pending_decision=pending_decision,
-            event_cursor=event_cursor,
-            event_log_lines=self._battlefield_view.hud.event_log_lines,
+        self._finite_state = (
+            FiniteDecisionUiState.from_status(
+                initial_status,
+                event_cursor=event_cursor,
+                event_log_lines=self._battlefield_view.hud.event_log_lines,
+            )
+            if initial_status is not None
+            else FiniteDecisionUiState(
+                pending_decision=pending_decision,
+                event_cursor=event_cursor,
+                event_log_lines=self._battlefield_view.hud.event_log_lines,
+            )
         )
         self._pending_decision = self._finite_state.pending_decision
         self._event_cursor = self._finite_state.event_cursor
@@ -110,6 +137,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._movement_draft: MovementDraft | None = None
         self._right_mouse_press_screen: tuple[float, float] | None = None
         self._right_mouse_drag_distance_px = 0.0
+        self._fatal_exit_deadline_monotonic: float | None = None
 
     @property
     def camera(self) -> WorldCamera:
@@ -203,6 +231,16 @@ class ArcadeWarhammerWindow(arcade.Window):
 
         super().on_resize(width, height)
         self._camera = self._camera.resize_viewport(width_px=width, height_px=height)
+
+    def on_update(self, delta_time: float) -> None:
+        """Close cleanly after a fatal engine/client error has been displayed."""
+
+        del delta_time
+        if (
+            self._fatal_exit_deadline_monotonic is not None
+            and time.monotonic() >= self._fatal_exit_deadline_monotonic
+        ):
+            self.close()
 
     def on_mouse_motion(self, x: int, y: int, dx: int, dy: int) -> None:
         """Track table coordinates under the mouse for debug display."""
@@ -315,6 +353,8 @@ class ArcadeWarhammerWindow(arcade.Window):
     def on_key_press(self, symbol: int, modifiers: int) -> None:
         """Apply configured local UI hotkeys."""
 
+        if self._fatal_exit_deadline_monotonic is not None:
+            return
         invocation = command_for_key(
             preferences=self._preferences,
             key=_key_name(symbol),
@@ -409,22 +449,55 @@ class ArcadeWarhammerWindow(arcade.Window):
                 )
             )
             return
-        self._set_finite_state(
-            submit_finite_option(
+        self._set_finite_state(self._submit_finite_option_or_fatal(selected_option_id))
+
+    def _submit_finite_option_or_fatal(
+        self,
+        selected_option_id: str | None,
+    ) -> FiniteDecisionUiState:
+        client = self._core_client
+        if client is None:
+            return self._finite_state.with_local_invalid(
+                violation_code="no_core_client",
+                message="Finite submission requires a configured core client.",
+                field="client",
+            )
+        try:
+            return submit_finite_option(
                 state=self._finite_state,
-                client=self._core_client,
+                client=client,
                 selected_option_id=selected_option_id,
                 viewer_player_id=self._viewer_player_id,
             )
-        )
+        except UiClientProtocolError as exc:
+            return self._fatal_game_engine_state(exc)
+        except RenderViewModelError as exc:
+            return self._fatal_game_engine_state(exc)
+        except MovementSubmissionError as exc:
+            return self._fatal_game_engine_state(exc)
+        except KeyError as exc:
+            return self._fatal_game_engine_state(exc)
 
     def _submit_movement_draft(self) -> None:
-        result = submit_movement_draft(
-            state=self._finite_state,
-            movement_draft=self._movement_draft,
-            client=self._core_client,
-            viewer_player_id=self._viewer_player_id,
-        )
+        try:
+            result = submit_movement_draft(
+                state=self._finite_state,
+                movement_draft=self._movement_draft,
+                client=self._core_client,
+                viewer_player_id=self._viewer_player_id,
+            )
+        except UiClientProtocolError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        except RenderViewModelError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        except MovementSubmissionError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        except KeyError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
         if result.refreshed_view is not None:
             self._apply_refreshed_game_view(
                 view=result.refreshed_view,
@@ -436,6 +509,24 @@ class ArcadeWarhammerWindow(arcade.Window):
                 self._preferences
             )
         self._set_finite_state(result.finite_state)
+
+    def _fatal_game_engine_state(
+        self,
+        exc: FatalGameEngineException,
+    ) -> FiniteDecisionUiState:
+        logger.exception("Fatal game engine error during Arcade UI interaction.")
+        self._movement_draft = None
+        self._selection_state = self._selection_state.without_movement_draft_overlays(
+            self._preferences
+        )
+        self._fatal_exit_deadline_monotonic = time.monotonic() + FATAL_ENGINE_EXIT_DELAY_SECONDS
+        return self._finite_state.with_fatal_game_engine_error(
+            message=(
+                "Fatal game engine error. "
+                f"Closing in {FATAL_ENGINE_EXIT_DELAY_SECONDS:.0f} seconds."
+            ),
+            detail=_fatal_game_engine_error_detail(exc),
+        )
 
     def _set_finite_state(self, state: FiniteDecisionUiState) -> None:
         self._finite_state = state
@@ -611,6 +702,12 @@ def _pending_decision_summary(pending_decision: UiDecision | None) -> str:
         )
         return f"Proposal required: {label}"
     return f"{pending_decision.decision_type}: {len(pending_decision.options)} options"
+
+
+def _fatal_game_engine_error_detail(exc: FatalGameEngineException) -> str:
+    if type(exc) is KeyError:
+        return f"Missing engine projection field: {exc!s}."
+    return f"{type(exc).__name__}: {exc}"
 
 
 def _hud_event_lines(

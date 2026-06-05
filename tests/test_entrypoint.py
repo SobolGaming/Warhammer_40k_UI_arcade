@@ -50,22 +50,26 @@ class FakeArcadeRuntime:
 
 
 def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, Path | None]] = []
+    calls: list[tuple[str, Path | None, bool | None]] = []
 
     def fake_configure_logging() -> None:
-        calls.append(("configure_logging", None))
+        calls.append(("configure_logging", None, None))
 
-    def fake_run_app(*, ui_prefs_path: Path | None = None) -> None:
-        calls.append(("run_app", ui_prefs_path))
+    def fake_run_app(
+        *,
+        ui_prefs_path: Path | None = None,
+        live_core_smoke: bool = False,
+    ) -> None:
+        calls.append(("run_app", ui_prefs_path, live_core_smoke))
 
     monkeypatch.setattr(main, "configure_logging", fake_configure_logging)
     monkeypatch.setattr(main, "run_app", fake_run_app)
 
-    main.main(["--ui-prefs", "docs/preferences/keyboard-heavy.yaml"])
+    main.main(["--ui-prefs", "docs/preferences/keyboard-heavy.yaml", "--live-core-smoke"])
 
     assert calls == [
-        ("configure_logging", None),
-        ("run_app", Path("docs/preferences/keyboard-heavy.yaml")),
+        ("configure_logging", None, None),
+        ("run_app", Path("docs/preferences/keyboard-heavy.yaml"), True),
     ]
 
 
@@ -90,9 +94,10 @@ def test_create_window_accepts_explicit_config() -> None:
 
 
 def test_parse_args_accepts_optional_ui_preferences_path() -> None:
-    parsed = main.parse_args(["--ui-prefs", "/tmp/profile.yaml"])
+    parsed = main.parse_args(["--ui-prefs", "/tmp/profile.yaml", "--live-core-smoke"])
 
     assert parsed.ui_prefs_path == Path("/tmp/profile.yaml")
+    assert parsed.live_core_smoke is True
 
 
 def test_phase7_debug_env_alias_enables_debug_fixture(monkeypatch: pytest.MonkeyPatch) -> None:

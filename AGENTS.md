@@ -28,6 +28,11 @@ present, the relevant plan in `docs/plans/`, and relevant tests.
 If a request would weaken the UI/core boundary or create a second validation path, stop
 and ask.
 
+This UI repository may use Warhammer_40k_AI core engine code, objects, and datatypes to represent
+things and may have dependencies on it to simplify and deduplicate code instead of re-writing different
+but functionally identical elements.
+
+
 ## Pull-request mediated development
 
 Feature work should be PR-shaped by default, even when the user is asking for local implementation
@@ -108,8 +113,9 @@ decision path is trustworthy end to end.
 
 - The engine alone mutates authoritative game state.
 - The UI must not own rule validation, event logs, replay records, or authoritative model poses.
+  - It may represent and check those things, but is not the authoritative arbiter of such.
 - UI, headless, network, replay, and tests must use the same engine decision path.
-- No player choice outside `DecisionRequest` / `DecisionResult`.
+- No game effecting player choice outside `DecisionRequest` / `DecisionResult`.
 - Finite decisions must submit one engine-provided option ID for the current request ID.
 - Parameterized decisions must submit typed, JSON-safe payloads for the current proposal request.
 - Movement/charge/pile-in/consolidate/disembark/reserves/reactive movement require a `PathWitness`
@@ -123,6 +129,13 @@ decision path is trustworthy end to end.
 - User preferences may configure known UI commands, known overlays, local hotkeys, HUD defaults, and
   advisory presentation only; they must not create engine decisions, legal actions, proposal kinds,
   validation behavior, or hidden-information visibility.
+
+## Bugfixes
+
+- For every bugix made, a regression test should be created if there is not already
+  a test to cover that case where possible.
+  - If a regression test is not possible, the agent should announce it to the developer and ask for
+    guidance.
 
 ## Exception and fallback policy
 

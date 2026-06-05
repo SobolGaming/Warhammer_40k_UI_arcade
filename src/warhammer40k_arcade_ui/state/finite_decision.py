@@ -108,6 +108,28 @@ class FiniteDecisionUiState:
             diagnostics=(diagnostic,),
         )
 
+    def with_fatal_game_engine_error(
+        self,
+        *,
+        message: str,
+        detail: str,
+    ) -> FiniteDecisionUiState:
+        """Record a fatal engine/client projection failure before UI shutdown."""
+
+        diagnostic = UiInvalidDiagnostic(
+            violation_code="fatal_game_engine_error",
+            message=detail,
+            field="core_engine",
+        )
+        return replace(
+            self,
+            pending_decision=None,
+            highlighted_option_index=0,
+            status_kind="fatal",
+            status_message=message,
+            diagnostics=(diagnostic,),
+        )
+
     def prepare_submission(
         self,
         selected_option_id: str | None = None,

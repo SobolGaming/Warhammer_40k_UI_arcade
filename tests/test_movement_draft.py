@@ -165,6 +165,7 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     assert first_path["model_id"] == "intercessor_1"
     assert first_path["poses"] == [
         {"position": {"x": 7.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
+        {"position": {"x": 8.5, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
         {"position": {"x": 10.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
     ]
     assert second_path["model_id"] == "intercessor_2"
@@ -177,6 +178,17 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     assert type(second_poses) is list
     assert second_movement["path"] == second_poses
     assert second_movement["final_pose"] == second_poses[-1]
+
+
+def test_mouse_hover_preview_does_not_clear_ready_payload() -> None:
+    view = default_battlefield_view()
+    ready = _active_draft().add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
+
+    hovered = ready.with_cursor_preview(view=view, world_point=(12.0, 20.0))
+
+    assert hovered.is_ready is True
+    assert hovered.payload_preview == ready.payload_preview
+    assert hovered.cursor_preview_point == ready.cursor_preview_point
 
 
 def test_fall_back_payload_preserves_engine_issued_mode_context() -> None:

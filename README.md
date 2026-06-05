@@ -19,6 +19,7 @@ uv lock
 uv sync
 uv run warhammer40k-arcade-ui
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
 uv run pytest
 ```
 
@@ -195,6 +196,11 @@ surface.
 - UI consumes engine `GameViewPayload`-style projections rather than mutable engine objects.
 - The current launch path renders a fixture-backed inspectable battlefield until live engine
   projections are connected to the render view models.
+- The opt-in live core smoke path launches a real local core session with
+  `uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml`.
+  It advances through fixed-secondary setup to the first Movement phase unit selection and then
+  reuses the normal finite-decision, movement draft, movement submission, diagnostics, event, and
+  projection-refresh paths.
 - Render code uses typed read-only view models, pure camera transforms, and render primitives before
   handing anything to Arcade.
 - UI submits `FiniteOptionSubmission` / `ParameterizedSubmission`-style choices through the

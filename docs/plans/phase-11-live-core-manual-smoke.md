@@ -41,52 +41,79 @@ factory/session APIs and treat the core projection as authoritative.
 
 ## Tasks
 
-- [ ] Review the current `Warhammer_40k_AI` local-session and adapter contracts before
+- [x] Review the current `Warhammer_40k_AI` local-session and adapter contracts before
   implementation and record the core commit reviewed.
-- [ ] Identify the smallest stable core game setup API or fixture that can produce a movement-phase
+- [x] Identify the smallest stable core game setup API or fixture that can produce a movement-phase
   pending decision.
-- [ ] Add a live-core smoke startup factory isolated behind `core_client` or an adjacent launch
+- [x] Add a live-core smoke startup factory isolated behind `core_client` or an adjacent launch
   module that does not leak mutable engine internals into render, HUD, input, or local state.
-- [ ] Add a CLI flag and README command for the smoke mode.
-- [ ] Start `LocalSessionClient`, call the real game/session start path, and advance until a pending
+- [x] Add a CLI flag and README command for the smoke mode.
+- [x] Start `LocalSessionClient`, call the real game/session start path, and advance until a pending
   decision or terminal status.
-- [ ] Fetch the initial viewer-scoped projection and event cursor through the UI-facing client
+- [x] Fetch the initial viewer-scoped projection and event cursor through the UI-facing client
   protocol.
-- [ ] Bind the existing finite-decision, movement-draft, movement-submission, projection-refresh,
+- [x] Bind the existing finite-decision, movement-draft, movement-submission, projection-refresh,
   and diagnostics flow to that live client.
-- [ ] Add typed startup diagnostics for missing core fixtures, unsupported setup shape, no pending
+- [x] Add typed startup diagnostics for missing core fixtures, unsupported setup shape, no pending
   movement-capable decision, or projection payloads the current renderer cannot represent.
-- [ ] Add tests for:
+- [x] Add tests for:
   - CLI/config selection of live-core smoke mode;
   - smoke startup factory behavior using stable core fixture APIs where possible;
   - import-boundary checks proving live core imports remain isolated from render/HUD/input/state;
   - unsupported startup diagnostics.
-- [ ] Update manual validation instructions after implementation.
+- [x] Update manual validation instructions after implementation.
 
 ## Acceptance Criteria
 
-- [ ] `uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml`
+- [x] `uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml`
   launches through the real local core path.
-- [ ] The UI shows the real pending decision from the smoke game rather than a fake debug request.
-- [ ] Selecting an engine-provided movement option preserves the exact request ID and option ID.
-- [ ] Drafting and submitting a movement proposal calls the real core parameterized submission path.
-- [ ] Accepted movement clears the local draft and refreshes model positions from the real
+- [x] The UI shows the real pending decision from the smoke game rather than a fake debug request.
+- [x] Selecting an engine-provided movement option preserves the exact request ID and option ID.
+- [x] Drafting and submitting a movement proposal calls the real core parameterized submission path.
+- [x] Accepted movement clears the local draft and refreshes model positions from the real
   projection.
-- [ ] Invalid movement shows authoritative core diagnostics without locally committing the draft.
-- [ ] Unsupported live-core setup/projection states produce typed visible diagnostics.
-- [ ] Default fake/debug workflows continue to work for deterministic UI tests.
-- [ ] Full repository gates pass.
+- [x] Invalid movement shows authoritative core diagnostics without locally committing the draft.
+- [x] Unsupported live-core setup/projection states produce typed visible diagnostics.
+- [x] Default fake/debug workflows continue to work for deterministic UI tests.
+- [x] Full repository gates pass.
 
 ## Tests
 
-- [ ] CLI argument tests for live-core smoke mode.
-- [ ] Live smoke startup tests at the `core_client` boundary, using real core fixture/factory APIs
+- [x] CLI argument tests for live-core smoke mode.
+- [x] Live smoke startup tests at the `core_client` boundary, using real core fixture/factory APIs
   if available.
-- [ ] State-flow regression tests proving Phase 10 movement submission works with a live-client
+- [x] State-flow regression tests proving Phase 10 movement submission works with a live-client
   shaped response.
-- [ ] Static/import-boundary test keeping mutable core imports out of render, HUD, input, and local
+- [x] Static/import-boundary test keeping mutable core imports out of render, HUD, input, and local
   UI state.
-- [ ] Diagnostic tests for missing or unsupported live smoke setup.
+- [x] Diagnostic tests for missing or unsupported live smoke setup.
+
+## Contract Review Notes
+
+Reviewed `Warhammer_40k_AI` at `603fb16` on 2026-06-05:
+
+- `docs/ADAPTER_DECISION_CONTRACT.md`
+- `docs/DECISION_SUBMISSION_CATALOG.md`
+- `src/warhammer40k_core/adapters/local_session.py`
+- movement lifecycle tests around `select_movement_unit`, `select_movement_action`, and
+  `submit_movement_proposal`.
+
+Relevant contract points:
+
+- Movement remains a two-step finite path followed by a parameterized movement proposal:
+  `select_movement_unit` -> `select_movement_action` -> `submit_movement_proposal`.
+- `select_movement_action` emits engine-provided options including `normal_move`, `advance`, and
+  `remain_stationary`; Normal Move and Advance always require `submit_movement_proposal`.
+- The proposal request uses the fixed `submit_parameterized_payload` option and the UI must preserve
+  the explicit request ID at the UI boundary.
+- Movement `PathWitness` payloads must contain non-endpoint path evidence for moved straight
+  segments. Phase 11 updated the UI movement draft serializer to include midpoint evidence for
+  simple moved segments while preserving explicit start/end no-op paths for unchanged models.
+- The core `LocalGameSession` still has helper methods that infer the pending request, but the UI
+  wrapper continues to construct `FiniteOptionSubmission` and `ParameterizedSubmission` directly
+  with explicit request IDs.
+- The live smoke setup uses the core canonical Phase 9A content pack and Chapter Approved 2025-26
+  mission setup. The UI does not define rules or legal actions.
 
 ## Manual Validation Checklist
 
@@ -98,15 +125,66 @@ After implementation:
   uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
   ```
 
-- [ ] Confirm the debug panel indicates a live core smoke profile/client, not the fake debug client.
-- [ ] Confirm the pending decision shown in the HUD matches an engine-provided movement decision.
-- [ ] Select one model, draft a path, press Enter once, and confirm only a local payload preview is
-  ready.
-- [ ] Press Enter again and confirm the engine response is visible as accepted or invalid.
+- [ ] Confirm the table label begins with `Live Core` and the finite-decision HUD is not showing a
+  `phase6`/`phase10` fake debug request.
+- [ ] Confirm the finite-decision HUD starts at real `select_movement_unit` with the option
+  `army-alpha:intercessor-unit-1`.
+- [ ] Press Enter to select the engine-emitted movement unit option.
+- [ ] Click a player-a model on the table, open the selected-unit actions menu, and choose
+  `Normal Move`.
+- [ ] Select the whole unit, draft a short translated path, press Enter once, and confirm only a
+  local payload preview is ready.
+- [ ] Press Enter again and confirm the engine response either advances to the next live pending
+  decision, such as a Fire Overwatch reaction prompt, or shows an authoritative invalid diagnostic.
 - [ ] If accepted, confirm local draft overlays clear and model bases move only after projection
   refresh.
 - [ ] If invalid, confirm the diagnostic code/message comes from the engine and the draft remains
   available for retry when the engine emits a compatible retry request.
+- [ ] Confirm diagonal live-core terrain slots render as rotated footprints rather than large
+  axis-aligned overlap boxes. The engine still owns authoritative terrain occupancy; this visual
+  footprint comes from core source rotation provenance when present.
+
+## Implementation Closeout
+
+Implemented on 2026-06-05.
+
+- Added `--live-core-smoke` as an explicit CLI launch mode.
+- Added `core_client.live_smoke` to construct a real local core smoke game using
+  `LocalSessionClient`, the canonical core content pack, Chapter Approved 2025-26 mission setup,
+  and explicit UI request/result IDs.
+- The startup harness advances through both fixed-secondary setup choices into the first real
+  `select_movement_unit` decision, then passes the real client/status/view/event cursor into the
+  Arcade window.
+- Added `render.core_projection` to build a renderable `BattlefieldView` from the viewer-scoped
+  core `GameViewPayload` shape, including mission table dimensions, deployment zones, objective
+  markers, terrain footprints, and placed units/models.
+- Live-core terrain rendering now uses core source rotation/origin provenance for visible ruin
+  footprints when that provenance matches the projected engine footprint bounds. If no recognized
+  provenance is present, the UI falls back to the engine-projected axis-aligned footprint.
+- The existing finite-decision, context menu, movement draft, movement submission, authoritative
+  diagnostics, event refresh, and projection-refresh paths are reused; no new decision IDs,
+  proposal kinds, or validation paths were added.
+- Real-core accepted movement now has automated coverage: a whole-unit Normal Move payload is
+  submitted through `LocalSessionClient.submit_movement_payload`, emits
+  `movement_activation_completed`, and advances into the live Fire Overwatch reaction proposal.
+- Follow-up core projection/parser failures are now handled as fatal engine/client errors at the
+  Arcade window boundary. The HUD shows `Fatal game engine error`, logs the traceback, and closes the
+  window cleanly after a short delay instead of allowing the exception to unwind through Pyglet.
+
+## Automated Verification
+
+```bash
+UV_CACHE_DIR=/tmp/uv-cache uv run pytest \
+  tests/test_live_core_smoke.py \
+  tests/test_entrypoint.py \
+  tests/test_core_client_local_session.py
+UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
+UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .
+UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests
+UV_CACHE_DIR=/tmp/uv-cache uv run pyright
+UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/
+PRE_COMMIT_HOME=/tmp/pre-commit-cache UV_CACHE_DIR=/tmp/uv-cache uv run pre-commit run --all-files
+```
 
 ## Closeout Milestone
 

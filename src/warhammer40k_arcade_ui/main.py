@@ -16,6 +16,7 @@ class CliArgs:
     """Parsed command-line options for the Arcade UI."""
 
     ui_prefs_path: Path | None
+    live_core_smoke: bool
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -23,7 +24,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     args = parse_args(argv)
     configure_logging()
-    run_app(ui_prefs_path=args.ui_prefs_path)
+    run_app(ui_prefs_path=args.ui_prefs_path, live_core_smoke=args.live_core_smoke)
 
 
 def parse_args(argv: Sequence[str] | None) -> CliArgs:
@@ -33,8 +34,16 @@ def parse_args(argv: Sequence[str] | None) -> CliArgs:
         type=Path,
         help="Path to a JSON/YAML UI preferences profile.",
     )
+    parser.add_argument(
+        "--live-core-smoke",
+        action="store_true",
+        help="Launch an opt-in real local core movement smoke session.",
+    )
     namespace = parser.parse_args(argv)
-    return CliArgs(ui_prefs_path=namespace.ui_prefs)
+    return CliArgs(
+        ui_prefs_path=namespace.ui_prefs,
+        live_core_smoke=namespace.live_core_smoke,
+    )
 
 
 if __name__ == "__main__":

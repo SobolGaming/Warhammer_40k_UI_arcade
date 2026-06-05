@@ -62,6 +62,26 @@ def test_prepare_submission_rejects_parameterized_request() -> None:
     )
 
 
+def test_fatal_game_engine_error_state_clears_pending_decision() -> None:
+    state = FiniteDecisionUiState(
+        pending_decision=_finite_decision(),
+        highlighted_option_index=1,
+    )
+
+    next_state = state.with_fatal_game_engine_error(
+        message="Fatal game engine error. Closing in 4 seconds.",
+        detail="Missing engine projection field: 'request_id'.",
+    )
+
+    assert next_state.pending_decision is None
+    assert next_state.highlighted_option_index == 0
+    assert next_state.status_kind == "fatal"
+    assert next_state.status_message == "Fatal game engine error. Closing in 4 seconds."
+    assert next_state.diagnostics[0].violation_code == "fatal_game_engine_error"
+    assert next_state.diagnostics[0].field == "core_engine"
+    assert next_state.diagnostics[0].message == "Missing engine projection field: 'request_id'."
+
+
 def test_submit_finite_option_records_client_submission_and_refreshes_events() -> None:
     follow_up_status = UiClientStatus(
         stage="battle",

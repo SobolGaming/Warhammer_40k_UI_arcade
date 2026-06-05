@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-10 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-11 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -45,7 +45,7 @@ under `docs/plans/`.
 | 8 | Complete | Entity selection profile foundation | [phase-08](docs/plans/phase-08-entity-selection-profile-foundation.md) |
 | 9 | Complete | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
 | 10 | Complete | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
-| 11 | Planned | Live core manual smoke path | [phase-11](docs/plans/phase-11-live-core-manual-smoke.md) |
+| 11 | Complete | Live core manual smoke path | [phase-11](docs/plans/phase-11-live-core-manual-smoke.md) |
 | 12 | Planned | Generic assignment HUD | [phase-12](docs/plans/phase-12-generic-assignment-hud.md) |
 | 13 | Planned | Action visual summary overlays | [phase-13](docs/plans/phase-13-action-visual-summary-overlays.md) |
 | 14 | Planned | HUD ergonomics pass | [phase-14](docs/plans/phase-14-hud-ergonomics.md) |
@@ -71,10 +71,10 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-10 provide the runnable shell, core client boundary, inspectable render foundation,
+Phases 0-11 provide the runnable shell, core client boundary, inspectable render foundation,
 shareable UI preference framework, local selection/HUD state, finite decision submission, local
 movement path drafting, request-scoped entity-selection foundation, and per-model movement draft
-assignments with authoritative movement proposal submission:
+assignments with authoritative movement proposal submission plus opt-in live-core smoke startup:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
@@ -86,10 +86,14 @@ assignments with authoritative movement proposal submission:
 - `warhammer40k_arcade_ui.core_client.protocol` — UI-facing dataclasses and client protocol.
 - `warhammer40k_arcade_ui.core_client.local_session_client` — local in-process wrapper over the
   core engine adapter/session APIs.
+- `warhammer40k_arcade_ui.core_client.live_smoke` — opt-in real-core smoke startup harness that
+  constructs a canonical two-player local session and advances to the first movement-unit decision.
 - `warhammer40k_arcade_ui.core_client.fake_client` — deterministic fake client for UI tests.
 - `warhammer40k_arcade_ui.render.view_models` — read-only battlefield render view models parsed from
   deterministic fixture/projection payloads, plus supported refresh from render-shaped payloads or
   core battlefield runtime model-placement projections.
+- `warhammer40k_arcade_ui.render.core_projection` — viewer-scoped core `GameViewPayload` to
+  render-view adapter for the live smoke launch path.
 - `warhammer40k_arcade_ui.render.camera` — world-space camera, pan/zoom, and screen/world
   coordinate conversion.
 - `warhammer40k_arcade_ui.render.primitives` — pure table, deployment-zone, objective, terrain,
@@ -133,8 +137,6 @@ assignments with authoritative movement proposal submission:
 
 Planned modules from later phases:
 
-- `core_client` / launch — live local-session smoke harness for thin manual end-to-end testing
-  against the real core engine.
 - `input` — later command flows beyond finite decisions and movement drafting.
 - `hud` — generic assignment review, action visual summary controls, movement submission
   diagnostics, and later phase-specific ergonomics.
@@ -416,3 +418,6 @@ finite movement action selection
   can be tested against the real local core before the generic assignment HUD and later polish
   phases. Generic assignment HUD, action visual summaries, HUD ergonomics, and packaging shifted to
   Phases 12-15.
+- 2026-06-05: Phase 11 completed with the `--live-core-smoke` launch mode, a real
+  `LocalSessionClient` smoke startup at core commit `603fb16`, core projection to render-view
+  conversion, CLI tests, real-core movement decision path tests, and an import-boundary regression.
