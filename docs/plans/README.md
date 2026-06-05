@@ -36,6 +36,9 @@ for a numbered phase.
 - [Entity selection and assignment workspace](proposal-entity-selection-assignment-workspace.md) -
   accepted roadmap direction that explains the cross-cutting workspace concept and links to the
   concrete phases above.
+- [Forensic event replay](preliminary-forensic-event-replay.md) - preliminary future plan for
+  replaying forensic trace UI events through a `--play-events` workflow, with explicit engine-side
+  deterministic replay needs called out.
 - [Shooting declaration assignment tool](preliminary-shooting-declaration-assignment-tool.md) -
   preliminary future plan for model/weapon-to-target assignment.
 - [Stratagem target-binding assignment tool](preliminary-stratagem-target-binding-tool.md) -
