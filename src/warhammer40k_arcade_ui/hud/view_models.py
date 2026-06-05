@@ -73,6 +73,11 @@ class MovementDraftPanelView:
     movement_phase_action: str | None
     movement_mode: str | None
     fall_back_mode: str | None
+    active_layer: str | None
+    active_model_ids: tuple[str, ...]
+    assigned_model_count: int
+    total_model_count: int
+    unchanged_model_count: int
     current_segment_inches: float | None
     total_path_inches: float | None
     remaining_budget_inches: float | None
@@ -233,6 +238,11 @@ def build_movement_draft_panel(
             movement_phase_action=movement_draft.movement_phase_action,
             movement_mode=movement_draft.movement_mode,
             fall_back_mode=movement_draft.fall_back_mode,
+            active_layer=movement_draft.active_layer,
+            active_model_ids=movement_draft.selected_model_ids,
+            assigned_model_count=movement_draft.assigned_model_count,
+            total_model_count=movement_draft.total_model_count,
+            unchanged_model_count=movement_draft.unchanged_model_count,
             current_segment_inches=movement_draft.current_segment_length,
             total_path_inches=movement_draft.total_path_length,
             remaining_budget_inches=movement_draft.remaining_budget_inches,
@@ -249,6 +259,11 @@ def build_movement_draft_panel(
             movement_phase_action=None,
             movement_mode=None,
             fall_back_mode=None,
+            active_layer=None,
+            active_model_ids=(),
+            assigned_model_count=0,
+            total_model_count=0,
+            unchanged_model_count=0,
             current_segment_inches=None,
             total_path_inches=None,
             remaining_budget_inches=None,
@@ -266,6 +281,11 @@ def build_movement_draft_panel(
         movement_phase_action=movement_proposal.movement_phase_action,
         movement_mode=None,
         fall_back_mode=None,
+        active_layer=None,
+        active_model_ids=(),
+        assigned_model_count=0,
+        total_model_count=0,
+        unchanged_model_count=0,
         current_segment_inches=None,
         total_path_inches=None,
         remaining_budget_inches=None,

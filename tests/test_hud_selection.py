@@ -174,7 +174,7 @@ def test_movement_draft_panel_shows_measurements_and_ready_state() -> None:
         pending_decision=_movement_proposal_decision(),
     )
     assert draft is not None
-    ready_draft = draft.add_waypoint(view=view, world_point=(10.0, 22.0)).mark_ready(view=view)
+    ready_draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
 
     panel = build_movement_draft_panel(
         movement_draft=ready_draft,
@@ -187,6 +187,11 @@ def test_movement_draft_panel_shows_measurements_and_ready_state() -> None:
     assert panel.unit_id == "intercessor_squad"
     assert panel.movement_phase_action == "normal_move"
     assert panel.movement_mode == "normal"
+    assert panel.active_layer == "model"
+    assert panel.active_model_ids == ("intercessor_1",)
+    assert panel.assigned_model_count == 1
+    assert panel.total_model_count == 3
+    assert panel.unchanged_model_count == 2
     assert panel.total_path_inches == 3.0
     assert panel.remaining_budget_inches == 3.0
     assert panel.ready is True

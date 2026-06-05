@@ -15,14 +15,21 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
-from warhammer40k_arcade_ui.state.selection import SelectionState, selected_unit, unit_center
+from warhammer40k_arcade_ui.state.entity_selection import (
+    EntityRef,
+    EntitySelectionState,
+    build_entity_selection_profile,
+    entity_ref_for_model,
+)
+from warhammer40k_arcade_ui.state.selection import SelectionState, selected_unit
 
 MOVEMENT_PROPOSAL_DECISION_TYPE = "submit_movement_proposal"
 MOVEMENT_MODE_CONTEXT_KEY = "movement_mode"
 FALL_BACK_MODE_CONTEXT_KEY = "fall_back_mode"
 MOVEMENT_BUDGET_CONTEXT_KEY = "movement_budget_inches"
 
-type MovementDraftMode = Literal["unit_simple", "model_edit_deferred"]
+type MovementDraftMode = Literal["model_assignments"]
+type MovementAssignmentState = Literal["active", "assigned", "unassigned"]
 
 
 class MovementDraftError(ValueError):
@@ -36,6 +43,7 @@ class MovementModelPath:
     model_id: str
     base_radius: float
     points: tuple[WorldPoint, ...]
+    assignment_group_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "model_id", _non_empty_string("model_id", self.model_id))
@@ -47,6 +55,11 @@ class MovementModelPath:
             "points",
             tuple(_validate_world_point("path point", point) for point in self.points),
         )
+        object.__setattr__(
+            self,
+            "assignment_group_id",
+            _optional_string("assignment_group_id", self.assignment_group_id),
+        )
 
     @property
     def final_point(self) -> WorldPoint:
@@ -54,8 +67,45 @@ class MovementModelPath:
 
         return self.points[-1]
 
-    def with_translated_waypoint(self, *, delta_x: float, delta_y: float) -> MovementModelPath:
+    @property
+    def has_movement(self) -> bool:
+        """Return whether this path includes a non-zero movement segment."""
+
+        return any(math.dist(start, end) > 0.0 for start, end in pairwise(self.points))
+
+    @property
+    def path_length_inches(self) -> float:
+        """Return total path length in inches."""
+
+        return _polyline_length(self.points)
+
+    def payload_points(self) -> tuple[WorldPoint, ...]:
+        """Return payload points, including explicit no-op start/end for unchanged models."""
+
+        if len(self.points) == 1:
+            return (self.points[0], self.points[0])
+        return self.points
+
+    def with_translated_waypoint(
+        self,
+        *,
+        delta_x: float,
+        delta_y: float,
+        assignment_group_id: str,
+    ) -> MovementModelPath:
         """Append a waypoint translated from the current final point."""
+
+        _validate_finite("delta_x", delta_x)
+        _validate_finite("delta_y", delta_y)
+        final_x, final_y = self.final_point
+        return replace(
+            self,
+            points=(*self.points, (final_x + delta_x, final_y + delta_y)),
+            assignment_group_id=assignment_group_id,
+        )
+
+    def with_preview_waypoint(self, *, delta_x: float, delta_y: float) -> MovementModelPath:
+        """Return a non-mutating preview path translated from the current final point."""
 
         _validate_finite("delta_x", delta_x)
         _validate_finite("delta_y", delta_y)
@@ -67,12 +117,60 @@ class MovementModelPath:
 
         if len(self.points) <= 1:
             return self
-        return replace(self, points=self.points[:-1])
+        points = self.points[:-1]
+        return replace(
+            self,
+            points=points,
+            assignment_group_id=self.assignment_group_id if len(points) > 1 else None,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MovementAssignmentView:
+    """Summary-friendly view of one model's local movement assignment."""
+
+    model_id: str
+    base_radius: float
+    points: tuple[WorldPoint, ...]
+    final_point: WorldPoint
+    assignment_group_id: str | None
+    state: MovementAssignmentState
+    path_length_inches: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "model_id", _non_empty_string("model_id", self.model_id))
+        _validate_positive("base_radius", self.base_radius)
+        if type(self.points) is not tuple or not self.points:
+            raise MovementDraftError("MovementAssignmentView points must be a non-empty tuple.")
+        object.__setattr__(
+            self,
+            "points",
+            tuple(_validate_world_point("assignment point", point) for point in self.points),
+        )
+        object.__setattr__(
+            self,
+            "final_point",
+            _validate_world_point("final_point", self.final_point),
+        )
+        object.__setattr__(
+            self,
+            "assignment_group_id",
+            _optional_string("assignment_group_id", self.assignment_group_id),
+        )
+        if self.state not in ("active", "assigned", "unassigned"):
+            raise MovementDraftError("MovementAssignmentView state is unsupported.")
+        _validate_non_negative("path_length_inches", self.path_length_inches)
+
+    @property
+    def has_movement(self) -> bool:
+        """Return whether this assignment includes a non-zero movement segment."""
+
+        return self.path_length_inches > 0.0
 
 
 @dataclass(frozen=True, slots=True)
 class MovementDraft:
-    """Local movement draft for a pending movement proposal request."""
+    """Local per-model assignment workspace for a pending movement proposal request."""
 
     selected_unit_id: str
     proposal_request_id: str
@@ -83,12 +181,13 @@ class MovementDraft:
     source_decision_request_id: str
     source_decision_result_id: str
     mode: MovementDraftMode
-    anchor_points: tuple[WorldPoint, ...]
+    entity_selection: EntitySelectionState
     model_paths: tuple[MovementModelPath, ...]
     cursor_preview_point: WorldPoint | None
     movement_budget_inches: float | None
     local_hint_lines: tuple[str, ...]
     ready_payload: JsonObject | None = None
+    next_assignment_group_index: int = 1
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -137,15 +236,10 @@ class MovementDraft:
                 self.source_decision_result_id,
             ),
         )
-        if self.mode not in ("unit_simple", "model_edit_deferred"):
+        if self.mode != "model_assignments":
             raise MovementDraftError("Unsupported movement draft mode.")
-        if type(self.anchor_points) is not tuple or not self.anchor_points:
-            raise MovementDraftError("MovementDraft anchor_points must be a non-empty tuple.")
-        object.__setattr__(
-            self,
-            "anchor_points",
-            tuple(_validate_world_point("anchor point", point) for point in self.anchor_points),
-        )
+        if type(self.entity_selection) is not EntitySelectionState:
+            raise MovementDraftError("entity_selection must be an EntitySelectionState.")
         if type(self.model_paths) is not tuple or not self.model_paths:
             raise MovementDraftError("MovementDraft model_paths must be a non-empty tuple.")
         if any(type(path) is not MovementModelPath for path in self.model_paths):
@@ -171,6 +265,11 @@ class MovementDraft:
                 "ready_payload",
                 _json_object("ready_payload", self.ready_payload),
             )
+        if (
+            type(self.next_assignment_group_index) is not int
+            or self.next_assignment_group_index < 1
+        ):
+            raise MovementDraftError("next_assignment_group_index must be a positive integer.")
 
     @classmethod
     def start_for_pending(
@@ -187,13 +286,19 @@ class MovementDraft:
             selection=selection,
             pending_decision=pending_decision,
         )
-        if proposal is None:
+        if proposal is None or pending_decision is None:
             return None
         unit = selected_unit(view, selection)
         if unit is None:
             return None
         if proposal.movement_phase_action is None:
             raise MovementDraftError("Movement proposal requires movement_phase_action.")
+        entity_selection = _seed_entity_selection(
+            view=view,
+            selection=selection,
+            pending_decision=pending_decision,
+            unit=unit,
+        )
         draft = cls(
             selected_unit_id=unit.unit_id,
             proposal_request_id=proposal.request_id,
@@ -203,8 +308,8 @@ class MovementDraft:
             fall_back_mode=_context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY),
             source_decision_request_id=proposal.source_decision_request_id,
             source_decision_result_id=proposal.source_decision_result_id,
-            mode=_draft_mode_for_unit(unit),
-            anchor_points=(unit_center(unit),),
+            mode="model_assignments",
+            entity_selection=entity_selection,
             model_paths=tuple(
                 MovementModelPath(
                     model_id=model.model_id,
@@ -229,23 +334,70 @@ class MovementDraft:
         return self.ready_payload is not None
 
     @property
+    def has_assignments(self) -> bool:
+        """Return whether any model has a non-zero drafted movement path."""
+
+        return any(path.has_movement for path in self.model_paths)
+
+    @property
+    def total_model_count(self) -> int:
+        """Return the number of models in the proposal unit."""
+
+        return len(self.model_paths)
+
+    @property
+    def assigned_model_count(self) -> int:
+        """Return the number of models with drafted non-zero movement."""
+
+        return sum(1 for path in self.model_paths if path.has_movement)
+
+    @property
+    def unchanged_model_count(self) -> int:
+        """Return the number of models represented as no-op paths."""
+
+        return self.total_model_count - self.assigned_model_count
+
+    @property
+    def selected_model_ids(self) -> tuple[str, ...]:
+        """Return active model IDs after applying unit aliases to the model layer."""
+
+        ids: list[str] = []
+        all_model_ids = tuple(path.model_id for path in self.model_paths)
+        for ref in self.entity_selection.selected_refs:
+            if ref.kind == "model" and ref.entity_id in all_model_ids and ref.entity_id not in ids:
+                ids.append(ref.entity_id)
+            elif ref.kind == "unit" and ref.entity_id == self.selected_unit_id:
+                ids.extend(model_id for model_id in all_model_ids if model_id not in ids)
+        return tuple(ids)
+
+    @property
+    def active_layer(self) -> str | None:
+        """Return the active entity-selection layer."""
+
+        return self.entity_selection.active_layer
+
+    @property
     def current_segment_length(self) -> float:
         """Return the current preview segment length in inches."""
 
-        if self.cursor_preview_point is not None:
-            return math.dist(self.anchor_points[-1], self.cursor_preview_point)
-        if len(self.anchor_points) < 2:
+        if self.cursor_preview_point is None:
             return 0.0
-        return math.dist(self.anchor_points[-2], self.anchor_points[-1])
+        anchor = self._active_anchor_point()
+        if anchor is None:
+            return 0.0
+        return math.dist(anchor, self.cursor_preview_point)
 
     @property
     def total_path_length(self) -> float:
-        """Return total anchor-path length including the live preview point."""
+        """Return the longest active selected model path length."""
 
-        total = _polyline_length(self.anchor_points)
-        if self.cursor_preview_point is not None:
-            total += math.dist(self.anchor_points[-1], self.cursor_preview_point)
-        return total
+        active_ids = set(self.selected_model_ids)
+        if not active_ids:
+            return 0.0
+        paths = [path for path in self.preview_model_paths() if path.model_id in active_ids]
+        if not paths:
+            return 0.0
+        return max(path.path_length_inches for path in paths)
 
     @property
     def remaining_budget_inches(self) -> float | None:
@@ -277,6 +429,90 @@ class MovementDraft:
             and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
         )
 
+    def replace_model_selection(
+        self,
+        *,
+        view: BattlefieldView,
+        ref: EntityRef,
+    ) -> MovementDraft:
+        """Replace the active request-scoped movement model selection."""
+
+        return self._with_entity_selection(
+            view=view,
+            entity_selection=self.entity_selection.replace_selection(ref),
+        )
+
+    def add_model_selection(
+        self,
+        *,
+        view: BattlefieldView,
+        ref: EntityRef,
+    ) -> MovementDraft:
+        """Add a model or alias target to the active movement selection."""
+
+        return self._with_entity_selection(
+            view=view,
+            entity_selection=self.entity_selection.add_selection(ref),
+        )
+
+    def subtract_model_selection(
+        self,
+        *,
+        view: BattlefieldView,
+        ref: EntityRef,
+    ) -> MovementDraft:
+        """Remove a model or alias target from the active movement selection."""
+
+        return self._with_entity_selection(
+            view=view,
+            entity_selection=self.entity_selection.subtract_selection(ref),
+        )
+
+    def toggle_model_selection(
+        self,
+        *,
+        view: BattlefieldView,
+        ref: EntityRef,
+    ) -> MovementDraft:
+        """Toggle a model or alias target in the active movement selection."""
+
+        return self._with_entity_selection(
+            view=view,
+            entity_selection=self.entity_selection.toggle_selection(ref),
+        )
+
+    def clear_active_selection(self, *, view: BattlefieldView) -> MovementDraft:
+        """Clear the active request-scoped selection while keeping drafted paths."""
+
+        return self._with_entity_selection(
+            view=view,
+            entity_selection=self.entity_selection.clear_selection(),
+        )
+
+    def cycle_entity_focus(self, *, view: BattlefieldView) -> MovementDraft:
+        """Cycle focus through the active entity layer."""
+
+        return self._with_entity_selection(
+            view=view,
+            entity_selection=self.entity_selection.cycle_focus(),
+        )
+
+    def cycle_entity_layer(self, *, view: BattlefieldView) -> MovementDraft:
+        """Cycle the active entity-selection layer."""
+
+        return self._with_entity_selection(
+            view=view,
+            entity_selection=self.entity_selection.cycle_active_layer(),
+        )
+
+    def select_current_group(self, *, view: BattlefieldView) -> MovementDraft:
+        """Expand the focused model to its current selectable group."""
+
+        return self._with_entity_selection(
+            view=view,
+            entity_selection=self.entity_selection.select_current_group(),
+        )
+
     def with_cursor_preview(
         self,
         *,
@@ -292,35 +528,55 @@ class MovementDraft:
         ).with_recomputed_hints(view=view)
 
     def add_waypoint(self, *, view: BattlefieldView, world_point: WorldPoint) -> MovementDraft:
-        """Commit a waypoint in unit-level simple path mode."""
+        """Commit a waypoint to the active selected model subset."""
 
         point = _validate_world_point("world_point", world_point)
-        last_x, last_y = self.anchor_points[-1]
+        active_ids = self.selected_model_ids
+        anchor = self._active_anchor_point()
+        if not active_ids or anchor is None:
+            return replace(
+                self,
+                cursor_preview_point=None,
+                ready_payload=None,
+                local_hint_lines=(
+                    *self.local_hint_lines,
+                    "Preview warning: select one or more moving models before adding a waypoint.",
+                ),
+            )
+        anchor_x, anchor_y = anchor
         point_x, point_y = point
-        delta_x = point_x - last_x
-        delta_y = point_y - last_y
+        delta_x = point_x - anchor_x
+        delta_y = point_y - anchor_y
+        group_id, next_index = self._assignment_group_for_active_selection(active_ids)
         return replace(
             self,
-            anchor_points=(*self.anchor_points, point),
             model_paths=tuple(
-                path.with_translated_waypoint(delta_x=delta_x, delta_y=delta_y)
+                path.with_translated_waypoint(
+                    delta_x=delta_x,
+                    delta_y=delta_y,
+                    assignment_group_id=group_id,
+                )
+                if path.model_id in active_ids
+                else path
                 for path in self.model_paths
             ),
             cursor_preview_point=None,
             ready_payload=None,
+            next_assignment_group_index=next_index,
         ).with_recomputed_hints(view=view)
 
     def remove_last_waypoint(self, *, view: BattlefieldView) -> MovementDraft:
-        """Remove the most recent committed waypoint without submitting anything."""
+        """Remove the most recent waypoint for the active selected model subset."""
 
-        if len(self.anchor_points) <= 1:
-            return replace(
-                self, cursor_preview_point=None, ready_payload=None
-            ).with_recomputed_hints(view=view)
+        active_ids = set(self.selected_model_ids)
+        if not active_ids:
+            return replace(self, cursor_preview_point=None, ready_payload=None)
         return replace(
             self,
-            anchor_points=self.anchor_points[:-1],
-            model_paths=tuple(path.with_removed_last_waypoint() for path in self.model_paths),
+            model_paths=tuple(
+                path.with_removed_last_waypoint() if path.model_id in active_ids else path
+                for path in self.model_paths
+            ),
             cursor_preview_point=None,
             ready_payload=None,
         ).with_recomputed_hints(view=view)
@@ -333,7 +589,7 @@ class MovementDraft:
             if self.cursor_preview_point is not None
             else self
         )
-        if len(draft.anchor_points) < 2:
+        if not draft.has_assignments:
             return replace(
                 draft,
                 ready_payload=None,
@@ -345,7 +601,7 @@ class MovementDraft:
         return replace(draft, ready_payload=draft.to_payload()).with_recomputed_hints(view=view)
 
     def with_recomputed_hints(self, *, view: BattlefieldView) -> MovementDraft:
-        """Recompute local advisory hints for the current path geometry."""
+        """Recompute local advisory hints for the current assignment geometry."""
 
         return replace(self, local_hint_lines=_local_hint_lines(view=view, draft=self))
 
@@ -354,13 +610,40 @@ class MovementDraft:
 
         if self.cursor_preview_point is None:
             return self.model_paths
-        last_x, last_y = self.anchor_points[-1]
+        active_ids = self.selected_model_ids
+        anchor = self._active_anchor_point()
+        if not active_ids or anchor is None:
+            return self.model_paths
+        anchor_x, anchor_y = anchor
         point_x, point_y = self.cursor_preview_point
-        delta_x = point_x - last_x
-        delta_y = point_y - last_y
+        delta_x = point_x - anchor_x
+        delta_y = point_y - anchor_y
         return tuple(
-            path.with_translated_waypoint(delta_x=delta_x, delta_y=delta_y)
+            path.with_preview_waypoint(delta_x=delta_x, delta_y=delta_y)
+            if path.model_id in active_ids
+            else path
             for path in self.model_paths
+        )
+
+    def assignment_views(self) -> tuple[MovementAssignmentView, ...]:
+        """Return summary-friendly assignment rows for render, HUD, and later visual summaries."""
+
+        active_ids = set(self.selected_model_ids)
+        return tuple(
+            MovementAssignmentView(
+                model_id=path.model_id,
+                base_radius=path.base_radius,
+                points=path.points,
+                final_point=path.final_point,
+                assignment_group_id=path.assignment_group_id,
+                state="active"
+                if path.model_id in active_ids
+                else "assigned"
+                if path.has_movement
+                else "unassigned",
+                path_length_inches=path.path_length_inches,
+            )
+            for path in self.preview_model_paths()
         )
 
     def to_payload(self) -> JsonObject:
@@ -375,7 +658,7 @@ class MovementDraft:
                 "model_paths": [
                     {
                         "model_id": path.model_id,
-                        "poses": [_pose_payload(point) for point in path.points],
+                        "poses": [_pose_payload(point) for point in path.payload_points()],
                     }
                     for path in self.model_paths
                 ],
@@ -383,8 +666,8 @@ class MovementDraft:
             "model_movements": [
                 {
                     "model_instance_id": path.model_id,
-                    "path": [_pose_payload(point) for point in path.points],
-                    "final_pose": _pose_payload(path.final_point),
+                    "path": [_pose_payload(point) for point in path.payload_points()],
+                    "final_pose": _pose_payload(path.payload_points()[-1]),
                 }
                 for path in self.model_paths
             ],
@@ -394,6 +677,46 @@ class MovementDraft:
         if self.fall_back_mode is not None:
             body["fall_back_mode"] = self.fall_back_mode
         return _json_object("movement proposal payload", body)
+
+    def _with_entity_selection(
+        self,
+        *,
+        view: BattlefieldView,
+        entity_selection: EntitySelectionState,
+    ) -> MovementDraft:
+        return replace(
+            self,
+            entity_selection=entity_selection,
+            cursor_preview_point=None,
+            ready_payload=None,
+        ).with_recomputed_hints(view=view)
+
+    def _active_anchor_point(self) -> WorldPoint | None:
+        active_ids = set(self.selected_model_ids)
+        if not active_ids:
+            return None
+        points = tuple(path.final_point for path in self.model_paths if path.model_id in active_ids)
+        if not points:
+            return None
+        return _mean_point(points)
+
+    def _assignment_group_for_active_selection(
+        self,
+        active_ids: tuple[str, ...],
+    ) -> tuple[str, int]:
+        active_paths = tuple(path for path in self.model_paths if path.model_id in active_ids)
+        group_ids = {
+            path.assignment_group_id
+            for path in active_paths
+            if path.assignment_group_id is not None
+        }
+        if len(group_ids) == 1 and all(
+            path.assignment_group_id in group_ids for path in active_paths
+        ):
+            group_id = next(iter(group_ids))
+            return group_id, self.next_assignment_group_index
+        group_id = f"assignment-group-{self.next_assignment_group_index:06d}"
+        return group_id, self.next_assignment_group_index + 1
 
 
 def movement_proposal_for_selected_unit(
@@ -432,25 +755,59 @@ def unsupported_parameterized_tool_label(pending_decision: UiDecision | None) ->
     return proposal.proposal_kind or proposal.decision_type
 
 
-def _draft_mode_for_unit(unit: UnitView) -> MovementDraftMode:
-    if len(unit.models) > 12:
-        return "model_edit_deferred"
-    return "unit_simple"
+def _seed_entity_selection(
+    *,
+    view: BattlefieldView,
+    selection: SelectionState,
+    pending_decision: UiDecision,
+    unit: UnitView,
+) -> EntitySelectionState:
+    profile = build_entity_selection_profile(view=view, pending_decision=pending_decision)
+    state = EntitySelectionState.initial(profile)
+    seed_ref = (
+        entity_ref_for_model(
+            view=view,
+            unit_id=unit.unit_id,
+            model_id=selection.selected_model_id,
+        )
+        if selection.selected_model_id is not None
+        else None
+    )
+    if seed_ref is None:
+        seed_ref = entity_ref_for_model(
+            view=view,
+            unit_id=unit.unit_id,
+            model_id=unit.models[0].model_id,
+        )
+    if seed_ref is None:
+        return state
+    return state.replace_selection(seed_ref)
 
 
 def _local_hint_lines(*, view: BattlefieldView, draft: MovementDraft) -> tuple[str, ...]:
     hints: list[str] = ["Preview/advisory only; engine validates movement."]
-    if draft.mode == "model_edit_deferred":
-        hints.append("Preview warning: model-level editing is deferred for this large unit.")
+    selected_count = len(draft.selected_model_ids)
+    hints.append(f"Active movement selection: {selected_count} model(s).")
+    if draft.unchanged_model_count:
+        hints.append(
+            "Preview note: "
+            f"{draft.unchanged_model_count} unchanged model(s) remain explicit no-op paths."
+        )
     if draft.movement_budget_inches is None:
         hints.append("Preview warning: movement budget is unavailable in the proposal context.")
-    elif draft.remaining_budget_inches is not None and draft.remaining_budget_inches < 0.0:
-        hints.append("Preview warning: estimated path exceeds the displayed movement budget.")
+    elif _has_over_budget_path(draft):
+        hints.append("Preview warning: at least one path exceeds the displayed movement budget.")
     if _has_out_of_bounds_endpoint(view=view, draft=draft):
         hints.append("Preview warning: final ghost base is outside table bounds.")
     if _has_self_overlap(draft):
         hints.append("Preview warning: final ghost bases overlap each other.")
     return tuple(hints)
+
+
+def _has_over_budget_path(draft: MovementDraft) -> bool:
+    if draft.movement_budget_inches is None:
+        return False
+    return any(path.path_length_inches > draft.movement_budget_inches for path in draft.model_paths)
 
 
 def _has_out_of_bounds_endpoint(*, view: BattlefieldView, draft: MovementDraft) -> bool:
@@ -549,6 +906,12 @@ def _validate_world_point(field_name: str, value: object) -> WorldPoint:
     )
 
 
+def _mean_point(points: tuple[WorldPoint, ...]) -> WorldPoint:
+    x_total = sum(point[0] for point in points)
+    y_total = sum(point[1] for point in points)
+    return (x_total / len(points), y_total / len(points))
+
+
 def _non_empty_string(field_name: str, value: object) -> str:
     if type(value) is not str:
         raise MovementDraftError(f"{field_name} must be a string.")
@@ -558,7 +921,7 @@ def _non_empty_string(field_name: str, value: object) -> str:
     return stripped
 
 
-def _optional_string(field_name: str, value: object) -> str | None:
+def _optional_string(field_name: str, value: object | None) -> str | None:
     if value is None:
         return None
     return _non_empty_string(field_name, value)
@@ -569,6 +932,13 @@ def _validate_positive(field_name: str, value: float) -> None:
         raise MovementDraftError(f"{field_name} must be a number.")
     if value <= 0.0 or not math.isfinite(value):
         raise MovementDraftError(f"{field_name} must be finite and positive.")
+
+
+def _validate_non_negative(field_name: str, value: float) -> None:
+    if type(value) is not float and type(value) is not int:
+        raise MovementDraftError(f"{field_name} must be a number.")
+    if value < 0.0 or not math.isfinite(value):
+        raise MovementDraftError(f"{field_name} must be finite and non-negative.")
 
 
 def _validate_finite(field_name: str, value: object) -> None:

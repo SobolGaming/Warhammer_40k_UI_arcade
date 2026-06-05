@@ -216,6 +216,11 @@ surface.
   as model-to-owning-unit, preserves deterministic selection order, and emits typed diagnostics for
   unsupported request profiles, missing candidates, cardinality violations, and unavailable visual
   anchors.
+- Phase 9 movement drafts use request-scoped per-model assignment: click a model during an active
+  movement draft to replace the active subset, Shift-click to add, Ctrl-click to remove, click empty
+  table space to add a waypoint for that subset, and press `g` to select the current model group.
+  Payload previews include every proposal-unit model in both `witness.model_paths` and
+  `model_movements`; unchanged models are explicit start/end no-op paths.
 - UI previews are advisory only; only accepted engine results can update authoritative state.
 - Phase 4 UI preference files may configure known overlays, hotkeys, HUD defaults, selected
   model/unit information affordances, and recognized upcoming behavior settings. They must not

@@ -176,21 +176,21 @@ consume this foundation in one reviewable interaction slice.
 
 ## Manual Validation Checklist
 
-- [ ] Export the default profile with `uv run warhammer40k-export-preferences --format yaml` and
+- [x] Export the default profile with `uv run warhammer40k-export-preferences --format yaml` and
   confirm the entity-selection command IDs are present:
   - `add_entity_selection`
   - `subtract_entity_selection`
   - `toggle_entity_selection`
   - `cycle_entity_layer`
   - `select_current_entity_group`
-- [ ] Start the Phase 7/8 debug fixture with
+- [x] Start the Phase 7/8 debug fixture with
   `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`.
-- [ ] Select a model for ordinary inspection and confirm the selected-unit panel still behaves.
-- [ ] Press `space` with a selected unit and confirm the selected-unit action context menu still
+- [x] Select a model for ordinary inspection and confirm the selected-unit panel still behaves.
+- [x] Press `space` with a selected unit and confirm the selected-unit action context menu still
   opens when finite actions are available.
-- [ ] Begin the existing movement draft flow and confirm movement path drafting still opens for the
+- [x] Begin the existing movement draft flow and confirm movement path drafting still opens for the
   selected unit.
-- [ ] Note that separate request-scoped selection highlights, Shift-click subset selection, and
+- [x] Note that separate request-scoped selection highlights, Shift-click subset selection, and
   visible model/unit layer cycling are not expected to appear until Phase 9 wires this foundation
   into live movement assignment input.
 

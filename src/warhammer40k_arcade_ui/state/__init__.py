@@ -27,6 +27,7 @@ from warhammer40k_arcade_ui.state.finite_decision import (
     submit_finite_option,
 )
 from warhammer40k_arcade_ui.state.movement_draft import (
+    MovementAssignmentView,
     MovementDraft,
     MovementDraftError,
     MovementModelPath,
@@ -53,6 +54,7 @@ __all__ = [
     "FiniteDecisionSubmission",
     "FiniteDecisionUiState",
     "ModelHit",
+    "MovementAssignmentView",
     "MovementDraft",
     "MovementDraftError",
     "MovementModelPath",

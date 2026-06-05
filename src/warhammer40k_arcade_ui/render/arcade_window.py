@@ -36,12 +36,18 @@ from warhammer40k_arcade_ui.render.primitives import (
     build_world_primitives,
 )
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView
+from warhammer40k_arcade_ui.state.entity_selection import entity_ref_for_model
 from warhammer40k_arcade_ui.state.finite_decision import (
     FiniteDecisionUiState,
     submit_finite_option,
 )
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
-from warhammer40k_arcade_ui.state.selection import SelectionState, selected_unit, unit_center
+from warhammer40k_arcade_ui.state.selection import (
+    SelectionState,
+    model_hits_at,
+    selected_unit,
+    unit_center,
+)
 
 MOUSE_ZOOM_BASE = 1.12
 CONTEXT_MENU_LINE_HEIGHT_WORLD = 1.1
@@ -209,7 +215,6 @@ class ArcadeWarhammerWindow(arcade.Window):
     def on_mouse_press(self, x: int, y: int, button: int, modifiers: int) -> None:
         """Select models with the configured default mouse button."""
 
-        del modifiers
         self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
         if button == arcade.MOUSE_BUTTON_RIGHT and self._movement_draft is not None:
             self._right_mouse_press_screen = (float(x), float(y))
@@ -232,6 +237,11 @@ class ArcadeWarhammerWindow(arcade.Window):
                 )
             return
         if self._movement_draft is not None:
+            if self._apply_movement_selection_at(
+                world_point=self._mouse_world_position,
+                modifiers=modifiers,
+            ):
+                return
             self._movement_draft = self._movement_draft.add_waypoint(
                 view=self._battlefield_view,
                 world_point=self._mouse_world_position,
@@ -324,12 +334,54 @@ class ArcadeWarhammerWindow(arcade.Window):
         elif invocation.command_id == "cycle_selection":
             if self._finite_state.finite_options:
                 self._set_finite_state(self._finite_state.cycle_option())
+            elif self._movement_draft is not None:
+                self._movement_draft = self._movement_draft.cycle_entity_focus(
+                    view=self._battlefield_view
+                )
             elif self._mouse_world_position is not None:
                 self._selection_state = self._selection_state.cycle_existing_at(
                     view=self._battlefield_view,
                     world_point=self._mouse_world_position,
                     preferences=self._preferences,
                 )
+        elif invocation.command_id == "cycle_entity_layer" and self._movement_draft is not None:
+            self._movement_draft = self._movement_draft.cycle_entity_layer(
+                view=self._battlefield_view
+            )
+        elif (
+            invocation.command_id == "select_current_entity_group"
+            and self._movement_draft is not None
+        ):
+            self._movement_draft = self._movement_draft.select_current_group(
+                view=self._battlefield_view
+            )
+        elif (
+            invocation.command_id == "add_entity_selection"
+            and self._movement_draft is not None
+            and self._movement_draft.entity_selection.focused_ref is not None
+        ):
+            self._movement_draft = self._movement_draft.add_model_selection(
+                view=self._battlefield_view,
+                ref=self._movement_draft.entity_selection.focused_ref,
+            )
+        elif (
+            invocation.command_id == "subtract_entity_selection"
+            and self._movement_draft is not None
+            and self._movement_draft.entity_selection.focused_ref is not None
+        ):
+            self._movement_draft = self._movement_draft.subtract_model_selection(
+                view=self._battlefield_view,
+                ref=self._movement_draft.entity_selection.focused_ref,
+            )
+        elif (
+            invocation.command_id == "toggle_entity_selection"
+            and self._movement_draft is not None
+            and self._movement_draft.entity_selection.focused_ref is not None
+        ):
+            self._movement_draft = self._movement_draft.toggle_model_selection(
+                view=self._battlefield_view,
+                ref=self._movement_draft.entity_selection.focused_ref,
+            )
         elif invocation.command_id == "confirm":
             if self._movement_draft is not None:
                 self._movement_draft = self._movement_draft.mark_ready(view=self._battlefield_view)
@@ -401,10 +453,51 @@ class ArcadeWarhammerWindow(arcade.Window):
     def _cancel_movement_draft(self) -> None:
         if self._movement_draft is None:
             return
+        if self._movement_draft.has_assignments and self._movement_draft.selected_model_ids:
+            self._movement_draft = self._movement_draft.clear_active_selection(
+                view=self._battlefield_view
+            )
+            return
         self._movement_draft = None
         self._selection_state = self._selection_state.without_movement_draft_overlays(
             self._preferences
         )
+
+    def _apply_movement_selection_at(
+        self,
+        *,
+        world_point: WorldPoint,
+        modifiers: int,
+    ) -> bool:
+        if self._movement_draft is None:
+            return False
+        for hit in model_hits_at(view=self._battlefield_view, world_point=world_point):
+            if hit.unit_id != self._movement_draft.selected_unit_id:
+                continue
+            ref = entity_ref_for_model(
+                view=self._battlefield_view,
+                unit_id=hit.unit_id,
+                model_id=hit.model_id,
+            )
+            if ref is None:
+                return False
+            if modifiers & arcade.key.MOD_CTRL:
+                self._movement_draft = self._movement_draft.subtract_model_selection(
+                    view=self._battlefield_view,
+                    ref=ref,
+                )
+            elif modifiers & arcade.key.MOD_SHIFT:
+                self._movement_draft = self._movement_draft.add_model_selection(
+                    view=self._battlefield_view,
+                    ref=ref,
+                )
+            else:
+                self._movement_draft = self._movement_draft.replace_model_selection(
+                    view=self._battlefield_view,
+                    ref=ref,
+                )
+            return True
+        return False
 
     def _context_menu_action_at(self, world_point: WorldPoint) -> ContextMenuAction | None:
         menu = build_context_menu(

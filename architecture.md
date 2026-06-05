@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-8 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-9 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -43,7 +43,7 @@ under `docs/plans/`.
 | 6 | Complete | Finite decision submission | [phase-06](docs/plans/phase-06-finite-decision-submission.md) |
 | 7 | Complete | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
 | 8 | Complete | Entity selection profile foundation | [phase-08](docs/plans/phase-08-entity-selection-profile-foundation.md) |
-| 9 | Planned | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
+| 9 | Complete | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
 | 10 | Planned | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
 | 11 | Planned | Generic assignment HUD | [phase-11](docs/plans/phase-11-generic-assignment-hud.md) |
 | 12 | Planned | Action visual summary overlays | [phase-12](docs/plans/phase-12-action-visual-summary-overlays.md) |
@@ -70,9 +70,10 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-8 provide the runnable shell, core client boundary, inspectable render foundation,
+Phases 0-9 provide the runnable shell, core client boundary, inspectable render foundation,
 shareable UI preference framework, local selection/HUD state, finite decision submission, local
-movement path drafting, and request-scoped entity-selection foundation:
+movement path drafting, request-scoped entity-selection foundation, and per-model movement draft
+assignments:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
@@ -90,9 +91,10 @@ movement path drafting, and request-scoped entity-selection foundation:
 - `warhammer40k_arcade_ui.render.camera` — world-space camera, pan/zoom, and screen/world
   coordinate conversion.
 - `warhammer40k_arcade_ui.render.primitives` — pure table, deployment-zone, objective, terrain,
-  unit, model-base, and HUD primitive generation.
+  unit, model-base, movement assignment overlay, and HUD primitive generation.
 - `warhammer40k_arcade_ui.render.arcade_window` — `ArcadeWarhammerWindow` consuming render
-  primitives for drawing, right/middle-drag panning, mouse-wheel zoom, and mouse coordinate display.
+  primitives for drawing, right/middle-drag panning, mouse-wheel zoom, mouse coordinate display,
+  finite hotkeys, context-menu actions, and local movement-assignment input.
 - `warhammer40k_arcade_ui.render.default_fixture` — deterministic launch-time battlefield fixture
   used until live projections are connected.
 - `warhammer40k_arcade_ui.preferences.schema` — typed preference dataclasses, versioned parsing,
@@ -110,9 +112,10 @@ movement path drafting, and request-scoped entity-selection foundation:
 - `warhammer40k_arcade_ui.state.finite_decision` — local finite-option focus, deterministic UI
   result-ID generation, UI-boundary no-submit diagnostics, status refresh, and viewer-scoped event
   cursor state.
-- `warhammer40k_arcade_ui.state.movement_draft` — local-only movement proposal draft state,
-  waypoint management, advisory measurement/hint generation, and JSON-safe payload preview
-  construction that preserves engine-issued movement context.
+- `warhammer40k_arcade_ui.state.movement_draft` — local-only per-model movement proposal draft
+  state, request-scoped entity selection, model assignment groups, advisory measurement/hint
+  generation, summary-friendly assignment rows, and JSON-safe payload preview construction that
+  preserves engine-issued movement context and includes explicit no-op paths for unchanged models.
 - `warhammer40k_arcade_ui.state.entity_selection` — request-scoped entity refs, layer registry,
   profile builders, alias rules, local add/subtract/toggle state transitions, request drift
   reconciliation, and visual-anchor diagnostics for movement and finite unit-selection profiles.
@@ -206,10 +209,10 @@ The renderer displays active movement-path and movement-budget overlays in world
 waypoints, endpoint preview, final ghost bases, and budget rings. The HUD displays proposal context,
 segment and total measurements, remaining budget estimates, ready state, and preview-only warnings.
 
-This phase prepares a JSON-safe movement payload preview, including `witness.model_paths` and
-optional `model_movements`, but does not submit the parameterized request. Phase 8 and Phase 9
-replace the current unit-simple interaction with request-scoped entity selection and per-model
-movement assignments before Phase 10 submits movement proposals to the engine.
+This phase prepared a JSON-safe movement payload preview, including `witness.model_paths` and
+optional `model_movements`, but did not submit the parameterized request. Phase 8 and Phase 9
+replace the unit-simple interaction with request-scoped entity selection and per-model movement
+assignments before Phase 10 submits movement proposals to the engine.
 
 ## Entity Selection And Assignment Workspace
 
@@ -229,6 +232,10 @@ deterministic add/subtract/toggle transitions. Phase 9 wires that foundation int
 so selecting one model moves one model, selecting a subset moves that subset, and selecting the
 whole unit must be an explicit action. Later shooting and Stratagem tools should reuse the same
 selection and assignment foundation when the engine request exposes safe candidate metadata.
+
+Phase 9's movement draft payload preview represents every model in the proposal unit. Models with
+no drafted movement are encoded as explicit start/end no-op paths in both `witness.model_paths` and
+`model_movements`; the UI does not omit unchanged models or submit the proposal in this phase.
 
 The Generic Assignment HUD is the visible review surface for that workspace. It should show what
 request is being answered, which entities are selected, which entities are assigned, which entities

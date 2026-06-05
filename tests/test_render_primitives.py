@@ -103,7 +103,7 @@ def test_movement_draft_builds_path_waypoint_ghost_and_budget_primitives() -> No
         pending_decision=_movement_proposal_decision(),
     )
     assert draft is not None
-    draft = draft.add_waypoint(view=view, world_point=(10.0, 22.0))
+    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0))
 
     primitives = build_world_primitives(view, selection, draft)
 
@@ -113,8 +113,10 @@ def test_movement_draft_builds_path_waypoint_ghost_and_budget_primitives() -> No
     circle_layers = [
         primitive.layer for primitive in primitives if type(primitive) is CirclePrimitive
     ]
-    assert line_layers.count("movement_path") == 3
-    assert circle_layers.count("movement_ghost_base") == 3
+    assert line_layers.count("movement_path") == 1
+    assert circle_layers.count("movement_active_model_overlay") == 1
+    assert circle_layers.count("movement_unassigned_model_overlay") == 2
+    assert circle_layers.count("movement_ghost_base") == 1
     assert "movement_waypoint" in circle_layers
     assert "movement_budget_ring" in circle_layers
 
@@ -215,7 +217,7 @@ def test_hud_primitives_include_movement_draft_panel() -> None:
         pending_decision=_movement_proposal_decision(),
     )
     assert draft is not None
-    draft = draft.add_waypoint(view=view, world_point=(10.0, 22.0)).mark_ready(view=view)
+    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
 
     primitives = build_hud_primitives(
         view=view,
@@ -232,6 +234,8 @@ def test_hud_primitives_include_movement_draft_panel() -> None:
     assert "Movement draft" in texts
     assert "Payload preview: ready" in texts
     assert "Mode: normal" in texts
+    assert "Active models: intercessor_1" in texts
+    assert "Assignments: 1/3 moved, 2 no-op" in texts
 
 
 def test_render_view_model_rejects_incomplete_payload() -> None:

@@ -39,6 +39,9 @@ MOVEMENT_PATH: Color = (102, 220, 180, 255)
 MOVEMENT_PREVIEW: Color = (102, 220, 180, 150)
 MOVEMENT_WARNING: Color = (255, 168, 94, 255)
 MOVEMENT_GHOST_FILL: Color = (102, 220, 180, 54)
+MOVEMENT_ACTIVE: Color = (132, 232, 255, 255)
+MOVEMENT_ASSIGNED: Color = (122, 214, 156, 210)
+MOVEMENT_UNASSIGNED: Color = (184, 190, 186, 135)
 
 
 @dataclass(frozen=True, slots=True)
@@ -400,51 +403,64 @@ def _movement_draft_primitives(
 ) -> tuple[RenderPrimitive, ...]:
     primitives: list[RenderPrimitive] = []
     warning = any("warning" in hint.lower() for hint in movement_draft.local_hint_lines)
-    line_color = MOVEMENT_WARNING if warning else MOVEMENT_PATH
+    default_line_color = MOVEMENT_WARNING if warning else MOVEMENT_PATH
+    assignment_views = movement_draft.assignment_views()
     if "movement_path_draft" in selection_state.active_overlay_ids:
-        for path in movement_draft.preview_model_paths():
-            if len(path.points) > 1:
+        for assignment in assignment_views:
+            state_color = _movement_assignment_color(assignment.state)
+            primitives.append(
+                CirclePrimitive(
+                    layer=f"movement_{assignment.state}_model_overlay",
+                    center=assignment.points[0],
+                    radius=assignment.base_radius + 0.18,
+                    fill_color=(0, 0, 0, 0),
+                    outline_color=state_color,
+                    line_width=1.6 if assignment.state == "active" else 1.1,
+                )
+            )
+            line_color = MOVEMENT_WARNING if warning else state_color
+            if assignment.has_movement:
                 primitives.append(
                     PolylinePrimitive(
                         layer="movement_path",
-                        points=path.points,
+                        points=assignment.points,
                         color=line_color,
-                        line_width=1.3,
+                        line_width=1.5 if assignment.state == "active" else 1.1,
                     )
                 )
-            primitives.append(
-                CirclePrimitive(
-                    layer="movement_ghost_base",
-                    center=path.final_point,
-                    radius=path.base_radius,
-                    fill_color=MOVEMENT_GHOST_FILL,
-                    outline_color=line_color,
-                    line_width=1.0,
+                primitives.append(
+                    CirclePrimitive(
+                        layer="movement_ghost_base",
+                        center=assignment.final_point,
+                        radius=assignment.base_radius,
+                        fill_color=MOVEMENT_GHOST_FILL,
+                        outline_color=line_color,
+                        line_width=1.0,
+                    )
                 )
-            )
-        for index, point in enumerate(movement_draft.anchor_points[1:], start=1):
-            primitives.append(
-                CirclePrimitive(
-                    layer="movement_waypoint",
-                    center=point,
-                    radius=0.24,
-                    fill_color=line_color,
-                    outline_color=(248, 250, 246, 255),
-                    line_width=0.8,
-                )
-            )
-            primitives.append(
-                TextPrimitive(
-                    layer="movement_waypoint_label",
-                    text=str(index),
-                    position=(point[0], point[1] + 0.42),
-                    color=line_color,
-                    font_size=8.5,
-                    coordinate_space="world",
-                    anchor_x="center",
-                    anchor_y="center",
-                )
-            )
+                for index, point in enumerate(assignment.points[1:], start=1):
+                    primitives.append(
+                        CirclePrimitive(
+                            layer="movement_waypoint",
+                            center=point,
+                            radius=0.24,
+                            fill_color=line_color,
+                            outline_color=(248, 250, 246, 255),
+                            line_width=0.8,
+                        )
+                    )
+                    primitives.append(
+                        TextPrimitive(
+                            layer="movement_waypoint_label",
+                            text=f"{assignment.model_id}:{index}",
+                            position=(point[0], point[1] + 0.42),
+                            color=line_color,
+                            font_size=7.5,
+                            coordinate_space="world",
+                            anchor_x="center",
+                            anchor_y="center",
+                        )
+                    )
         if movement_draft.cursor_preview_point is not None:
             primitives.append(
                 CirclePrimitive(
@@ -452,7 +468,7 @@ def _movement_draft_primitives(
                     center=movement_draft.cursor_preview_point,
                     radius=0.18,
                     fill_color=MOVEMENT_PREVIEW,
-                    outline_color=line_color,
+                    outline_color=default_line_color,
                     line_width=0.8,
                 )
             )
@@ -460,16 +476,19 @@ def _movement_draft_primitives(
         "movement_budget" in selection_state.active_overlay_ids
         and movement_draft.movement_budget_inches is not None
     ):
-        primitives.append(
-            CirclePrimitive(
-                layer="movement_budget_ring",
-                center=movement_draft.anchor_points[0],
-                radius=movement_draft.movement_budget_inches,
-                fill_color=(0, 0, 0, 0),
-                outline_color=MOVEMENT_PREVIEW,
-                line_width=1.0,
+        for assignment in assignment_views:
+            if assignment.state != "active":
+                continue
+            primitives.append(
+                CirclePrimitive(
+                    layer="movement_budget_ring",
+                    center=assignment.points[0],
+                    radius=movement_draft.movement_budget_inches,
+                    fill_color=(0, 0, 0, 0),
+                    outline_color=MOVEMENT_PREVIEW,
+                    line_width=1.0,
+                )
             )
-        )
     return tuple(primitives)
 
 
@@ -547,6 +566,16 @@ def _movement_draft_panel_primitives(
         lines.append(f"Mode: {panel.movement_mode}")
     if panel.fall_back_mode is not None:
         lines.append(f"Fall Back: {panel.fall_back_mode}")
+    if panel.active_layer is not None:
+        lines.append(f"Layer: {panel.active_layer}")
+    if panel.total_model_count:
+        active_models = ", ".join(panel.active_model_ids) if panel.active_model_ids else "none"
+        lines.append(f"Active models: {active_models}")
+        lines.append(
+            "Assignments: "
+            f"{panel.assigned_model_count}/{panel.total_model_count} moved, "
+            f"{panel.unchanged_model_count} no-op"
+        )
     if panel.current_segment_inches is not None:
         lines.append(f"Segment: {panel.current_segment_inches:.2f} in")
     if panel.total_path_inches is not None:
@@ -599,6 +628,14 @@ def _finite_option_line(option: FiniteDecisionOptionView) -> str:
     marker = ">" if option.highlighted else " "
     suffix = "" if option.disabled_reason is None else f" ({option.disabled_reason})"
     return f"{marker} {option.label} [{option.option_id}]{suffix}"
+
+
+def _movement_assignment_color(state: str) -> Color:
+    if state == "active":
+        return MOVEMENT_ACTIVE
+    if state == "assigned":
+        return MOVEMENT_ASSIGNED
+    return MOVEMENT_UNASSIGNED
 
 
 def _player_color(player_id: str) -> Color:
