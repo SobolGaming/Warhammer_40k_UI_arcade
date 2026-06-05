@@ -9,7 +9,12 @@ from pathlib import Path
 import arcade
 
 from warhammer40k_arcade_ui.config import AppConfig
-from warhammer40k_arcade_ui.core_client.protocol import UiCoreClient, UiDecision, UiGameView
+from warhammer40k_arcade_ui.core_client.protocol import (
+    UiClientStatus,
+    UiCoreClient,
+    UiDecision,
+    UiGameView,
+)
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
@@ -68,6 +73,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         preferences: UiPreferences | None = None,
         preferences_path: Path | None = None,
         pending_decision: UiDecision | None = None,
+        initial_status: UiClientStatus | None = None,
         core_client: UiCoreClient | None = None,
         viewer_player_id: str = "player_1",
         event_cursor: int = 0,
@@ -93,10 +99,18 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._selection_state = SelectionState.initial(self._preferences)
         self._core_client = core_client
         self._viewer_player_id = viewer_player_id
-        self._finite_state = FiniteDecisionUiState(
-            pending_decision=pending_decision,
-            event_cursor=event_cursor,
-            event_log_lines=self._battlefield_view.hud.event_log_lines,
+        self._finite_state = (
+            FiniteDecisionUiState.from_status(
+                initial_status,
+                event_cursor=event_cursor,
+                event_log_lines=self._battlefield_view.hud.event_log_lines,
+            )
+            if initial_status is not None
+            else FiniteDecisionUiState(
+                pending_decision=pending_decision,
+                event_cursor=event_cursor,
+                event_log_lines=self._battlefield_view.hud.event_log_lines,
+            )
         )
         self._pending_decision = self._finite_state.pending_decision
         self._event_cursor = self._finite_state.event_cursor

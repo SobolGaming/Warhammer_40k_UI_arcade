@@ -84,6 +84,11 @@ class MovementModelPath:
 
         if len(self.points) == 1:
             return (self.points[0], self.points[0])
+        if len(self.points) == 2 and math.dist(self.points[0], self.points[1]) > 0.0:
+            # The engine needs non-endpoint path evidence even for straight moved segments.
+            start, end = self.points
+            midpoint = ((start[0] + end[0]) / 2.0, (start[1] + end[1]) / 2.0)
+            return (start, midpoint, end)
         return self.points
 
     def with_translated_waypoint(

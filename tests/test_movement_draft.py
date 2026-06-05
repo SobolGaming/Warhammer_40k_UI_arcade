@@ -165,6 +165,7 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     assert first_path["model_id"] == "intercessor_1"
     assert first_path["poses"] == [
         {"position": {"x": 7.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
+        {"position": {"x": 8.5, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
         {"position": {"x": 10.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
     ]
     assert second_path["model_id"] == "intercessor_2"

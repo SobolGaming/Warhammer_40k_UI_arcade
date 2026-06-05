@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from warhammer40k_arcade_ui.config import AppConfig
+from warhammer40k_arcade_ui.core_client.protocol import UiClientStatus
 
 PHASE6_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6"
 PHASE7_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7"
@@ -69,6 +70,7 @@ def create_window(
     config: AppConfig | None = None,
     arcade_runtime: ArcadeRuntime | None = None,
     ui_prefs_path: Path | None = None,
+    live_core_smoke: bool = False,
 ) -> ArcadeWindow:
     """Create the application window without entering Arcade's event loop."""
 
@@ -76,6 +78,35 @@ def create_window(
     if arcade_runtime is None:
         from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 
+        if live_core_smoke:
+            from warhammer40k_arcade_ui.core_client.live_smoke import (
+                LiveCoreSmokeError,
+                build_live_core_smoke_startup,
+            )
+
+            try:
+                startup = build_live_core_smoke_startup()
+            except LiveCoreSmokeError as exc:
+                return ArcadeWarhammerWindow(
+                    config=resolved_config,
+                    preferences_path=ui_prefs_path,
+                    initial_status=UiClientStatus.invalid(
+                        stage="setup",
+                        violation_code="live_core_smoke_startup_failed",
+                        message=str(exc),
+                        field="startup",
+                    ),
+                    viewer_player_id="player-a",
+                )
+            return ArcadeWarhammerWindow(
+                config=resolved_config,
+                battlefield_view=startup.battlefield_view,
+                preferences_path=ui_prefs_path,
+                initial_status=startup.status,
+                core_client=startup.core_client,
+                viewer_player_id=startup.viewer_player_id,
+                event_cursor=startup.event_cursor,
+            )
         if phase_debug_enabled():
             from warhammer40k_arcade_ui.debug_fixtures import (
                 phase6_debug_core_client,
@@ -106,16 +137,17 @@ def run_app(
     config: AppConfig | None = None,
     arcade_runtime: ArcadeRuntime | None = None,
     ui_prefs_path: Path | None = None,
+    live_core_smoke: bool = False,
 ) -> None:
     """Create the Arcade window and start the event loop."""
 
     if arcade_runtime is None:
-        create_window(config, ui_prefs_path=ui_prefs_path)
+        create_window(config, ui_prefs_path=ui_prefs_path, live_core_smoke=live_core_smoke)
         _load_arcade().run()
         return
 
     runtime = arcade_runtime
-    create_window(config, runtime, ui_prefs_path=ui_prefs_path)
+    create_window(config, runtime, ui_prefs_path=ui_prefs_path, live_core_smoke=live_core_smoke)
     runtime.run()
 
 
