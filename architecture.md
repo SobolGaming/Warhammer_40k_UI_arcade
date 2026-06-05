@@ -42,9 +42,12 @@ under `docs/plans/`.
 | 5 | Complete | Selection and unit information HUD | [phase-05](docs/plans/phase-05-selection-unit-hud.md) |
 | 6 | Complete | Finite decision submission | [phase-06](docs/plans/phase-06-finite-decision-submission.md) |
 | 7 | Complete | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
-| 8 | Planned | Movement proposal diagnostics | [phase-08](docs/plans/phase-08-movement-proposal-diagnostics.md) |
-| 9 | Planned | HUD ergonomics pass | [phase-09](docs/plans/phase-09-hud-ergonomics.md) |
-| 10 | Planned | Packaging, CI, and regression hardening | [phase-10](docs/plans/phase-10-packaging-ci-regression.md) |
+| 8 | Planned | Entity selection profile foundation | [phase-08](docs/plans/phase-08-entity-selection-profile-foundation.md) |
+| 9 | Planned | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
+| 10 | Planned | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
+| 11 | Planned | Generic assignment HUD | [phase-11](docs/plans/phase-11-generic-assignment-hud.md) |
+| 12 | Planned | HUD ergonomics pass | [phase-12](docs/plans/phase-12-hud-ergonomics.md) |
+| 13 | Planned | Packaging, CI, and regression hardening | [phase-13](docs/plans/phase-13-packaging-ci-regression.md) |
 
 ## Cross-cutting architectural rules
 
@@ -117,8 +120,10 @@ movement path drafting:
 Planned modules from later phases:
 
 - `input` — later command flows beyond finite decisions and movement drafting.
-- `hud` — movement submission diagnostics and later phase-specific ergonomics.
-- `state` — other local-only workflow state beyond movement drafts.
+- `hud` — generic assignment review, movement submission diagnostics, and later phase-specific
+  ergonomics.
+- `state` — request-scoped entity selection, assignment workspaces, and other local-only workflow
+  state beyond movement drafts.
 
 ## Shareable Preferences
 
@@ -177,7 +182,7 @@ engine-provided finite option for the current explicit `request_id`, generate de
 The finite-decision HUD is generic. It does not assume movement-only decision types or option IDs.
 Parameterized requests are displayed as requiring a proposal tool and the fixed
 `submit_parameterized_payload` option is not exposed as a finite action. Movement payload drafting
-and submission remain deferred to Phases 7 and 8.
+and submission continue through the later movement drafting, assignment, and submission phases.
 
 Tab now cycles finite-option focus when finite options are pending. Without finite options, Tab only
 cycles an already selected overlapping model hit set; it no longer creates a selection from a merely
@@ -196,9 +201,31 @@ waypoints, endpoint preview, final ghost bases, and budget rings. The HUD displa
 segment and total measurements, remaining budget estimates, ready state, and preview-only warnings.
 
 This phase prepares a JSON-safe movement payload preview, including `witness.model_paths` and
-optional `model_movements`, but does not submit the parameterized request. Phase 8 owns actual
-movement proposal submission, authoritative diagnostics, accepted-state refresh, and retry
-behavior.
+optional `model_movements`, but does not submit the parameterized request. Phase 8 and Phase 9
+replace the current unit-simple interaction with request-scoped entity selection and per-model
+movement assignments before Phase 10 submits movement proposals to the engine.
+
+## Entity Selection And Assignment Workspace
+
+The next movement work introduces a reusable workspace for answering request-scoped engine
+questions. In plain terms, the workspace is temporary local scratch space for one pending request:
+what entities are selected now, what has already been assigned, what remains incomplete, and what
+payload preview is being assembled.
+
+The workspace is separate from ordinary inspect selection. A player can inspect a model or unit
+while the active request-selection state tracks the entities that will actually be used to answer
+the current request. This prevents accidental behaviors such as moving every model merely because
+one model was selected for inspection.
+
+The first concrete use is movement: selecting one model moves one model, selecting a subset moves
+that subset, and selecting the whole unit must be an explicit action. Later shooting and Stratagem
+tools should reuse the same selection and assignment foundation when the engine request exposes
+safe candidate metadata.
+
+The Generic Assignment HUD is the visible review surface for that workspace. It should show what
+request is being answered, which entities are selected, which entities are assigned, which entities
+are still unassigned, whether the payload preview is ready, and whether messages are local preview
+hints or authoritative engine diagnostics.
 
 ## Runtime modes
 
@@ -236,8 +263,9 @@ The first rules-facing vertical slice will be movement:
 finite movement action selection
   -> movement proposal request
   -> preserve movement action/mode context
-  -> path drafting
-  -> PathWitness and optional model movement payload
+  -> request-scoped entity selection
+  -> per-model path assignment
+  -> aggregate PathWitness and optional model movement payload
   -> proposal submission
   -> accepted movement or authoritative invalid diagnostics
 ```
@@ -258,6 +286,10 @@ finite movement action selection
   Fall Back mode preservation, and unsupported parameterized requests.
 - Render/HUD tests for movement path primitives, ghost bases, movement budget overlays, and
   movement draft panel content.
+- Future request-scoped entity selection tests for model/unit aliasing, additive/subtractive
+  selection, layer cycling, assignment workspaces, and request drift reconciliation.
+- Future assignment HUD tests for active/assigned/unassigned entity rows and preview-vs-engine
+  diagnostic separation.
 - Manual validation checklists for user-facing graphical workflows because live GUI interaction is
   only partially automatable.
 - Future movement submission tests for exact preservation of engine-issued movement mode and Fall
@@ -325,4 +357,9 @@ finite movement action selection
   gates, advisory path/measurement overlays, movement draft HUD content, payload preview generation,
   active movement preference overlays, and tests covering draft transitions, payload shape, Fall
   Back mode preservation, unsupported parameterized requests, HUD view models, and render
-  primitives. Engine submission remains Phase 8.
+  primitives. Engine submission remains a later movement phase.
+- 2026-06-04: Replanned post-Phase 7 movement work to insert a cross-cutting entity selection and
+  assignment workspace before movement submission. The updated flow makes per-model movement
+  assignment explicit, moves movement submission to Phase 10, adds a generic assignment HUD in
+  Phase 11, and keeps shooting/Stratagem assignment plans preliminary until their core contracts
+  stabilize.

@@ -15,9 +15,25 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 5 | [Selection and unit information HUD](phase-05-selection-unit-hud.md) | Selectable Tactical View |
 | 6 | [Finite decision submission](phase-06-finite-decision-submission.md) | Authoritative Finite Decision UI |
 | 7 | [Movement path drafting UI](phase-07-movement-path-drafting.md) | Movement Path Planner |
-| 8 | [Movement proposal submission and diagnostics](phase-08-movement-proposal-diagnostics.md) | End-to-End Movement UI |
-| 9 | [HUD ergonomics pass](phase-09-hud-ergonomics.md) | Usable Movement Client |
-| 10 | [Packaging, CI, and regression hardening](phase-10-packaging-ci-regression.md) | Development-Ready UI Repo |
+| 8 | [Entity selection profile foundation](phase-08-entity-selection-profile-foundation.md) | Entity Selection Foundation |
+| 9 | [Movement draft model assignments](phase-09-movement-draft-model-assignments.md) | Per-Model Movement Planner |
+| 10 | [Movement proposal submission and diagnostics](phase-10-movement-proposal-submission-diagnostics.md) | End-to-End Movement UI |
+| 11 | [Generic assignment HUD](phase-11-generic-assignment-hud.md) | Assignment Review HUD |
+| 12 | [HUD ergonomics pass](phase-12-hud-ergonomics.md) | Usable Movement Client |
+| 13 | [Packaging, CI, and regression hardening](phase-13-packaging-ci-regression.md) | Development-Ready UI Repo |
+
+## Umbrella And Preliminary Plans
+
+These documents either explain cross-phase direction or outline future work that is not yet ready
+for a numbered phase.
+
+- [Entity selection and assignment workspace](proposal-entity-selection-assignment-workspace.md) -
+  accepted roadmap direction that explains the cross-cutting workspace concept and links to the
+  concrete phases above.
+- [Shooting declaration assignment tool](preliminary-shooting-declaration-assignment-tool.md) -
+  preliminary future plan for model/weapon-to-target assignment.
+- [Stratagem target-binding assignment tool](preliminary-stratagem-target-binding-tool.md) -
+  preliminary future plan for multi-slot Stratagem target selection.
 
 ## First sprint recommendation
 

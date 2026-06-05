@@ -1,8 +1,9 @@
-# Phase 8 — Movement proposal submission and diagnostics
+# Phase 10 - Movement proposal submission and diagnostics
 
 ## Goal
 
-Submit the movement path to the engine and display authoritative result/diagnostics.
+Submit the aggregated per-model movement path proposal to the engine and display authoritative
+result/diagnostics.
 
 The adapter contract distinguishes malformed/stale/context-drift submissions from rule-invalid but
 well-formed proposals. Malformed or stale proposals leave the pending request unresolved;
@@ -13,7 +14,10 @@ diagnostics.
 
 Reviewed against `Warhammer_40k_AI` `main` at `16d0adf` on 2026-06-04.
 
-- Phase 8 should submit only `submit_movement_proposal` payloads. Placement, shooting declaration,
+- Phase 10 depends on the Phase 8 entity selection foundation and Phase 9 per-model movement
+  assignment workflow. Submission should not preserve the old unit-simple "move every model
+  together" drafting behavior.
+- Phase 10 should submit only `submit_movement_proposal` payloads. Placement, shooting declaration,
   Stratagem target-binding, and other parameterized proposal families remain visible but unsupported
   by this movement submission tool.
 - Submission must use the current explicit `request_id` at the UI boundary. The UI facade should
@@ -52,14 +56,20 @@ Reviewed against `Warhammer_40k_AI` `main` at `16d0adf` on 2026-06-04.
   - affected field/model/path segment, if present
 - [ ] On accepted movement:
   - clear draft
+  - clear request-scoped movement assignment state
   - refresh battlefield projection
   - append events
 - [ ] On invalid movement:
   - retain or reconstruct draft if still relevant
   - show diagnostic
   - update to new request id and proposal context if engine emits a fresh movement proposal request
-- [ ] Add “retry from last path” affordance if safe.
+- [ ] Add "retry from last path" affordance if safe.
 - [ ] Add snapshot tests for representative diagnostic payloads.
+- [ ] Add auto-follow lifecycle behavior after accepted movement:
+  - refresh viewer-scoped events;
+  - advance until the next pending decision or terminal status;
+  - build the next request-scoped selection profile;
+  - show waiting/opponent context if the next actor is not the viewer.
 
 ## Acceptance criteria
 
@@ -68,6 +78,7 @@ Reviewed against `Warhammer_40k_AI` `main` at `16d0adf` on 2026-06-04.
 - [ ] Stale request errors are obvious to the user.
 - [ ] Movement-mode and Fall Back mode drift diagnostics are obvious to the user.
 - [ ] UI never mutates authoritative model positions before engine acceptance.
+- [ ] UI submits the aggregate per-model movement payload produced by Phase 9.
 - [ ] UI rejects or displays unsupported non-movement parameterized requests without trying to
   submit them through the movement payload path.
 - [ ] Tests verify invalid diagnostics are surfaced.
@@ -79,7 +90,7 @@ Reviewed against `Warhammer_40k_AI` `main` at `16d0adf` on 2026-06-04.
 
 ## Closeout milestone
 
-**Milestone 8: “End-to-End Movement UI”**
+**Milestone 10: "End-to-End Movement UI"**
 
-A user can complete the full flow: select unit → select movement action → draw path → submit
-movement proposal → see accepted state or authoritative diagnostics.
+A user can complete the full flow: select unit -> select movement action -> draw path -> submit
+movement proposal -> see accepted state or authoritative diagnostics.

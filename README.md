@@ -206,7 +206,7 @@ surface.
   `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6=1 uv run warhammer40k-arcade-ui`.
 - Phase 7 movement drafting activates only for selected-unit `submit_movement_proposal` requests,
   renders advisory path/measurement overlays, and builds JSON-safe payload previews while leaving
-  actual engine submission to Phase 8.
+  actual engine submission to a later movement proposal submission phase.
 - Manually validate the current fixture-backed Phase 7 movement draft flow with
   `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`.
 - UI previews are advisory only; only accepted engine results can update authoritative state.

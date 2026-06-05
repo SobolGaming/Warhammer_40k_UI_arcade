@@ -13,7 +13,7 @@ rule explicitly models teleport/setup placement.
 Reviewed against `Warhammer_40k_AI` `main` at `16d0adf` on 2026-06-04.
 
 - Phase 7 is only a drafting phase. It should create local draft state and a JSON-safe movement
-  payload preview; engine submission remains Phase 8.
+  payload preview; engine submission remains a later movement proposal submission phase.
 - Movement drafting activates only for `decision_type: "submit_movement_proposal"`.
   `submit_placement_proposal`, `submit_shooting_declaration`,
   `submit_stratagem_target_proposal`, and other parameterized requests must stay visible as
@@ -55,7 +55,7 @@ Reviewed against `Warhammer_40k_AI` `main` at `16d0adf` on 2026-06-04.
   - right-click/remove last waypoint
   - Escape cancel draft
   - Enter marks the draft ready and builds the payload preview; it must not call the engine until
-    Phase 8 wires submission.
+    the movement proposal submission phase wires submission.
 - [x] Render:
   - movement path line
   - waypoints
@@ -123,14 +123,16 @@ Implemented on 2026-06-04.
 - Added `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1` as an alias for the deterministic debug fixture used
   to manually exercise movement action selection and draft activation.
 
-Known limitations deferred to Phase 8:
+Known limitations deferred to later movement phases:
 
 - Ready movement payloads are previewed locally but not submitted to the engine.
-- Accepted movement does not update authoritative model positions until Phase 8 wires
+- Accepted movement does not update authoritative model positions until Phase 10 wires
   parameterized submission and projection refresh.
 - Local hints are intentionally advisory and incomplete; the engine remains the only authority for
   legal movement.
 - Model-level edit mode is represented as a draft mode but remains deferred for larger units.
+- The current unit-simple draft interaction can move every model together. Phase 9 replaces this
+  with explicit per-model and selected-subset movement assignment before engine submission.
 
 ## Verification
 
