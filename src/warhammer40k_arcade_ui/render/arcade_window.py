@@ -12,11 +12,17 @@ import arcade
 
 from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
     UiClientProtocolError,
     UiClientStatus,
     UiCoreClient,
     UiDecision,
     UiGameView,
+)
+from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
+    ForensicTraceWriter,
+    NoOpTraceWriter,
+    TraceContext,
 )
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
@@ -90,6 +96,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         core_client: UiCoreClient | None = None,
         viewer_player_id: str = "player_1",
         event_cursor: int = 0,
+        trace_writer: ForensicTraceWriter | None = None,
     ) -> None:
         resolved_config = config or AppConfig()
         super().__init__(
@@ -138,6 +145,20 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._right_mouse_press_screen: tuple[float, float] | None = None
         self._right_mouse_drag_distance_px = 0.0
         self._fatal_exit_deadline_monotonic: float | None = None
+        self._trace_writer = trace_writer or NoOpTraceWriter()
+        self._trace_event(
+            category="ui",
+            event_name="ui.window_created",
+            summary={
+                "window_width": resolved_config.window_width,
+                "window_height": resolved_config.window_height,
+                "viewer_player_id": self._viewer_player_id,
+                "preferences": self._preference_source_label,
+                "trace_path": str(self._trace_writer.trace_path)
+                if self._trace_writer.trace_path is not None
+                else None,
+            },
+        )
 
     @property
     def camera(self) -> WorldCamera:
@@ -213,6 +234,18 @@ class ArcadeWarhammerWindow(arcade.Window):
     def on_draw(self) -> None:
         """Render the battlefield and fixed HUD."""
 
+        if self._trace_writer.level == "render":
+            self._trace_event(
+                category="render",
+                event_name="render.frame_draw",
+                summary={
+                    "window_width": self.width,
+                    "window_height": self.height,
+                    "camera_zoom": self._camera.zoom,
+                    "unit_count": len(self._battlefield_view.units),
+                    "movement_draft_active": self._movement_draft is not None,
+                },
+            )
         self.clear()
         unit_panel = (
             build_unit_panel(
@@ -272,6 +305,11 @@ class ArcadeWarhammerWindow(arcade.Window):
 
         super().on_resize(width, height)
         self._camera = self._camera.resize_viewport(width_px=width, height_px=height)
+        self._trace_event(
+            category="ui",
+            event_name="ui.window_resize",
+            summary={"width": width, "height": height},
+        )
 
     def on_update(self, delta_time: float) -> None:
         """Close cleanly after a fatal engine/client error has been displayed."""
@@ -286,8 +324,20 @@ class ArcadeWarhammerWindow(arcade.Window):
     def on_mouse_motion(self, x: int, y: int, dx: int, dy: int) -> None:
         """Track table coordinates under the mouse for debug display."""
 
-        del dx, dy
         self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+        self._trace_event(
+            category="ui_input",
+            event_name="ui.mouse_motion",
+            summary={
+                "screen_x": x,
+                "screen_y": y,
+                "dx": dx,
+                "dy": dy,
+                "world_x": self._mouse_world_position[0],
+                "world_y": self._mouse_world_position[1],
+                "movement_draft_active": self._movement_draft is not None,
+            },
+        )
         if self._movement_draft is not None:
             self._movement_draft = self._movement_draft.with_cursor_preview(
                 view=self._battlefield_view,
@@ -298,6 +348,18 @@ class ArcadeWarhammerWindow(arcade.Window):
         """Select models with the configured default mouse button."""
 
         self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+        self._trace_event(
+            category="ui_input",
+            event_name="ui.mouse_press",
+            summary={
+                "screen_x": x,
+                "screen_y": y,
+                "button": _mouse_button_name(button),
+                "modifiers": list(_modifier_names(modifiers)),
+                "world_x": self._mouse_world_position[0],
+                "world_y": self._mouse_world_position[1],
+            },
+        )
         if button == arcade.MOUSE_BUTTON_RIGHT and self._movement_draft is not None:
             self._right_mouse_press_screen = (float(x), float(y))
             self._right_mouse_drag_distance_px = 0.0
@@ -307,6 +369,11 @@ class ArcadeWarhammerWindow(arcade.Window):
         selected_action = self._context_menu_action_at(self._mouse_world_position)
         if selected_action is not None:
             if selected_action.enabled:
+                self._trace_event(
+                    category="ui",
+                    event_name="ui.context_menu_action_selected",
+                    summary={"option_id": selected_action.option_id},
+                )
                 self._submit_finite_option(selected_action.option_id)
             else:
                 self._set_finite_state(
@@ -328,6 +395,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 view=self._battlefield_view,
                 world_point=self._mouse_world_position,
             )
+            self._trace_movement_draft_event("ui.movement_draft_waypoint")
             return
         self._selection_state = self._selection_state.select_at(
             view=self._battlefield_view,
@@ -352,6 +420,18 @@ class ArcadeWarhammerWindow(arcade.Window):
         if buttons & pan_buttons:
             self._camera = self._camera.pan_screen(float(dx), float(dy))
             self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+            self._trace_event(
+                category="ui_input",
+                event_name="ui.mouse_drag",
+                summary={
+                    "screen_x": x,
+                    "screen_y": y,
+                    "dx": dx,
+                    "dy": dy,
+                    "buttons": buttons,
+                    "camera_zoom": self._camera.zoom,
+                },
+            )
             if buttons & arcade.MOUSE_BUTTON_RIGHT:
                 self._right_mouse_drag_distance_px += abs(float(dx)) + abs(float(dy))
         elif buttons & arcade.MOUSE_BUTTON_LEFT and self._movement_draft is not None:
@@ -366,6 +446,17 @@ class ArcadeWarhammerWindow(arcade.Window):
 
         del modifiers
         self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+        self._trace_event(
+            category="ui_input",
+            event_name="ui.mouse_release",
+            summary={
+                "screen_x": x,
+                "screen_y": y,
+                "button": _mouse_button_name(button),
+                "world_x": self._mouse_world_position[0],
+                "world_y": self._mouse_world_position[1],
+            },
+        )
         if button != arcade.MOUSE_BUTTON_RIGHT:
             return
         if (
@@ -376,6 +467,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft = self._movement_draft.remove_last_waypoint(
                 view=self._battlefield_view
             )
+            self._trace_movement_draft_event("ui.movement_draft_remove_waypoint")
         self._right_mouse_press_screen = None
         self._right_mouse_drag_distance_px = 0.0
 
@@ -390,19 +482,46 @@ class ArcadeWarhammerWindow(arcade.Window):
             screen_point=(float(x), float(y)),
         )
         self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+        self._trace_event(
+            category="ui_input",
+            event_name="ui.mouse_scroll",
+            summary={
+                "screen_x": x,
+                "screen_y": y,
+                "scroll_y": scroll_y,
+                "camera_zoom": self._camera.zoom,
+            },
+        )
 
     def on_key_press(self, symbol: int, modifiers: int) -> None:
         """Apply configured local UI hotkeys."""
 
         if self._fatal_exit_deadline_monotonic is not None:
             return
+        key_name = _key_name(symbol)
+        modifier_names = _modifier_names(modifiers)
+        self._trace_event(
+            category="ui_input",
+            event_name="ui.key_press",
+            summary={"key": key_name, "modifiers": list(modifier_names)},
+        )
         invocation = command_for_key(
             preferences=self._preferences,
-            key=_key_name(symbol),
-            modifiers=_modifier_names(modifiers),
+            key=key_name,
+            modifiers=modifier_names,
         )
         if invocation is None:
             return
+        self._trace_event(
+            category="ui",
+            event_name="ui.command_dispatch",
+            summary={
+                "command_id": invocation.command_id,
+                "overlay_id": invocation.overlay_id,
+                "key": key_name,
+                "modifiers": list(modifier_names),
+            },
+        )
         if invocation.command_id == "toggle_debug_inspector":
             self._selection_state = self._selection_state.toggle_debug_inspector()
         elif invocation.command_id == "show_selected_unit":
@@ -415,6 +534,11 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._selection_state = self._selection_state.open_context_menu(
                 self._context_anchor_world()
             )
+            self._trace_event(
+                category="ui",
+                event_name="ui.context_menu_open",
+                summary={"visible": self.context_menu is not None},
+            )
         elif invocation.command_id == "cycle_selection":
             if self._finite_state.finite_options:
                 self._set_finite_state(self._finite_state.cycle_option())
@@ -422,6 +546,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 self._movement_draft = self._movement_draft.cycle_entity_focus(
                     view=self._battlefield_view
                 )
+                self._trace_movement_draft_event("ui.movement_draft_focus_cycle")
             elif self._mouse_world_position is not None:
                 self._selection_state = self._selection_state.cycle_existing_at(
                     view=self._battlefield_view,
@@ -432,6 +557,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft = self._movement_draft.cycle_entity_layer(
                 view=self._battlefield_view
             )
+            self._trace_movement_draft_event("ui.movement_draft_layer_cycle")
         elif (
             invocation.command_id == "select_current_entity_group"
             and self._movement_draft is not None
@@ -439,6 +565,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft = self._movement_draft.select_current_group(
                 view=self._battlefield_view
             )
+            self._trace_movement_draft_event("ui.movement_draft_select_current_group")
         elif (
             invocation.command_id == "add_entity_selection"
             and self._movement_draft is not None
@@ -448,6 +575,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 view=self._battlefield_view,
                 ref=self._movement_draft.entity_selection.focused_ref,
             )
+            self._trace_movement_draft_event("ui.movement_draft_add_entity_selection")
         elif (
             invocation.command_id == "subtract_entity_selection"
             and self._movement_draft is not None
@@ -457,6 +585,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 view=self._battlefield_view,
                 ref=self._movement_draft.entity_selection.focused_ref,
             )
+            self._trace_movement_draft_event("ui.movement_draft_subtract_entity_selection")
         elif (
             invocation.command_id == "toggle_entity_selection"
             and self._movement_draft is not None
@@ -466,6 +595,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 view=self._battlefield_view,
                 ref=self._movement_draft.entity_selection.focused_ref,
             )
+            self._trace_movement_draft_event("ui.movement_draft_toggle_entity_selection")
         elif invocation.command_id == "confirm":
             if self._movement_draft is not None:
                 if self._movement_draft.is_ready:
@@ -474,13 +604,42 @@ class ArcadeWarhammerWindow(arcade.Window):
                     self._movement_draft = self._movement_draft.mark_ready(
                         view=self._battlefield_view
                     )
+                    if self._movement_draft.is_ready:
+                        self._trace_movement_draft_event(
+                            "ui.movement_draft_ready",
+                            payload=self._movement_draft.payload_preview,
+                        )
+                    else:
+                        self._trace_movement_draft_event("ui.movement_draft_preview")
             else:
                 self._submit_finite_option(None)
         elif invocation.command_id == "cancel":
             self._cancel_movement_draft()
             self._selection_state = self._selection_state.close_context_menu()
+            self._trace_event(
+                category="ui",
+                event_name="ui.context_menu_close",
+                summary={"reason": "cancel"},
+            )
+
+    def on_key_release(self, symbol: int, modifiers: int) -> None:
+        """Trace key release events."""
+
+        self._trace_event(
+            category="ui_input",
+            event_name="ui.key_release",
+            summary={
+                "key": _key_name(symbol),
+                "modifiers": list(_modifier_names(modifiers)),
+            },
+        )
 
     def _submit_finite_option(self, selected_option_id: str | None) -> None:
+        self._trace_event(
+            category="ui",
+            event_name="ui.finite_submission_attempt",
+            summary={"selected_option_id": selected_option_id},
+        )
         if self._core_client is None:
             self._set_finite_state(
                 self._finite_state.with_local_invalid(
@@ -489,8 +648,18 @@ class ArcadeWarhammerWindow(arcade.Window):
                     field="client",
                 )
             )
+            self._trace_event(
+                category="ui",
+                event_name="ui.finite_submission_outcome",
+                summary={"status_kind": self._finite_state.status_kind},
+            )
             return
         self._set_finite_state(self._submit_finite_option_or_fatal(selected_option_id))
+        self._trace_event(
+            category="ui",
+            event_name="ui.finite_submission_outcome",
+            summary={"status_kind": self._finite_state.status_kind},
+        )
 
     def _submit_finite_option_or_fatal(
         self,
@@ -520,6 +689,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             return self._fatal_game_engine_state(exc)
 
     def _submit_movement_draft(self) -> None:
+        self._trace_movement_draft_event("ui.movement_submission_attempt")
         try:
             result = submit_movement_draft(
                 state=self._finite_state,
@@ -550,12 +720,28 @@ class ArcadeWarhammerWindow(arcade.Window):
                 self._preferences
             )
         self._set_finite_state(result.finite_state)
+        self._trace_event(
+            category="ui",
+            event_name="ui.movement_submission_outcome",
+            summary={
+                "status_kind": self._finite_state.status_kind,
+                "movement_draft_active": self._movement_draft is not None,
+            },
+        )
 
     def _fatal_game_engine_state(
         self,
         exc: FatalGameEngineException,
     ) -> FiniteDecisionUiState:
         logger.exception("Fatal game engine error during Arcade UI interaction.")
+        self._trace_event(
+            category="ui",
+            event_name="ui.fatal_game_engine_error",
+            summary={
+                "exception_type": type(exc).__name__,
+                "detail": _fatal_game_engine_error_detail(exc),
+            },
+        )
         self._movement_draft = None
         self._selection_state = self._selection_state.without_movement_draft_overlays(
             self._preferences
@@ -605,6 +791,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._selection_state = self._selection_state.with_movement_draft_overlays(
                 self._preferences
             )
+            self._trace_movement_draft_event("ui.movement_draft_retry_request")
             return
         next_draft = MovementDraft.start_for_pending(
             view=self._battlefield_view,
@@ -616,11 +803,17 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._selection_state = self._selection_state.with_movement_draft_overlays(
                 self._preferences
             )
+            self._trace_movement_draft_event("ui.movement_draft_started")
             return
         if current is not None:
             self._movement_draft = None
             self._selection_state = self._selection_state.without_movement_draft_overlays(
                 self._preferences
+            )
+            self._trace_event(
+                category="ui",
+                event_name="ui.movement_draft_cleared",
+                summary={"reason": "context_mismatch"},
             )
 
     def _cancel_movement_draft(self) -> None:
@@ -630,10 +823,16 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft = self._movement_draft.clear_active_selection(
                 view=self._battlefield_view
             )
+            self._trace_movement_draft_event("ui.movement_draft_clear_active_selection")
             return
         self._movement_draft = None
         self._selection_state = self._selection_state.without_movement_draft_overlays(
             self._preferences
+        )
+        self._trace_event(
+            category="ui",
+            event_name="ui.movement_draft_cancelled",
+            summary={"reason": "cancel_command"},
         )
 
     def _apply_movement_selection_at(
@@ -669,6 +868,10 @@ class ArcadeWarhammerWindow(arcade.Window):
                     view=self._battlefield_view,
                     ref=ref,
                 )
+            self._trace_movement_draft_event(
+                "ui.movement_draft_entity_selection",
+                extra_summary={"model_id": hit.model_id, "unit_id": hit.unit_id},
+            )
             return True
         return False
 
@@ -706,6 +909,78 @@ class ArcadeWarhammerWindow(arcade.Window):
                 current_lines=self._battlefield_view.hud.event_log_lines,
                 state_lines=state.event_log_lines,
             ),
+        )
+        self._trace_event(
+            category="ui",
+            event_name="ui.projection_refreshed",
+            summary={
+                "phase_label": view.current_battle_phase or view.stage,
+                "active_player_id": view.active_player_id or "none",
+                "event_count": view.event_count,
+            },
+        )
+
+    def _trace_event(
+        self,
+        *,
+        category: str,
+        event_name: str,
+        summary: JsonObject | None = None,
+        payload: JsonObject | None = None,
+    ) -> None:
+        self._trace_writer.write_event(
+            category=category,
+            event_name=event_name,
+            summary=summary,
+            payload=payload,
+            context=self._trace_context(),
+        )
+
+    def _trace_movement_draft_event(
+        self,
+        event_name: str,
+        *,
+        payload: JsonObject | None = None,
+        extra_summary: JsonObject | None = None,
+    ) -> None:
+        draft = self._movement_draft
+        if draft is None:
+            summary: JsonObject = {"movement_draft_active": False}
+        else:
+            summary = {
+                "movement_draft_active": True,
+                "proposal_request_id": draft.proposal_request_id,
+                "proposal_kind": draft.proposal_kind,
+                "selected_unit_id": draft.selected_unit_id,
+                "selected_model_count": len(draft.selected_model_ids),
+                "assigned_model_count": draft.assigned_model_count,
+                "unchanged_model_count": draft.unchanged_model_count,
+                "ready": draft.is_ready,
+            }
+        if extra_summary is not None:
+            summary.update(extra_summary)
+        self._trace_event(
+            category="ui",
+            event_name=event_name,
+            summary=summary,
+            payload=payload,
+        )
+
+    def _trace_context(self) -> TraceContext:
+        movement_draft = self._movement_draft
+        decision = self._pending_decision
+        proposal = None if decision is None else decision.movement_proposal
+        request_id = None
+        if movement_draft is not None:
+            request_id = movement_draft.proposal_request_id
+        elif decision is not None:
+            request_id = decision.request_id
+        return TraceContext(
+            viewer_player_id=self._viewer_player_id,
+            game_id=None if proposal is None else proposal.game_id,
+            request_id=request_id,
+            status_kind=self._finite_state.status_kind,
+            event_cursor=self._event_cursor,
         )
 
 

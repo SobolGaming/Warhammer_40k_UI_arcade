@@ -50,26 +50,52 @@ class FakeArcadeRuntime:
 
 
 def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, Path | None, bool | None]] = []
+    calls: list[tuple[str, Path | None, bool | None, str | None, Path | None]] = []
 
     def fake_configure_logging() -> None:
-        calls.append(("configure_logging", None, None))
+        calls.append(("configure_logging", None, None, None, None))
 
     def fake_run_app(
         *,
         ui_prefs_path: Path | None = None,
         live_core_smoke: bool = False,
+        event_trace_level: str | None = None,
+        event_trace_file: Path | None = None,
     ) -> None:
-        calls.append(("run_app", ui_prefs_path, live_core_smoke))
+        calls.append(
+            (
+                "run_app",
+                ui_prefs_path,
+                live_core_smoke,
+                event_trace_level,
+                event_trace_file,
+            )
+        )
 
     monkeypatch.setattr(main, "configure_logging", fake_configure_logging)
     monkeypatch.setattr(main, "run_app", fake_run_app)
 
-    main.main(["--ui-prefs", "docs/preferences/keyboard-heavy.yaml", "--live-core-smoke"])
+    main.main(
+        [
+            "--ui-prefs",
+            "docs/preferences/keyboard-heavy.yaml",
+            "--live-core-smoke",
+            "--event-trace",
+            "payload",
+            "--event-trace-file",
+            "/tmp/ui-trace.jsonl",
+        ]
+    )
 
     assert calls == [
-        ("configure_logging", None, None),
-        ("run_app", Path("docs/preferences/keyboard-heavy.yaml"), True),
+        ("configure_logging", None, None, None, None),
+        (
+            "run_app",
+            Path("docs/preferences/keyboard-heavy.yaml"),
+            True,
+            "payload",
+            Path("/tmp/ui-trace.jsonl"),
+        ),
     ]
 
 
@@ -94,10 +120,22 @@ def test_create_window_accepts_explicit_config() -> None:
 
 
 def test_parse_args_accepts_optional_ui_preferences_path() -> None:
-    parsed = main.parse_args(["--ui-prefs", "/tmp/profile.yaml", "--live-core-smoke"])
+    parsed = main.parse_args(
+        [
+            "--ui-prefs",
+            "/tmp/profile.yaml",
+            "--live-core-smoke",
+            "--event-trace",
+            "summary",
+            "--event-trace-file",
+            "/tmp/trace.jsonl",
+        ]
+    )
 
     assert parsed.ui_prefs_path == Path("/tmp/profile.yaml")
     assert parsed.live_core_smoke is True
+    assert parsed.event_trace_level == "summary"
+    assert parsed.event_trace_file == Path("/tmp/trace.jsonl")
 
 
 def test_phase7_debug_env_alias_enables_debug_fixture(monkeypatch: pytest.MonkeyPatch) -> None:

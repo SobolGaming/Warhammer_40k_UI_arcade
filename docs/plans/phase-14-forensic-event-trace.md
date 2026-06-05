@@ -45,13 +45,13 @@ debugging.
 
 ## Tasks
 
-- [ ] Define a `ForensicTraceWriter` interface and JSON Lines event schema.
-- [ ] Add trace configuration parsing from `EVENT_TRACE` and optional CLI flags.
-- [ ] Wrap the UI-facing core client facade with trace hooks rather than scattering trace calls
+- [x] Define a `ForensicTraceWriter` interface and JSON Lines event schema.
+- [x] Add trace configuration parsing from `EVENT_TRACE` and optional CLI flags.
+- [x] Wrap the UI-facing core client facade with trace hooks rather than scattering trace calls
   through unrelated modules.
-- [ ] Add UI event trace hooks at the window boundary.
-- [ ] Add trace event categories and stable event names.
-- [ ] Include context fields:
+- [x] Add UI event trace hooks at the window boundary.
+- [x] Add trace event categories and stable event names.
+- [x] Include context fields:
   - wall-clock timestamp;
   - monotonic timestamp;
   - UI commit SHA when available;
@@ -60,25 +60,25 @@ debugging.
   - game ID;
   - current request ID/status when available;
   - event cursor when available.
-- [ ] Add deterministic redaction rules for environment variables, paths if needed, and any future
+- [x] Add deterministic redaction rules for environment variables, paths if needed, and any future
   token-like fields.
-- [ ] Add tests for:
+- [x] Add tests for:
   - disabled trace produces no file;
   - summary trace records status transitions without full payload bodies;
   - payload trace records JSON-safe UI/core payloads;
   - trace writer rejects non-JSON-safe data;
   - no GitHub token or configured secret-like env var is emitted.
-- [ ] Document trace usage and attach-to-bug-report workflow.
+- [x] Document trace usage and attach-to-bug-report workflow.
 
 ## Acceptance Criteria
 
-- [ ] `EVENT_TRACE=summary` emits a structured trace suitable for ordinary bug reports.
-- [ ] `EVENT_TRACE=payload` includes every JSON representation exchanged between UI and core.
-- [ ] Trace files are JSON Lines, bounded or rotateable, and stored in a predictable diagnostics
+- [x] `EVENT_TRACE=summary` emits a structured trace suitable for ordinary bug reports.
+- [x] `EVENT_TRACE=payload` includes every JSON representation exchanged between UI and core.
+- [x] Trace files are JSON Lines, bounded or rotateable, and stored in a predictable diagnostics
   directory.
-- [ ] Tracing can be enabled without changing code.
-- [ ] Tracing does not weaken UI/core boundaries or create an authoritative UI event log.
-- [ ] Full repository gates pass.
+- [x] Tracing can be enabled without changing code.
+- [x] Tracing does not weaken UI/core boundaries or create an authoritative UI event log.
+- [x] Full repository gates pass.
 
 ## Manual Validation Checklist
 
@@ -91,9 +91,38 @@ After implementation:
   request/status/event payloads are present.
 - [ ] Confirm no access token or unrelated environment secret appears in the trace.
 
+Suggested manual commands:
+
+```bash
+EVENT_TRACE=summary EVENT_TRACE_FILE=/tmp/warhammer40k-ui-summary.jsonl uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml
+EVENT_TRACE=payload EVENT_TRACE_FILE=/tmp/warhammer40k-ui-payload.jsonl uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --event-trace render --event-trace-file /tmp/warhammer40k-ui-render.jsonl
+```
+
+Review the JSONL file line-by-line in an editor, or parse individual lines with `json.loads` when a
+specific test or bug report needs machine-readable evidence.
+
 ## Phase Closeout Milestone
 
 **Milestone 14: "Forensic Event Trace"**
 
 Human reviewers can attach a structured trace showing how a UI/core interaction unfolded before a
 bug or crash.
+
+## Implementation Notes
+
+- Added `warhammer40k_arcade_ui.diagnostics.forensic_trace` with:
+  - `ForensicTraceConfig` for `EVENT_TRACE`, `EVENT_TRACE_FILE`, `EVENT_TRACE_DIR`,
+    `EVENT_TRACE_MAX_BYTES`, `--event-trace`, and `--event-trace-file`;
+  - `JsonLinesTraceWriter` / `NoOpTraceWriter`;
+  - token-like key redaction;
+  - JSON-safe dataclass/container serialization;
+  - simple one-file rotation;
+  - `TracedCoreClient` for facade-level core request/response tracing.
+- Wired UI window hooks for key press/release, mouse press/release/motion/scroll/drag, command
+  dispatch, context menu open/close, movement draft mutations, payload preview readiness,
+  movement/finite submission attempts and outcomes, projection refresh, fatal engine errors, and
+  optional render frame markers.
+- Added tests in `tests/test_forensic_trace.py` for disabled, summary, payload, redaction,
+  JSON-safety rejection, rotation, and GUI-driver event/core trace coverage.
+- Updated `README.md` with usage and bug-report attachment guidance.

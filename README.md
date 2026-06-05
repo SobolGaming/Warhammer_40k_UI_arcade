@@ -20,6 +20,7 @@ uv sync
 uv run warhammer40k-arcade-ui
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --event-trace summary --event-trace-file /tmp/ui-trace.jsonl
 uv run pytest
 ```
 
@@ -45,6 +46,34 @@ headless framebuffer path requires EGL/OpenGL runtime libraries. The GitHub Acti
 Render evidence helpers save PNG and JSON artifact bundles only when a semantic visual check fails,
 unless a test explicitly requests a success artifact. Set `WARHAMMER40K_ARCADE_UI_RENDER_ARTIFACT_DIR`
 to override the default local artifact directory `.test-artifacts/render`.
+
+## Forensic event traces
+
+Enable a structured JSON Lines trace when a UI/core interaction needs bug-report evidence:
+
+```bash
+EVENT_TRACE=summary uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml
+EVENT_TRACE=payload EVENT_TRACE_FILE=/tmp/ui-trace.jsonl uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --event-trace payload --event-trace-file /tmp/ui-trace.jsonl
+```
+
+Trace levels:
+
+- `off`: no file is created.
+- `summary`: UI inputs, command dispatch, status transitions, request/result IDs, and movement
+  draft state summaries.
+- `payload`: summary trace plus JSON-safe UI/core payloads exchanged through the `core_client`
+  facade.
+- `render`: payload trace plus high-level frame/camera markers; it does not store raw pixels.
+
+If no file is specified, trace files are written under
+`~/.local/state/warhammer40k-arcade-ui/event-traces/`. Set `EVENT_TRACE_DIR` to choose another
+directory, or `EVENT_TRACE_FILE` / `--event-trace-file` for an exact file. Files rotate when they
+reach `EVENT_TRACE_MAX_BYTES` bytes, defaulting to 5 MB.
+
+Trace rows are viewer-scoped and redact token-like fields such as `github_token`, `access_token`,
+`authorization`, `password`, and `api_key`. Attach the JSONL file to bug reports alongside the exact
+launch command and any render evidence artifacts.
 
 ## Purpose
 
@@ -125,6 +154,9 @@ warhammer40k-arcade-ui/
         fake_client.py
         local_session_client.py
         protocol.py
+      diagnostics/
+        __init__.py
+        forensic_trace.py
       hud/
         __init__.py
         view_models.py

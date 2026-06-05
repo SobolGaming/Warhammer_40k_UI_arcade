@@ -18,6 +18,10 @@ from warhammer40k_arcade_ui.debug_fixtures import (
     phase6_debug_core_client,
     phase6_debug_pending_decision,
 )
+from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
+    ForensicTraceWriter,
+    trace_core_client,
+)
 from warhammer40k_arcade_ui.hud.view_models import ContextMenuAction
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.schema import UiPreferences
@@ -47,29 +51,37 @@ class GuiTestDriver:
         *,
         core_mode: GuiCoreMode = "phase6_debug",
         preferences: UiPreferences | None = None,
+        trace_writer: ForensicTraceWriter | None = None,
     ) -> GuiTestDriver:
         """Launch a driver against the selected UI-facing core mode."""
 
         if core_mode == "phase6_debug":
-            return cls.phase6_debug(preferences=preferences)
-        return cls.live_core_smoke(preferences=preferences)
+            return cls.phase6_debug(preferences=preferences, trace_writer=trace_writer)
+        return cls.live_core_smoke(preferences=preferences, trace_writer=trace_writer)
 
     @classmethod
     def phase6_debug(
         cls,
         *,
         preferences: UiPreferences | None = None,
+        trace_writer: ForensicTraceWriter | None = None,
     ) -> GuiTestDriver:
         """Create the standard debug window used for finite and movement workflows."""
 
         core_client = phase6_debug_core_client()
+        window_core_client: UiCoreClient = (
+            trace_core_client(core_client, trace_writer)
+            if trace_writer is not None
+            else core_client
+        )
         window = ArcadeWarhammerWindow(
             config=AppConfig(window_width=1280, window_height=800, resizable=False),
             battlefield_view=default_battlefield_view(),
             preferences=preferences or default_preferences(),
             pending_decision=phase6_debug_pending_decision(),
-            core_client=core_client,
+            core_client=window_core_client,
             viewer_player_id="player_1",
+            trace_writer=trace_writer,
         )
         return cls(
             window=window,
@@ -83,20 +95,27 @@ class GuiTestDriver:
         cls,
         *,
         preferences: UiPreferences | None = None,
+        trace_writer: ForensicTraceWriter | None = None,
     ) -> GuiTestDriver:
         """Create a driver backed by the real local core smoke session."""
 
         from warhammer40k_arcade_ui.core_client.live_smoke import build_live_core_smoke_startup
 
         startup = build_live_core_smoke_startup()
+        window_core_client = (
+            trace_core_client(startup.core_client, trace_writer)
+            if trace_writer is not None
+            else startup.core_client
+        )
         window = ArcadeWarhammerWindow(
             config=AppConfig(window_width=1280, window_height=800, resizable=False),
             battlefield_view=startup.battlefield_view,
             preferences=preferences or default_preferences(),
             initial_status=startup.status,
-            core_client=startup.core_client,
+            core_client=window_core_client,
             viewer_player_id=startup.viewer_player_id,
             event_cursor=startup.event_cursor,
+            trace_writer=trace_writer,
         )
         return cls(
             window=window,
@@ -161,9 +180,9 @@ class GuiTestDriver:
         return self
 
     def release_key(self, symbol: int, *, modifiers: int = 0) -> GuiTestDriver:
-        """Release a key through pyglet's event dispatch path."""
+        """Release a key through the window key-release handler."""
 
-        self.window.dispatch_event("on_key_release", symbol, modifiers)
+        self.window.on_key_release(symbol, modifiers)
         return self
 
     def step_frames(self, count: int = 1, *, delta_time: float = 1.0 / 60.0) -> GuiTestDriver:
