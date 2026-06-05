@@ -683,7 +683,7 @@ def _json_list(field_name: str, value: object) -> list[JsonValue]:
 
 
 def _required_string(payload: JsonObject, key: str) -> str:
-    return _non_empty_string(key, payload[key])
+    return _non_empty_string(key, _required_value(payload, key))
 
 
 def _optional_string_value(payload: JsonObject, key: str) -> str | None:
@@ -707,10 +707,16 @@ def _string_or_fallback(payload: JsonObject, key: str, fallback: str) -> str:
 
 
 def _required_int(payload: JsonObject, key: str) -> int:
-    value = payload[key]
+    value = _required_value(payload, key)
     if type(value) is not int:
         raise UiClientProtocolError(f"{key} must be an integer.")
     return value
+
+
+def _required_value(payload: JsonObject, key: str) -> JsonValue:
+    if key not in payload:
+        raise UiClientProtocolError(f"{key} is required.")
+    return payload[key]
 
 
 def _optional_bool(payload: JsonObject, key: str) -> bool | None:

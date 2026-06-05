@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
 from warhammer40k_arcade_ui.core_client.protocol import (
+    UiClientProtocolError,
     UiClientStatus,
     UiDecision,
     UiEventDelta,
@@ -238,6 +241,48 @@ def test_game_view_represents_viewer_projection() -> None:
     assert view.pending_proposal.proposal_kind == "normal_move"
 
 
+def test_game_view_pending_proposal_missing_request_id_fails_fast() -> None:
+    with pytest.raises(UiClientProtocolError, match="request_id is required"):
+        UiGameView.from_payload(
+            {
+                "viewer_player_id": "player-a",
+                "game_id": "ui-live-smoke-game",
+                "stage": "battle",
+                "battle_round": 1,
+                "active_player_id": "player-a",
+                "current_setup_step": None,
+                "current_battle_phase": "movement",
+                "player_ids": ["player-a", "player-b"],
+                "battlefield_state": None,
+                "mission_setup": None,
+                "public_secondary_mission_choices": [],
+                "public_secondary_mission_card_states": [],
+                "public_command_point_ledgers": [],
+                "public_victory_point_ledgers": [],
+                "public_stratagem_use_records": [],
+                "pending_decision": {
+                    "request_id": "decision-request-000006",
+                    "decision_type": "submit_stratagem_target_proposal",
+                    "actor_id": "player-b",
+                    "payload": {
+                        "proposal_request": _stratagem_target_proposal_request_payload(),
+                        "declinable": True,
+                    },
+                    "options": [
+                        {
+                            "option_id": "submit_parameterized_payload",
+                            "label": "Submit Parameterized Payload",
+                            "payload": {"submission_kind": "parameterized"},
+                        }
+                    ],
+                    "is_parameterized": True,
+                },
+                "pending_proposal": _stratagem_target_proposal_request_payload(),
+                "event_count": 49,
+            }
+        )
+
+
 def test_fake_core_client_records_explicit_submission_ids() -> None:
     status = UiClientStatus(
         stage="battle",
@@ -289,4 +334,39 @@ def _movement_proposal_request_payload() -> dict[str, object]:
             "source_selected_option_id": "normal_move",
             "movement_mode": "normal",
         },
+    }
+
+
+def _stratagem_target_proposal_request_payload() -> dict[str, object]:
+    return {
+        "proposal_kind": "stratagem_target_binding",
+        "catalog_record": {
+            "record_id": "gw-11e-core-stratagems:core:fire-overwatch",
+            "availability_kind": "core",
+            "detachment_id": None,
+            "disabled": False,
+            "definition": {
+                "stratagem_id": "fire-overwatch",
+                "name": "Fire Overwatch",
+                "handler_id": "core:fire-overwatch",
+                "target_descriptor": "one eligible unit from the player's army that can shoot",
+            },
+        },
+        "context": {
+            "game_id": "ui-live-smoke-game",
+            "player_id": "player-b",
+            "active_player_id": "player-a",
+            "battle_round": 1,
+            "phase": "movement",
+            "trigger_kind": "end_phase",
+            "timing_window_id": (
+                "fire-overwatch-end-movement-round-01-unit-"
+                "army-alpha:intercessor-unit-1-player-player-b"
+            ),
+            "trigger_payload": {
+                "moved_unit_instance_id": "army-alpha:intercessor-unit-1",
+                "trigger_window": "end_opponent_movement_phase",
+            },
+        },
+        "target_binding": None,
     }

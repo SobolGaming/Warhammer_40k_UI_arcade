@@ -9,6 +9,12 @@ from typing import Any, Protocol, cast
 
 from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.protocol import UiClientStatus
+from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
+    ForensicTraceConfig,
+    ForensicTraceWriter,
+    build_trace_writer,
+    trace_core_client,
+)
 
 PHASE6_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6"
 PHASE7_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7"
@@ -71,10 +77,18 @@ def create_window(
     arcade_runtime: ArcadeRuntime | None = None,
     ui_prefs_path: Path | None = None,
     live_core_smoke: bool = False,
+    event_trace_level: str | None = None,
+    event_trace_file: Path | None = None,
+    trace_writer: ForensicTraceWriter | None = None,
 ) -> ArcadeWindow:
     """Create the application window without entering Arcade's event loop."""
 
     resolved_config = config or AppConfig()
+    resolved_trace_writer = _resolve_trace_writer(
+        event_trace_level=event_trace_level,
+        event_trace_file=event_trace_file,
+        trace_writer=trace_writer,
+    )
     if arcade_runtime is None:
         from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 
@@ -97,15 +111,17 @@ def create_window(
                         field="startup",
                     ),
                     viewer_player_id="player-a",
+                    trace_writer=resolved_trace_writer,
                 )
             return ArcadeWarhammerWindow(
                 config=resolved_config,
                 battlefield_view=startup.battlefield_view,
                 preferences_path=ui_prefs_path,
                 initial_status=startup.status,
-                core_client=startup.core_client,
+                core_client=trace_core_client(startup.core_client, resolved_trace_writer),
                 viewer_player_id=startup.viewer_player_id,
                 event_cursor=startup.event_cursor,
+                trace_writer=resolved_trace_writer,
             )
         if phase_debug_enabled():
             from warhammer40k_arcade_ui.debug_fixtures import (
@@ -117,10 +133,15 @@ def create_window(
                 config=resolved_config,
                 preferences_path=ui_prefs_path,
                 pending_decision=phase6_debug_pending_decision(),
-                core_client=phase6_debug_core_client(),
+                core_client=trace_core_client(phase6_debug_core_client(), resolved_trace_writer),
                 viewer_player_id="player_1",
+                trace_writer=resolved_trace_writer,
             )
-        return ArcadeWarhammerWindow(config=resolved_config, preferences_path=ui_prefs_path)
+        return ArcadeWarhammerWindow(
+            config=resolved_config,
+            preferences_path=ui_prefs_path,
+            trace_writer=resolved_trace_writer,
+        )
 
     runtime = arcade_runtime
     window = runtime.Window(
@@ -138,16 +159,34 @@ def run_app(
     arcade_runtime: ArcadeRuntime | None = None,
     ui_prefs_path: Path | None = None,
     live_core_smoke: bool = False,
+    event_trace_level: str | None = None,
+    event_trace_file: Path | None = None,
+    trace_writer: ForensicTraceWriter | None = None,
 ) -> None:
     """Create the Arcade window and start the event loop."""
 
     if arcade_runtime is None:
-        create_window(config, ui_prefs_path=ui_prefs_path, live_core_smoke=live_core_smoke)
+        create_window(
+            config,
+            ui_prefs_path=ui_prefs_path,
+            live_core_smoke=live_core_smoke,
+            event_trace_level=event_trace_level,
+            event_trace_file=event_trace_file,
+            trace_writer=trace_writer,
+        )
         _load_arcade().run()
         return
 
     runtime = arcade_runtime
-    create_window(config, runtime, ui_prefs_path=ui_prefs_path, live_core_smoke=live_core_smoke)
+    create_window(
+        config,
+        runtime,
+        ui_prefs_path=ui_prefs_path,
+        live_core_smoke=live_core_smoke,
+        event_trace_level=event_trace_level,
+        event_trace_file=event_trace_file,
+        trace_writer=trace_writer,
+    )
     runtime.run()
 
 
@@ -155,3 +194,20 @@ def phase_debug_enabled() -> bool:
     """Return whether any deterministic phase debug fixture is enabled."""
 
     return environ.get(PHASE6_DEBUG_ENV_VAR) == "1" or environ.get(PHASE7_DEBUG_ENV_VAR) == "1"
+
+
+def _resolve_trace_writer(
+    *,
+    event_trace_level: str | None,
+    event_trace_file: Path | None,
+    trace_writer: ForensicTraceWriter | None,
+) -> ForensicTraceWriter:
+    if trace_writer is not None:
+        return trace_writer
+    return build_trace_writer(
+        ForensicTraceConfig.from_runtime(
+            event_trace_level=event_trace_level,
+            event_trace_file=event_trace_file,
+            env=environ,
+        )
+    )
