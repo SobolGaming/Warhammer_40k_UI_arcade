@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast
 
 from warhammer40k_arcade_ui.preferences.diagnostics import PreferenceDiagnostic, Severity
 from warhammer40k_arcade_ui.preferences.registries import (
@@ -18,9 +18,11 @@ SCHEMA_VERSION = "1"
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, JsonValue]
+type AssignmentHudMode = Literal["compact", "detailed"]
 
 _VALID_MODIFIERS = frozenset(("ctrl", "alt", "shift", "meta"))
 _VALID_MOUSE_BUTTONS = frozenset(("left", "right", "middle"))
+_VALID_ASSIGNMENT_HUD_MODES: frozenset[AssignmentHudMode] = frozenset(("compact", "detailed"))
 _VALID_NAMED_KEYS = frozenset(
     (
         "escape",
@@ -129,6 +131,10 @@ class HudPreferences:
     show_config_diagnostics: bool
     show_selected_model_panel: bool
     show_selected_unit_panel: bool
+    show_assignment_hud: bool
+    assignment_hud_mode: AssignmentHudMode
+    show_assignment_warning_markers: bool
+    show_chain_breadcrumbs: bool
     text_scale: float
     high_contrast: bool
 
@@ -142,6 +148,10 @@ class HudPreferences:
             "show_config_diagnostics": self.show_config_diagnostics,
             "show_selected_model_panel": self.show_selected_model_panel,
             "show_selected_unit_panel": self.show_selected_unit_panel,
+            "show_assignment_hud": self.show_assignment_hud,
+            "assignment_hud_mode": self.assignment_hud_mode,
+            "show_assignment_warning_markers": self.show_assignment_warning_markers,
+            "show_chain_breadcrumbs": self.show_chain_breadcrumbs,
             "text_scale": self.text_scale,
             "high_contrast": self.high_contrast,
         }
@@ -454,6 +464,10 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
                 "show_config_diagnostics",
                 "show_selected_model_panel",
                 "show_selected_unit_panel",
+                "show_assignment_hud",
+                "assignment_hud_mode",
+                "show_assignment_warning_markers",
+                "show_chain_breadcrumbs",
                 "text_scale",
                 "high_contrast",
             )
@@ -491,6 +505,30 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
         show_selected_unit_panel=_required_bool(
             section,
             "show_selected_unit_panel",
+            diagnostics,
+            "hud",
+        ),
+        show_assignment_hud=_required_bool(
+            section,
+            "show_assignment_hud",
+            diagnostics,
+            "hud",
+        ),
+        assignment_hud_mode=_assignment_hud_mode(
+            section,
+            "assignment_hud_mode",
+            diagnostics,
+            "hud",
+        ),
+        show_assignment_warning_markers=_required_bool(
+            section,
+            "show_assignment_warning_markers",
+            diagnostics,
+            "hud",
+        ),
+        show_chain_breadcrumbs=_required_bool(
+            section,
+            "show_chain_breadcrumbs",
             diagnostics,
             "hud",
         ),
@@ -699,6 +737,28 @@ def _required_float(
         )
     )
     return 0.0
+
+
+def _assignment_hud_mode(
+    payload: dict[str, object],
+    key: str,
+    diagnostics: list[PreferenceDiagnostic],
+    prefix: str,
+) -> AssignmentHudMode:
+    field = f"{prefix}.{key}"
+    value = payload.get(key)
+    if type(value) is str and value in _VALID_ASSIGNMENT_HUD_MODES:
+        return value
+    diagnostics.append(
+        _diagnostic(
+            severity="error",
+            code="invalid_assignment_hud_mode",
+            field=field,
+            message="hud.assignment_hud_mode must be compact or detailed.",
+            value=str(value),
+        )
+    )
+    return "compact"
 
 
 def _string_list(

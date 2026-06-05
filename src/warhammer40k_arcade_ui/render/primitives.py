@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 from warhammer40k_arcade_ui.hud.view_models import (
+    AssignmentHudGroupView,
+    AssignmentHudPanelView,
     ContextMenuAction,
     ContextMenuView,
     DebugInspectorView,
@@ -136,6 +138,7 @@ def build_hud_primitives(
     context_menu: ContextMenuView | None = None,
     finite_decision_panel: FiniteDecisionPanelView | None = None,
     movement_draft_panel: MovementDraftPanelView | None = None,
+    assignment_hud_panel: AssignmentHudPanelView | None = None,
     debug_inspector: DebugInspectorView | None = None,
 ) -> tuple[TextPrimitive, ...]:
     """Build screen-space HUD primitives that remain fixed during camera movement."""
@@ -180,6 +183,13 @@ def build_hud_primitives(
         primitives.extend(
             _movement_draft_panel_primitives(
                 panel=movement_draft_panel,
+                viewport_height_px=viewport_height_px,
+            )
+        )
+    if assignment_hud_panel is not None:
+        primitives.extend(
+            _assignment_hud_panel_primitives(
+                panel=assignment_hud_panel,
                 viewport_height_px=viewport_height_px,
             )
         )
@@ -617,6 +627,113 @@ def _debug_inspector_primitives(
         )
         for index, line in enumerate(("Debug inspector", *inspector.lines))
     )
+
+
+def _assignment_hud_panel_primitives(
+    *,
+    panel: AssignmentHudPanelView,
+    viewport_height_px: int,
+) -> tuple[TextPrimitive, ...]:
+    y = viewport_height_px - 522.0
+    lines = _assignment_hud_lines(panel)
+    return tuple(
+        TextPrimitive(
+            layer="assignment_hud_panel",
+            text=line,
+            position=(16.0, y - (index * 15.5)),
+            color=_assignment_hud_line_color(line, panel),
+            font_size=11.0 if index else 12.0,
+            coordinate_space="screen",
+        )
+        for index, line in enumerate(lines)
+    )
+
+
+def _assignment_hud_lines(panel: AssignmentHudPanelView) -> tuple[str, ...]:
+    lines: list[str] = [
+        "Assignment review",
+        f"Operation: {panel.operation_kind}",
+        f"Ready: {panel.readiness_state}",
+    ]
+    if panel.request_id is not None:
+        lines.append(f"Request: {panel.request_id}")
+    if panel.decision_type is not None:
+        lines.append(f"Type: {panel.decision_type}")
+    if panel.actor_id is not None:
+        lines.append(f"Actor: {panel.actor_id}")
+    if panel.proposal_kind is not None:
+        lines.append(f"Proposal: {panel.proposal_kind}")
+    if panel.active_layer is not None:
+        lines.append(f"Layer: {panel.active_layer}")
+    if panel.active_selection_ref_keys:
+        lines.append(f"Selected: {_compact_ref_list(panel.active_selection_ref_keys)}")
+    if panel.assigned_ref_keys or panel.unassigned_ref_keys:
+        lines.append(
+            f"Refs: {len(panel.assigned_ref_keys)} assigned, "
+            f"{len(panel.unassigned_ref_keys)} unassigned"
+        )
+    group_limit = 4 if panel.display_mode == "compact" else len(panel.groups)
+    for group in panel.groups[:group_limit]:
+        lines.extend(_assignment_group_lines(group, detailed=panel.display_mode == "detailed"))
+    if group_limit < len(panel.groups):
+        lines.append(f"... {len(panel.groups) - group_limit} more group(s)")
+    advisory_limit = 2 if panel.display_mode == "compact" else len(panel.advisory_lines)
+    for line in panel.advisory_lines[:advisory_limit]:
+        prefix = "! " if panel.warning_markers_visible and "warning" in line.lower() else ""
+        lines.append(f"Hint: {prefix}{line}")
+    for line in panel.diagnostic_lines:
+        lines.append(f"Invalid: {line}")
+    if panel.chain_breadcrumbs_visible:
+        lines.extend(f"Chain: {line}" for line in panel.chain_lines)
+    if panel.preference_source_label is not None:
+        lines.append(f"UI prefs: {panel.preference_source_label}")
+        chain_state = "visible" if panel.chain_breadcrumbs_visible else "hidden"
+        lines.append(f"Chain breadcrumbs: {chain_state}")
+    return tuple(lines)
+
+
+def _assignment_group_lines(
+    group: AssignmentHudGroupView,
+    *,
+    detailed: bool,
+) -> tuple[str, ...]:
+    state_marker = {
+        "active": ">",
+        "assigned": "+",
+        "unassigned": "-",
+        "warning": "!",
+        "invalid": "x",
+    }[group.state]
+    lines = [f"{state_marker} {group.label}"]
+    if detailed:
+        if group.source_ref_keys:
+            lines.append(f"  Source: {_compact_ref_list(group.source_ref_keys)}")
+        if group.target_ref_keys:
+            lines.append(f"  Target: {_compact_ref_list(group.target_ref_keys)}")
+        lines.extend(f"  {summary}" for summary in group.summary_lines)
+    return tuple(lines)
+
+
+def _assignment_hud_line_color(line: str, panel: AssignmentHudPanelView) -> Color:
+    if line == "Assignment review":
+        return HUD_ACCENT
+    if line.startswith(("Invalid:", "x ")):
+        return MOVEMENT_WARNING
+    if panel.warning_markers_visible and line.startswith(("! ", "Hint: !")):
+        return MOVEMENT_WARNING
+    if line.startswith("> "):
+        return MOVEMENT_ACTIVE
+    if line.startswith("+ "):
+        return MOVEMENT_ASSIGNED
+    if line.startswith("- "):
+        return MOVEMENT_UNASSIGNED
+    return HUD_TEXT
+
+
+def _compact_ref_list(ref_keys: tuple[str, ...]) -> str:
+    if len(ref_keys) <= 3:
+        return ", ".join(ref_keys)
+    return f"{', '.join(ref_keys[:3])}, +{len(ref_keys) - 3}"
 
 
 def _context_action_text(action: ContextMenuAction) -> str:

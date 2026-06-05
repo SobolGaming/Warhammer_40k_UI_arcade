@@ -83,7 +83,7 @@ Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
 
 ## Tasks
 
-- [ ] Add generic assignment HUD view models:
+- [x] Add generic assignment HUD view models:
   - request ID;
   - decision type;
   - actor ID;
@@ -98,7 +98,7 @@ Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
   - advisory hints;
   - authoritative diagnostics, when present;
   - summary group IDs and refs for later visual summary overlays.
-- [ ] Add movement-specific adapters into the generic HUD:
+- [x] Add movement-specific adapters into the generic HUD:
   - movement action;
   - proposal kind;
   - movement mode;
@@ -106,41 +106,41 @@ Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
   - model path assignment groups;
   - per-group path length summaries;
   - unassigned/unchanged model hints.
-- [ ] Add finite-decision request summaries for assignment-adjacent decisions that do not yet have
+- [x] Add finite-decision request summaries for assignment-adjacent decisions that do not yet have
   a full workspace:
   - fight activation options;
   - fight interrupt decline/activation options;
   - ordering band or reaction context when the engine exposes it;
   - selected finite option context without local eligibility inference.
-- [ ] Add render primitives for multi-selection and assignment states:
+- [x] Add render primitives for multi-selection and assignment states:
   - ordinary inspect selection;
   - request-selected entities;
   - active assignment group;
   - assigned but inactive entities;
   - unassigned candidate entities;
   - invalid or warning-highlighted preview entities.
-- [ ] Add visual-summary pre-plumbing:
+- [x] Add visual-summary pre-plumbing:
   - expose assignment groups in a stable order;
   - expose safe source and target refs;
   - expose advisory/diagnostic severity;
   - expose readiness state;
   - do not draw the full action summary yet.
-- [ ] Add compact HUD layout:
+- [x] Add compact HUD layout:
   - current request header;
   - assignment list;
   - active selection summary;
   - completeness/readiness line;
   - diagnostic/warning lines;
   - preference source and debug fields when the debug inspector is visible.
-- [ ] Add preference-backed display settings:
+- [x] Add preference-backed display settings:
   - show/hide assignment HUD;
   - compact/detailed assignment rows;
   - color-independent warning markers;
   - optional auto-follow chain display.
-- [ ] Add keyboard/mouse affordance labels only where they are normal control labels, not tutorial
+- [x] Add keyboard/mouse affordance labels only where they are normal control labels, not tutorial
   prose.
-- [ ] Keep all warnings marked as preview/advisory unless they are engine-returned diagnostics.
-- [ ] Ensure the HUD can represent unsupported workspaces without failing:
+- [x] Keep all warnings marked as preview/advisory unless they are engine-returned diagnostics.
+- [x] Ensure the HUD can represent unsupported workspaces without failing:
   - unsupported proposal tool;
   - unsupported `charge_move` proposal until a charge-specific assignment adapter is added;
   - missing candidate metadata;
@@ -148,33 +148,33 @@ Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
 
 ## Acceptance Criteria
 
-- [ ] Movement assignment state is visible in the generic HUD.
-- [ ] The player can distinguish active selection, assigned models, and unassigned models.
-- [ ] The HUD clearly distinguishes local preview hints from authoritative engine diagnostics.
-- [ ] The HUD can show an incomplete assignment and a ready assignment.
-- [ ] The HUD can show request-scoped state without clearing ordinary inspect selection.
-- [ ] Preference settings can hide or compact the HUD without changing behavior or legality.
-- [ ] Unsupported workspaces produce visible diagnostics rather than blank panels.
-- [ ] The HUD view model contains enough stable group/ref data for Phase 17 to build visual summary
+- [x] Movement assignment state is visible in the generic HUD.
+- [x] The player can distinguish active selection, assigned models, and unassigned models.
+- [x] The HUD clearly distinguishes local preview hints from authoritative engine diagnostics.
+- [x] The HUD can show an incomplete assignment and a ready assignment.
+- [x] The HUD can show request-scoped state without clearing ordinary inspect selection.
+- [x] Preference settings can hide or compact the HUD without changing behavior or legality.
+- [x] Unsupported workspaces produce visible diagnostics rather than blank panels.
+- [x] The HUD view model contains enough stable group/ref data for Phase 17 to build visual summary
   overlays from the same workspace state.
-- [ ] Normalized `pending_proposal` metadata is displayed and preserved for supported and
+- [x] Normalized `pending_proposal` metadata is displayed and preserved for supported and
   unsupported parameterized request families.
-- [ ] Fight activation and fight interrupt finite requests remain selectable through the finite
+- [x] Fight activation and fight interrupt finite requests remain selectable through the finite
   decision path while exposing enough request context for richer future HUD summaries.
 
 ## Tests
 
-- [ ] HUD view-model tests for empty, incomplete, ready, and invalid movement workspaces.
-- [ ] HUD view-model tests for active/assigned/unassigned entity refs.
-- [ ] Render primitive tests for assignment highlights.
-- [ ] Preference tests for assignment HUD settings.
-- [ ] Regression tests proving authoritative diagnostics are visually distinct from local hints.
-- [ ] Fake-client chained request tests for the optional chain breadcrumb display.
-- [ ] Tests that assignment HUD summary groups remain stable across selection focus changes.
-- [ ] Protocol/HUD tests using normalized `pending_proposal` metadata from the core projection.
-- [ ] Unsupported-workspace tests for `charge_move` proving the HUD displays the request instead of
+- [x] HUD view-model tests for empty, incomplete, ready, and invalid movement workspaces.
+- [x] HUD view-model tests for active/assigned/unassigned entity refs.
+- [x] Render primitive tests for assignment highlights.
+- [x] Preference tests for assignment HUD settings.
+- [x] Regression tests proving authoritative diagnostics are visually distinct from local hints.
+- [x] Fake-client chained request tests for the optional chain breadcrumb display.
+- [x] Tests that assignment HUD summary groups remain stable across selection focus changes.
+- [x] Protocol/HUD tests using normalized `pending_proposal` metadata from the core projection.
+- [x] Unsupported-workspace tests for `charge_move` proving the HUD displays the request instead of
   routing it through the normal movement adapter.
-- [ ] Finite request summary tests for `select_fight_activation` and `resolve_fight_interrupt`.
+- [x] Finite request summary tests for `select_fight_activation` and `resolve_fight_interrupt`.
 
 ## Manual Validation Checklist
 
@@ -192,3 +192,81 @@ Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
 
 The UI has a reusable review surface for request-scoped selections and assignments, starting with
 movement and ready to be adapted for shooting and Stratagem tools later.
+
+## Implementation Closeout
+
+Implemented on 2026-06-05.
+
+- Added `AssignmentHudPanelView` and `AssignmentHudGroupView` in `hud.view_models` as a reusable
+  request-scoped checklist model. The view model carries request ID, decision type, actor ID,
+  operation kind, proposal kind, active layer, selected/assigned/unassigned refs, readiness state,
+  advisory hints, authoritative diagnostics, stable group IDs, and source/target refs for Phase 17
+  visual summary overlays.
+- Added a movement assignment HUD adapter using the existing Phase 9 `MovementDraft` assignment
+  rows. The HUD shows active movement selection, moved assignment groups, unassigned/no-op models,
+  readiness state, local preview hints, authoritative invalid diagnostics, and optional chain
+  breadcrumb lines from existing event-log state.
+- Added finite request summaries for `select_fight_activation` and `resolve_fight_interrupt`.
+  These remain finite decisions; the HUD highlights engine-issued fight/pass/decline options but
+  does not infer fight eligibility, pass distance, or interrupt availability.
+- Added a compact screen-space Assignment Review panel in render primitives. The panel supports
+  compact/detailed rows, color-independent warning markers, debug-only preferences source display,
+  and chain breadcrumb display from existing event lines.
+- Added preference schema fields:
+  - `hud.show_assignment_hud`
+  - `hud.assignment_hud_mode`
+  - `hud.show_assignment_warning_markers`
+  - `hud.show_chain_breadcrumbs`
+- Updated built-in and documented YAML profiles with the new HUD settings.
+- Tightened movement draft activation so `charge_move` is not routed through Normal Move/Advance/
+  Fall Back drafting. Charge Move now shows as an unsupported proposal tool until the preliminary
+  charge move assignment plan is implemented.
+
+## Automated Verification
+
+Focused checks during implementation:
+
+```bash
+UV_CACHE_DIR=/tmp/uv-cache uv run pytest \
+  tests/test_hud_selection.py \
+  tests/test_render_primitives.py \
+  tests/test_preferences.py
+UV_CACHE_DIR=/tmp/uv-cache uv run ruff check \
+  src/warhammer40k_arcade_ui/hud/view_models.py \
+  src/warhammer40k_arcade_ui/render/primitives.py \
+  src/warhammer40k_arcade_ui/preferences/schema.py \
+  tests/test_hud_selection.py \
+  tests/test_render_primitives.py \
+  tests/test_preferences.py
+UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests
+```
+
+Full PR gates run before PR:
+
+```bash
+UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
+UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .
+UV_CACHE_DIR=/tmp/uv-cache uv run pyright
+UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/
+PRE_COMMIT_HOME=/tmp/pre-commit-cache UV_CACHE_DIR=/tmp/uv-cache uv run pre-commit run --all-files
+```
+
+## Manual Validation Checklist
+
+- [ ] Launch `uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`.
+- [ ] Select a unit, open its action menu, choose Normal Move, and confirm the Assignment Review
+  panel appears under the movement draft panel.
+- [ ] Draft a path for one model and confirm the panel shows one active assignment group and the
+  remaining models as unassigned.
+- [ ] Shift-select another model and draft a shared waypoint; confirm the active assignment group
+  lists multiple models.
+- [ ] Mark the draft ready with Enter and confirm the panel shows `Ready: ready` and unchanged
+  models as no-op ready.
+- [ ] Trigger an invalid movement diagnostic and confirm `Invalid:` lines appear separately from
+  `Hint:` lines.
+- [ ] Edit a preference profile to set `hud.assignment_hud_mode: detailed` and relaunch; confirm
+  assignment source refs and group summaries are visible.
+- [ ] Edit a preference profile to set `hud.show_assignment_hud: false` and relaunch; confirm the
+  Assignment Review panel is hidden while movement behavior remains unchanged.
+- [ ] In a future live-core Charge Move request, confirm the HUD says `Unsupported proposal tool:
+  charge_move` rather than opening a normal movement draft.

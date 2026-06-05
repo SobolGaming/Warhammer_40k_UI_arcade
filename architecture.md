@@ -46,11 +46,11 @@ under `docs/plans/`.
 | 9 | Complete | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
 | 10 | Complete | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
 | 11 | Complete | Live core manual smoke path | [phase-11](docs/plans/phase-11-live-core-manual-smoke.md) |
-| 12 | Planned | GUI event test harness | [phase-12](docs/plans/phase-12-gui-event-test-harness.md) |
-| 13 | Planned | Headless render evidence | [phase-13](docs/plans/phase-13-headless-render-evidence.md) |
-| 14 | Planned | Forensic event trace | [phase-14](docs/plans/phase-14-forensic-event-trace.md) |
-| 15 | Planned | Crash diagnostic bundles | [phase-15](docs/plans/phase-15-crash-diagnostic-bundles.md) |
-| 16 | Planned | Generic assignment HUD | [phase-16](docs/plans/phase-16-generic-assignment-hud.md) |
+| 12 | Complete | GUI event test harness | [phase-12](docs/plans/phase-12-gui-event-test-harness.md) |
+| 13 | Complete | Headless render evidence | [phase-13](docs/plans/phase-13-headless-render-evidence.md) |
+| 14 | Complete | Forensic event trace | [phase-14](docs/plans/phase-14-forensic-event-trace.md) |
+| 15 | Complete | Crash diagnostic bundles | [phase-15](docs/plans/phase-15-crash-diagnostic-bundles.md) |
+| 16 | Complete | Generic assignment HUD | [phase-16](docs/plans/phase-16-generic-assignment-hud.md) |
 | 17 | Planned | Action visual summary overlays | [phase-17](docs/plans/phase-17-action-visual-summary-overlays.md) |
 | 18 | Planned | HUD ergonomics pass | [phase-18](docs/plans/phase-18-hud-ergonomics.md) |
 | 19 | Planned | Packaging, CI, and regression hardening | [phase-19](docs/plans/phase-19-packaging-ci-regression.md) |
@@ -136,14 +136,13 @@ assignments with authoritative movement proposal submission plus opt-in live-cor
   reconciliation, and visual-anchor diagnostics for movement and finite unit-selection profiles.
 - `warhammer40k_arcade_ui.input.commands` — preference-backed local hotkey matching.
 - `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, finite-decision
-  panel, movement draft/diagnostic panel, and debug inspector view models derived from projection
-  data and current pending requests.
+  panel, movement draft/diagnostic panel, generic assignment review HUD, and debug inspector view
+  models derived from projection data and current pending requests.
 
 Planned modules from later phases:
 
 - `input` — later command flows beyond finite decisions and movement drafting.
-- `hud` — generic assignment review, action visual summary controls, movement submission
-  diagnostics, and later phase-specific ergonomics.
+- `hud` — action visual summary controls and later phase-specific ergonomics.
 - `render` — action visual summary primitives for movement paths, source-to-target links, icons,
   and review/dim summary states.
 - `state` — assignment workspaces and other local-only workflow state beyond movement drafts and
@@ -426,8 +425,11 @@ finite movement action selection
   lines, and future Stratagem affected-unit markers.
 - 2026-06-05: Inserted Phase 11 live core manual smoke path so the Phase 10 movement submission UI
   can be tested against the real local core before the generic assignment HUD and later polish
-  phases. Generic assignment HUD, action visual summaries, HUD ergonomics, and packaging shifted to
-  Phases 12-15.
+  phases. GUI testability, render evidence, forensic tracing, and crash bundles now occupy Phases
+  12-15 before the Phase 16 generic assignment HUD.
+- 2026-06-05: Phase 16 completed with generic assignment HUD view models, compact/detailed
+  Assignment Review render primitives, preference-backed display settings, movement assignment
+  groups, unsupported Charge Move diagnostics, and finite fight activation/interrupt summaries.
 - 2026-06-05: Phase 11 completed with the `--live-core-smoke` launch mode, a real
   `LocalSessionClient` smoke startup at core commit `603fb16`, core projection to render-view
   conversion, CLI tests, real-core movement decision path tests, and an import-boundary regression.
