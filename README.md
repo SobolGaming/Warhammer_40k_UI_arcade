@@ -90,8 +90,10 @@ uv run warhammer40k-arcade-ui --crash-report-dir /tmp/ui-crashes
 
 Each bundle contains `crash-report.json` with the stack trace, UI version/commit metadata when
 available, runtime mode, preferences source, active request/status context, recent forensic trace
-tail when tracing is enabled, and references to recent render evidence artifacts. Token-like launch
-arguments are redacted. Attach the bundle and the launch command to issue reports.
+tail when tracing is enabled, and references to recent render evidence artifacts. When event tracing
+is enabled, the current trace file is copied into the same bundle as `event-trace.jsonl`, so the
+crash report and trace evidence are colocated. Token-like launch arguments are redacted. Attach the
+bundle and the launch command to issue reports.
 
 ## Purpose
 

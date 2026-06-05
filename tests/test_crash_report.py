@@ -52,6 +52,12 @@ def test_crash_report_captures_schema_stack_metadata_and_trace_tail(tmp_path: Pa
     assert any("controlled crash" in str(line) for line in stack_trace)
     trace_tail = cast(dict[str, Any], report["forensic_trace"])
     assert trace_tail["path"] == str(trace_path)
+    colocated_trace_path = result.bundle_dir / "event-trace.jsonl"
+    assert trace_tail["colocated_path"] == str(colocated_trace_path)
+    assert colocated_trace_path.exists()
+    assert colocated_trace_path.read_text(encoding="utf-8") == trace_path.read_text(
+        encoding="utf-8"
+    )
     rows = cast(list[dict[str, Any]], trace_tail["rows"])
     assert rows[-1]["event_name"] == "core.get_view.response"
 

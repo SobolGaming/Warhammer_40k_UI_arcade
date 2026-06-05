@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import platform
+import shutil
 import subprocess
 import sys
 import traceback
@@ -33,6 +34,7 @@ CRASH_REPORT_SCHEMA_VERSION = "1"
 DEFAULT_TRACE_TAIL_ROWS = 25
 DEFAULT_RENDER_ARTIFACT_LIMIT = 8
 CRASH_REPORT_FILENAME = "crash-report.json"
+COLOCATED_TRACE_FILENAME = "event-trace.jsonl"
 
 _SENSITIVE_ARG_PARTS = (
     "token",
@@ -128,6 +130,15 @@ class GitMetadata:
     dirty: bool | None
 
 
+@dataclass(frozen=True, slots=True)
+class TraceFileCopy:
+    """Best-effort colocated forensic trace file copy metadata."""
+
+    original_path: Path | None
+    copied_path: Path | None
+    copy_error: str | None = None
+
+
 def write_crash_report(
     *,
     exception: Exception,
@@ -141,14 +152,22 @@ def write_crash_report(
     environment = environ if env is None else env
     bundle_dir = _new_bundle_dir(report_dir=_resolve_report_root(report_dir, environment))
     report_path = bundle_dir / CRASH_REPORT_FILENAME
+    try:
+        bundle_dir.mkdir(parents=True, exist_ok=False)
+    except OSError as exc:
+        raise CrashReportError(f"Could not create crash report bundle {bundle_dir}.") from exc
+    trace_file_copy = _colocate_trace_file(
+        trace_path=context.trace_path,
+        bundle_dir=bundle_dir,
+    )
     report = _crash_report_payload(
         exception=exception,
         context=context,
         traceback_obj=traceback_obj,
         env=environment,
+        trace_file_copy=trace_file_copy,
     )
     try:
-        bundle_dir.mkdir(parents=True, exist_ok=False)
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
@@ -200,6 +219,7 @@ def _crash_report_payload(
     context: CrashReportContext,
     traceback_obj: TracebackType | None,
     env: Mapping[str, str],
+    trace_file_copy: TraceFileCopy,
 ) -> JsonObject:
     repo_root = _repo_root()
     git = _git_metadata(repo_root)
@@ -226,7 +246,7 @@ def _crash_report_payload(
             "arcade_version": _dependency_version("arcade"),
             "pyglet_version": _dependency_version("pyglet"),
         },
-        "forensic_trace": _trace_tail_payload(context.trace_path),
+        "forensic_trace": _trace_tail_payload(trace_file_copy),
         "render_artifacts": _render_artifacts_payload(
             artifact_dir=_resolve_render_artifact_dir(context.render_artifact_dir, env)
         ),
@@ -294,15 +314,25 @@ def _sensitive_arg_key(value: str) -> bool:
     return any(part in normalized for part in _SENSITIVE_ARG_PARTS)
 
 
-def _trace_tail_payload(trace_path: Path | None) -> JsonObject:
+def _trace_tail_payload(trace_file_copy: TraceFileCopy) -> JsonObject:
+    trace_path = trace_file_copy.original_path
     if trace_path is None:
-        return {"path": None, "rows": []}
-    payload: JsonObject = {"path": str(trace_path), "rows": []}
-    if not trace_path.exists():
+        return {"path": None, "colocated_path": None, "rows": []}
+    read_path = trace_file_copy.copied_path or trace_path
+    payload: JsonObject = {
+        "path": str(trace_path),
+        "colocated_path": None
+        if trace_file_copy.copied_path is None
+        else str(trace_file_copy.copied_path),
+        "rows": [],
+    }
+    if trace_file_copy.copy_error is not None:
+        payload["copy_error"] = trace_file_copy.copy_error
+    if not read_path.exists():
         payload["missing"] = True
         return payload
     try:
-        lines = trace_path.read_text(encoding="utf-8").splitlines()
+        lines = read_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
         payload["read_error"] = str(exc)
         return payload
@@ -332,6 +362,31 @@ def _trace_tail_payload(trace_path: Path | None) -> JsonObject:
     if decode_errors:
         payload["decode_errors"] = decode_errors
     return payload
+
+
+def _colocate_trace_file(*, trace_path: Path | None, bundle_dir: Path) -> TraceFileCopy:
+    if trace_path is None:
+        return TraceFileCopy(original_path=None, copied_path=None)
+    try:
+        trace_exists = trace_path.exists()
+    except OSError as exc:
+        return TraceFileCopy(
+            original_path=trace_path,
+            copied_path=None,
+            copy_error=str(exc),
+        )
+    if not trace_exists:
+        return TraceFileCopy(original_path=trace_path, copied_path=None)
+    copied_path = bundle_dir / COLOCATED_TRACE_FILENAME
+    try:
+        shutil.copy2(trace_path, copied_path)
+    except OSError as exc:
+        return TraceFileCopy(
+            original_path=trace_path,
+            copied_path=None,
+            copy_error=str(exc),
+        )
+    return TraceFileCopy(original_path=trace_path, copied_path=copied_path)
 
 
 def _tail_numbered_lines(lines: Sequence[str], max_lines: int) -> list[tuple[int, str]]:

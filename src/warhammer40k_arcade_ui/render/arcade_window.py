@@ -753,16 +753,15 @@ class ArcadeWarhammerWindow(arcade.Window):
         exc: FatalGameEngineException,
     ) -> FiniteDecisionUiState:
         logger.exception("Fatal game engine error during Arcade UI interaction.")
-        crash_report_path = self._write_fatal_crash_report(exc)
         self._trace_event(
             category="ui",
             event_name="ui.fatal_game_engine_error",
             summary={
                 "exception_type": type(exc).__name__,
                 "detail": _fatal_game_engine_error_detail(exc),
-                "crash_report_path": None if crash_report_path is None else str(crash_report_path),
             },
         )
+        crash_report_path = self._write_fatal_crash_report(exc)
         self._movement_draft = None
         self._selection_state = self._selection_state.without_movement_draft_overlays(
             self._preferences

@@ -92,14 +92,16 @@ After implementation:
   `crash-report.json` and include the report path in the user-facing fatal message.
 - Reports include UI version/git metadata, runtime mode, preferences path/label, active
   viewer/request/status context, recent forensic trace tail, and recent render artifact references.
+- When tracing is enabled, the active event trace file is copied into the same crash bundle as
+  `event-trace.jsonl`, so manual review only needs one diagnostics directory.
 - Reports intentionally leave core engine version/commit as `null` until the adapter contract exposes
   that metadata.
 
 ## Automated Coverage
 
-- `tests/test_crash_report.py` covers report schema, stack trace capture, trace tail inclusion,
-  token-like launch argument redaction, fatal window report creation, and the no-report invariant for
-  ordinary local invalid diagnostics.
+- `tests/test_crash_report.py` covers report schema, stack trace capture, event trace colocation,
+  trace tail inclusion, token-like launch argument redaction, fatal window report creation, and the
+  no-report invariant for ordinary local invalid diagnostics.
 - `tests/test_entrypoint.py` covers CLI parsing and runtime propagation of crash-report settings.
 
 ## Manual Validation Details
@@ -115,8 +117,9 @@ EVENT_TRACE=payload EVENT_TRACE_FILE=/tmp/ui-trace.jsonl \
 ```
 
 When the UI reports a fatal game engine error, inspect the path shown in the HUD/status text. The
-bundle should contain `/tmp/ui-crashes/crash-*/crash-report.json`. Attach that JSON file, the trace
-file when enabled, the launch command, and any relevant render artifacts to the issue or PR review.
+bundle should contain `/tmp/ui-crashes/crash-*/crash-report.json` and, when event tracing was
+enabled, `/tmp/ui-crashes/crash-*/event-trace.jsonl`. Attach the whole crash bundle directory, the
+launch command, and any relevant render artifacts to the issue or PR review.
 
 ## Phase Closeout Milestone
 
