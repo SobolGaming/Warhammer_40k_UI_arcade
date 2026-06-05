@@ -1,11 +1,11 @@
-# Phase 14 - HUD ergonomics pass
+# Phase 18 - HUD ergonomics pass
 
 ## Goal
 
 Improve decision-making speed and reduce cognitive load.
 
-This phase should consume the Phase 4 preferences framework, the Phase 12 generic assignment HUD,
-and the Phase 13 action visual summaries for overlay defaults, HUD defaults, assignment review,
+This phase should consume the Phase 4 preferences framework, the Phase 16 generic assignment HUD,
+and the Phase 17 action visual summaries for overlay defaults, HUD defaults, assignment review,
 summary overlays, and hotkeys instead of hard-coding user workflow assumptions into render, input,
 or HUD modules.
 

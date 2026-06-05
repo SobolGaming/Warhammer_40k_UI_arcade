@@ -19,10 +19,14 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 9 | [Movement draft model assignments](phase-09-movement-draft-model-assignments.md) | Per-Model Movement Planner |
 | 10 | [Movement proposal submission and diagnostics](phase-10-movement-proposal-submission-diagnostics.md) | End-to-End Movement UI |
 | 11 | [Live core manual smoke path](phase-11-live-core-manual-smoke.md) | Live Core Movement Smoke |
-| 12 | [Generic assignment HUD](phase-12-generic-assignment-hud.md) | Assignment Review HUD |
-| 13 | [Action visual summary overlays](phase-13-action-visual-summary-overlays.md) | Action Summary Overlays |
-| 14 | [HUD ergonomics pass](phase-14-hud-ergonomics.md) | Usable Movement Client |
-| 15 | [Packaging, CI, and regression hardening](phase-15-packaging-ci-regression.md) | Development-Ready UI Repo |
+| 12 | [GUI event test harness](phase-12-gui-event-test-harness.md) | Scriptable GUI Events |
+| 13 | [Headless render evidence](phase-13-headless-render-evidence.md) | Headless Visual Evidence |
+| 14 | [Forensic event trace](phase-14-forensic-event-trace.md) | Forensic Event Trace |
+| 15 | [Crash diagnostic bundles](phase-15-crash-diagnostic-bundles.md) | Actionable Crash Bundles |
+| 16 | [Generic assignment HUD](phase-16-generic-assignment-hud.md) | Assignment Review HUD |
+| 17 | [Action visual summary overlays](phase-17-action-visual-summary-overlays.md) | Action Summary Overlays |
+| 18 | [HUD ergonomics pass](phase-18-hud-ergonomics.md) | Usable Movement Client |
+| 19 | [Packaging, CI, and regression hardening](phase-19-packaging-ci-regression.md) | Development-Ready UI Repo |
 
 ## Umbrella And Preliminary Plans
 

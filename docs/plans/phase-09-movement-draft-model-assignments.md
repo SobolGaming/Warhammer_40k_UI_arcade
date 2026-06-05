@@ -78,7 +78,7 @@ Reviewed against the local `Warhammer_40k_AI` checkout on 2026-06-04.
   - estimated over-budget path;
   - obvious table-bound and self-overlap warnings;
   - "engine validates movement" reminder.
-- [x] Expose movement visual-summary data for later Phase 13:
+- [x] Expose movement visual-summary data for later Phase 17:
   - per-model path points;
   - final ghost-base poses;
   - active assignment group;
