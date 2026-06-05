@@ -101,10 +101,14 @@ Build bottom-up:
 9. movement draft state and path witness payloads
 10. proposal submission diagnostics
 11. live local core smoke path for thin manual end-to-end testing
-12. generic assignment HUD
-13. action visual summary overlays
-14. HUD ergonomics
-15. packaging, CI, regression fixtures, and import-boundary audits
+12. GUI event test harness for deterministic in-process interaction tests
+13. headless render evidence and framebuffer validation
+14. forensic UI/core event tracing
+15. crash diagnostic bundles
+16. generic assignment HUD
+17. action visual summary overlays
+18. HUD ergonomics
+19. packaging, CI, regression fixtures, and import-boundary audits
 
 Do not add shooting, fight, charge, AI, training, or private rule logic before the movement
 decision path is trustworthy end to end.
@@ -114,6 +118,8 @@ decision path is trustworthy end to end.
 - The engine alone mutates authoritative game state.
 - The UI must not own rule validation, event logs, replay records, or authoritative model poses.
   - It may represent and check those things, but is not the authoritative arbiter of such.
+  - Opt-in diagnostic UI traces are allowed when they are explicitly non-authoritative,
+    viewer-scoped, redacted, and used only for debugging crashes or UI/client behavior.
 - UI, headless, network, replay, and tests must use the same engine decision path.
 - No game effecting player choice outside `DecisionRequest` / `DecisionResult`.
 - Finite decisions must submit one engine-provided option ID for the current request ID.

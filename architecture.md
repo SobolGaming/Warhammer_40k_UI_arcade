@@ -46,10 +46,14 @@ under `docs/plans/`.
 | 9 | Complete | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
 | 10 | Complete | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
 | 11 | Complete | Live core manual smoke path | [phase-11](docs/plans/phase-11-live-core-manual-smoke.md) |
-| 12 | Planned | Generic assignment HUD | [phase-12](docs/plans/phase-12-generic-assignment-hud.md) |
-| 13 | Planned | Action visual summary overlays | [phase-13](docs/plans/phase-13-action-visual-summary-overlays.md) |
-| 14 | Planned | HUD ergonomics pass | [phase-14](docs/plans/phase-14-hud-ergonomics.md) |
-| 15 | Planned | Packaging, CI, and regression hardening | [phase-15](docs/plans/phase-15-packaging-ci-regression.md) |
+| 12 | Planned | GUI event test harness | [phase-12](docs/plans/phase-12-gui-event-test-harness.md) |
+| 13 | Planned | Headless render evidence | [phase-13](docs/plans/phase-13-headless-render-evidence.md) |
+| 14 | Planned | Forensic event trace | [phase-14](docs/plans/phase-14-forensic-event-trace.md) |
+| 15 | Planned | Crash diagnostic bundles | [phase-15](docs/plans/phase-15-crash-diagnostic-bundles.md) |
+| 16 | Planned | Generic assignment HUD | [phase-16](docs/plans/phase-16-generic-assignment-hud.md) |
+| 17 | Planned | Action visual summary overlays | [phase-17](docs/plans/phase-17-action-visual-summary-overlays.md) |
+| 18 | Planned | HUD ergonomics pass | [phase-18](docs/plans/phase-18-hud-ergonomics.md) |
+| 19 | Planned | Packaging, CI, and regression hardening | [phase-19](docs/plans/phase-19-packaging-ci-regression.md) |
 
 ## Cross-cutting architectural rules
 
@@ -260,12 +264,18 @@ Phase 11 adds the next bridge: an opt-in live-core smoke launch path that uses t
 session for thin manual movement testing while keeping fake debug fixtures available for
 deterministic UI tests.
 
+Phases 12 through 15 pause feature growth to harden GUI testability and debug evidence. The UI
+should gain an in-process Arcade event driver, headless render evidence, opt-in forensic UI/core
+event tracing, and crash diagnostic bundles before the next broad interactive workflow is added.
+These tools are diagnostic and testing infrastructure only; they do not create authoritative game
+state or a private replay log.
+
 The Generic Assignment HUD is the visible review surface for that workspace. It should show what
 request is being answered, which entities are selected, which entities are assigned, which entities
 are still unassigned, whether the payload preview is ready, and whether messages are local preview
 hints or authoritative engine diagnostics.
 
-Phase 13 adds a battlefield-level visual summary for the same workspace. If the assignment HUD is
+Phase 17 adds a battlefield-level visual summary for the same workspace. If the assignment HUD is
 the checklist, the visual summary is the map overlay: dim green/grey paths for movement, future red
 source-to-target lines for shooting, and future Stratagem markers with lines to affected units. The
 summary is togglable and preference-backed. A subdued summary may remain visible while working, and

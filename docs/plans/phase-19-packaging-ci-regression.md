@@ -1,4 +1,4 @@
-# Phase 15 - Packaging, CI, and regression hardening
+# Phase 19 - Packaging, CI, and regression hardening
 
 ## Goal
 

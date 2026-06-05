@@ -9,8 +9,8 @@ Concrete phases:
 - [Phase 8 - Entity selection profile foundation](phase-08-entity-selection-profile-foundation.md)
 - [Phase 9 - Movement draft model assignments](phase-09-movement-draft-model-assignments.md)
 - [Phase 10 - Movement proposal submission and diagnostics](phase-10-movement-proposal-submission-diagnostics.md)
-- [Phase 12 - Generic assignment HUD](phase-12-generic-assignment-hud.md)
-- [Phase 13 - Action visual summary overlays](phase-13-action-visual-summary-overlays.md)
+- [Phase 16 - Generic assignment HUD](phase-16-generic-assignment-hud.md)
+- [Phase 17 - Action visual summary overlays](phase-17-action-visual-summary-overlays.md)
 
 Preliminary future plans:
 
@@ -416,14 +416,14 @@ requests and does not choose answers locally.
 - Display authoritative invalid diagnostics.
 - Retain/reconcile draft paths only when the fresh proposal context still matches.
 
-### Phase 12 - Generic Assignment HUD
+### Phase 16 - Generic Assignment HUD
 
 - Add a compact assignment review panel showing selected layer, selected refs, assigned refs,
   unassigned refs, and request context.
 - Add render primitives for multi-selection highlights that distinguish inspect selection,
   request-selection, active assignment group, and assigned-but-not-active groups.
 
-### Phase 13 - Action Visual Summary Overlays
+### Phase 17 - Action Visual Summary Overlays
 
 - Build visual summaries from the same workspace/HUD assignment groups.
 - Support dim always-on and bright review modes.
