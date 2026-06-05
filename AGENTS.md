@@ -114,7 +114,7 @@ decision path is trustworthy end to end.
 - The engine alone mutates authoritative game state.
 - The UI must not own rule validation, event logs, replay records, or authoritative model poses.
   - It may represent and check those things, but is not the authoritative arbiter of such.
-- UI, headless, network, replay, and tests must use the same engine decision path. 
+- UI, headless, network, replay, and tests must use the same engine decision path.
 - No game effecting player choice outside `DecisionRequest` / `DecisionResult`.
 - Finite decisions must submit one engine-provided option ID for the current request ID.
 - Parameterized decisions must submit typed, JSON-safe payloads for the current proposal request.

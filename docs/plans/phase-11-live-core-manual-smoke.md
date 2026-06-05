@@ -161,6 +161,9 @@ Implemented on 2026-06-05.
 - Real-core accepted movement now has automated coverage: a whole-unit Normal Move payload is
   submitted through `LocalSessionClient.submit_movement_payload`, emits
   `movement_activation_completed`, and advances into the live Fire Overwatch reaction proposal.
+- Follow-up core projection/parser failures are now handled as fatal engine/client errors at the
+  Arcade window boundary. The HUD shows `Fatal game engine error`, logs the traceback, and closes the
+  window cleanly after a short delay instead of allowing the exception to unwind through Pyglet.
 
 ## Automated Verification
 
