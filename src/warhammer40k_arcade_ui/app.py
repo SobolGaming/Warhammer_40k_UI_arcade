@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from importlib import import_module
 from os import environ
 from pathlib import Path
@@ -9,6 +10,11 @@ from typing import Any, Protocol, cast
 
 from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.protocol import UiClientStatus
+from warhammer40k_arcade_ui.diagnostics.crash_report import (
+    CrashReportContext,
+    CrashReportError,
+    write_crash_report,
+)
 from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
     ForensicTraceConfig,
     ForensicTraceWriter,
@@ -18,6 +24,8 @@ from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
 
 PHASE6_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6"
 PHASE7_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7"
+
+logger = logging.getLogger(__name__)
 
 
 class ArcadeWindow(Protocol):
@@ -80,6 +88,8 @@ def create_window(
     event_trace_level: str | None = None,
     event_trace_file: Path | None = None,
     trace_writer: ForensicTraceWriter | None = None,
+    crash_report_context: CrashReportContext | None = None,
+    crash_report_dir: Path | None = None,
 ) -> ArcadeWindow:
     """Create the application window without entering Arcade's event loop."""
 
@@ -88,6 +98,12 @@ def create_window(
         event_trace_level=event_trace_level,
         event_trace_file=event_trace_file,
         trace_writer=trace_writer,
+    )
+    resolved_crash_context = _resolve_crash_context(
+        crash_report_context=crash_report_context,
+        runtime_mode=_runtime_mode(live_core_smoke),
+        ui_prefs_path=ui_prefs_path,
+        trace_writer=resolved_trace_writer,
     )
     if arcade_runtime is None:
         from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
@@ -101,17 +117,30 @@ def create_window(
             try:
                 startup = build_live_core_smoke_startup()
             except LiveCoreSmokeError as exc:
+                report_path = _write_startup_crash_report(
+                    exception=exc,
+                    context=resolved_crash_context.with_updates(
+                        runtime_mode="live_core_smoke",
+                        viewer_player_id="player-a",
+                    ),
+                    crash_report_dir=crash_report_dir,
+                )
                 return ArcadeWarhammerWindow(
                     config=resolved_config,
                     preferences_path=ui_prefs_path,
                     initial_status=UiClientStatus.invalid(
                         stage="setup",
                         violation_code="live_core_smoke_startup_failed",
-                        message=str(exc),
+                        message=_startup_failure_message(exc=exc, report_path=report_path),
                         field="startup",
                     ),
                     viewer_player_id="player-a",
                     trace_writer=resolved_trace_writer,
+                    crash_report_context=resolved_crash_context.with_updates(
+                        runtime_mode="live_core_smoke",
+                        viewer_player_id="player-a",
+                    ),
+                    crash_report_dir=crash_report_dir,
                 )
             return ArcadeWarhammerWindow(
                 config=resolved_config,
@@ -122,6 +151,12 @@ def create_window(
                 viewer_player_id=startup.viewer_player_id,
                 event_cursor=startup.event_cursor,
                 trace_writer=resolved_trace_writer,
+                crash_report_context=resolved_crash_context.with_updates(
+                    runtime_mode="live_core_smoke",
+                    viewer_player_id=startup.viewer_player_id,
+                    event_cursor=startup.event_cursor,
+                ),
+                crash_report_dir=crash_report_dir,
             )
         if phase_debug_enabled():
             from warhammer40k_arcade_ui.debug_fixtures import (
@@ -136,11 +171,18 @@ def create_window(
                 core_client=trace_core_client(phase6_debug_core_client(), resolved_trace_writer),
                 viewer_player_id="player_1",
                 trace_writer=resolved_trace_writer,
+                crash_report_context=resolved_crash_context.with_updates(
+                    runtime_mode="debug_fixture",
+                    viewer_player_id="player_1",
+                ),
+                crash_report_dir=crash_report_dir,
             )
         return ArcadeWarhammerWindow(
             config=resolved_config,
             preferences_path=ui_prefs_path,
             trace_writer=resolved_trace_writer,
+            crash_report_context=resolved_crash_context.with_updates(runtime_mode="fake_fixture"),
+            crash_report_dir=crash_report_dir,
         )
 
     runtime = arcade_runtime
@@ -162,6 +204,8 @@ def run_app(
     event_trace_level: str | None = None,
     event_trace_file: Path | None = None,
     trace_writer: ForensicTraceWriter | None = None,
+    crash_report_context: CrashReportContext | None = None,
+    crash_report_dir: Path | None = None,
 ) -> None:
     """Create the Arcade window and start the event loop."""
 
@@ -173,6 +217,8 @@ def run_app(
             event_trace_level=event_trace_level,
             event_trace_file=event_trace_file,
             trace_writer=trace_writer,
+            crash_report_context=crash_report_context,
+            crash_report_dir=crash_report_dir,
         )
         _load_arcade().run()
         return
@@ -186,6 +232,8 @@ def run_app(
         event_trace_level=event_trace_level,
         event_trace_file=event_trace_file,
         trace_writer=trace_writer,
+        crash_report_context=crash_report_context,
+        crash_report_dir=crash_report_dir,
     )
     runtime.run()
 
@@ -211,3 +259,49 @@ def _resolve_trace_writer(
             env=environ,
         )
     )
+
+
+def _runtime_mode(live_core_smoke: bool) -> str:
+    if live_core_smoke:
+        return "live_core_smoke"
+    if phase_debug_enabled():
+        return "debug_fixture"
+    return "fake_fixture"
+
+
+def _resolve_crash_context(
+    *,
+    crash_report_context: CrashReportContext | None,
+    runtime_mode: str,
+    ui_prefs_path: Path | None,
+    trace_writer: ForensicTraceWriter,
+) -> CrashReportContext:
+    base = crash_report_context or CrashReportContext(runtime_mode=runtime_mode)
+    return base.with_updates(
+        runtime_mode=runtime_mode,
+        preferences_path=ui_prefs_path,
+        trace_path=trace_writer.trace_path,
+    )
+
+
+def _write_startup_crash_report(
+    *,
+    exception: Exception,
+    context: CrashReportContext,
+    crash_report_dir: Path | None,
+) -> Path | None:
+    try:
+        return write_crash_report(
+            exception=exception,
+            context=context,
+            report_dir=crash_report_dir,
+        ).report_path
+    except CrashReportError:
+        logger.exception("Startup crash report capture failed.")
+        return None
+
+
+def _startup_failure_message(*, exc: Exception, report_path: Path | None) -> str:
+    if report_path is None:
+        return str(exc)
+    return f"{exc} Crash report: {report_path}"

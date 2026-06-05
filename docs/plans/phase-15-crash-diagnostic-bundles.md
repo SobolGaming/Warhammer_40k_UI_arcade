@@ -39,37 +39,37 @@ stack trace.
 
 ## Tasks
 
-- [ ] Define crash bundle schema and output directory policy.
-- [ ] Add version metadata helpers:
+- [x] Define crash bundle schema and output directory policy.
+- [x] Add version metadata helpers:
   - package version from installed metadata or `pyproject.toml`;
   - git commit SHA and dirty flag when running from a checkout;
   - placeholder core engine version fields.
-- [ ] Add crash capture utility, for example `diagnostics/crash_report.py`.
-- [ ] Integrate startup and fatal runtime paths:
+- [x] Add crash capture utility, for example `diagnostics/crash_report.py`.
+- [x] Integrate startup and fatal runtime paths:
   - app startup failures;
   - live-core smoke startup failures;
   - projection/parser fatal errors;
   - unhandled exceptions reaching the main entry point.
-- [ ] Add trace tail attachment when Phase 14 trace files exist.
-- [ ] Add optional screenshot/render artifact references when Phase 13 has produced them.
-- [ ] Add user-facing fatal message that gives the crash report path.
-- [ ] Add tests for:
+- [x] Add trace tail attachment when Phase 14 trace files exist.
+- [x] Add optional screenshot/render artifact references when Phase 13 has produced them.
+- [x] Add user-facing fatal message that gives the crash report path.
+- [x] Add tests for:
   - crash report schema;
   - stack trace capture;
   - version metadata fallback behavior;
   - redaction of token-like values;
   - trace tail inclusion;
   - no crash report produced for ordinary authoritative invalid diagnostics.
-- [ ] Document how to attach crash reports to issues/PR review comments.
+- [x] Document how to attach crash reports to issues/PR review comments.
 
 ## Acceptance Criteria
 
-- [ ] An unhandled UI exception writes a crash report before exit.
-- [ ] Fatal engine/client errors write a report and close gracefully.
-- [ ] Crash reports include enough context to reproduce the mode and recent UI/core exchange.
-- [ ] Sensitive token-like data is redacted.
-- [ ] The user-facing fatal message includes the path to the diagnostic bundle.
-- [ ] Full repository gates pass.
+- [x] An unhandled UI exception writes a crash report before exit.
+- [x] Fatal engine/client errors write a report and close gracefully.
+- [x] Crash reports include enough context to reproduce the mode and recent UI/core exchange.
+- [x] Sensitive token-like data is redacted.
+- [x] The user-facing fatal message includes the path to the diagnostic bundle.
+- [x] Full repository gates pass.
 
 ## Manual Validation Checklist
 
@@ -80,6 +80,46 @@ After implementation:
   label, and recent trace tail when tracing is enabled.
 - [ ] Confirm a normal authoritative invalid movement diagnostic does not create a crash bundle.
 - [ ] Confirm the GUI exits gracefully and shows/prints the crash report path.
+
+## Implementation Notes
+
+- Added `warhammer40k_arcade_ui.diagnostics.crash_report` with JSON bundle output under
+  `~/.local/state/warhammer40k-arcade-ui/crash-bundles/` by default.
+- Added `WARHAMMER40K_ARCADE_UI_CRASH_REPORT_DIR` and `--crash-report-dir` overrides for test and
+  manual triage sessions.
+- `main.py` installs a process-level crash-report excepthook for uncaught exceptions.
+- Live-core smoke startup failures and runtime fatal engine/client errors now write
+  `crash-report.json` and include the report path in the user-facing fatal message.
+- Reports include UI version/git metadata, runtime mode, preferences path/label, active
+  viewer/request/status context, recent forensic trace tail, and recent render artifact references.
+- When tracing is enabled, the active event trace file is copied into the same crash bundle as
+  `event-trace.jsonl`, so manual review only needs one diagnostics directory.
+- Reports intentionally leave core engine version/commit as `null` until the adapter contract exposes
+  that metadata.
+
+## Automated Coverage
+
+- `tests/test_crash_report.py` covers report schema, stack trace capture, event trace colocation,
+  trace tail inclusion, token-like launch argument redaction, fatal window report creation, and the
+  no-report invariant for ordinary local invalid diagnostics.
+- `tests/test_entrypoint.py` covers CLI parsing and runtime propagation of crash-report settings.
+
+## Manual Validation Details
+
+Run with an explicit output directory while reproducing a fatal issue:
+
+```bash
+EVENT_TRACE=payload EVENT_TRACE_FILE=/tmp/ui-trace.jsonl \
+  uv run warhammer40k-arcade-ui \
+  --live-core-smoke \
+  --ui-prefs docs/preferences/default.yaml \
+  --crash-report-dir /tmp/ui-crashes
+```
+
+When the UI reports a fatal game engine error, inspect the path shown in the HUD/status text. The
+bundle should contain `/tmp/ui-crashes/crash-*/crash-report.json` and, when event tracing was
+enabled, `/tmp/ui-crashes/crash-*/event-trace.jsonl`. Attach the whole crash bundle directory, the
+launch command, and any relevant render artifacts to the issue or PR review.
 
 ## Phase Closeout Milestone
 
