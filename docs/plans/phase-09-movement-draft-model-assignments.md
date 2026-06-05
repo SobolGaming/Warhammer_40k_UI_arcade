@@ -123,20 +123,20 @@ Reviewed against the local `Warhammer_40k_AI` checkout on 2026-06-04.
 
 ## Manual Validation Checklist
 
-- [ ] Start the deterministic movement debug fixture with
+- [x] Start the deterministic movement debug fixture with
   `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`.
-- [ ] Select one model, choose Normal Move, click empty table space, and confirm only that model
+- [x] Select one model, choose Normal Move, click empty table space, and confirm only that model
   gets a path preview.
-- [ ] Shift-click a second model in the same unit, click empty table space, and confirm both
+- [x] Shift-click a second model in the same unit, click empty table space, and confirm both
   selected models move together.
-- [ ] Click another model without Shift, draft a different path, and confirm earlier model paths
+- [x] Click another model without Shift, draft a different path, and confirm earlier model paths
   remain.
-- [ ] Press `g` to select the current model's group, draft a path, and confirm all models move only
+- [x] Press `g` to select the current model's group, draft a path, and confirm all models move only
   after that explicit group-selection command.
-- [ ] Right-click while a subset is active and confirm the last waypoint is removed only for that
+- [x] Right-click while a subset is active and confirm the last waypoint is removed only for that
   active subset.
-- [ ] Press Enter and inspect the ready payload preview; no engine submission should occur yet.
-- [ ] Confirm unchanged models are shown as no-op in the preview payload once the debug payload
+- [x] Press Enter and inspect the ready payload preview; no engine submission should occur yet.
+- [x] Confirm unchanged models are shown as no-op in the preview payload once the debug payload
   viewer exists in Phase 10; until then this is covered by automated payload tests.
 
 ## Closeout Milestone
