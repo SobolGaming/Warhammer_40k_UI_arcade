@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import arcade
 
@@ -24,6 +24,9 @@ from warhammer40k_arcade_ui.preferences.schema import UiPreferences
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
+
+if TYPE_CHECKING:
+    from tests.support.render_capture import RenderCapture
 
 type GuiCoreMode = Literal["phase6_debug", "live_core_smoke"]
 type ScreenPoint = tuple[int, int]
@@ -169,6 +172,13 @@ class GuiTestDriver:
         for _ in range(count):
             self.window.on_update(delta_time)
         return self
+
+    def capture_frame(self, *, source_name: str) -> RenderCapture:
+        """Render and capture the current window framebuffer."""
+
+        from tests.support.render_capture import capture_window_frame
+
+        return capture_window_frame(self.window, source_name=source_name)
 
     @property
     def selected_unit_id(self) -> str | None:

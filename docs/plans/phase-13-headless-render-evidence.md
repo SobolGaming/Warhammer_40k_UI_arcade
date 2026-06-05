@@ -41,37 +41,37 @@ tests unless a surface is stable enough to justify them.
 
 ## Tasks
 
-- [ ] Identify the correct Arcade headless initialization sequence for this repo and document the
+- [x] Identify the correct Arcade headless initialization sequence for this repo and document the
   import-order constraints.
-- [ ] Add a render harness module, for example `tests/support/render_capture.py`.
-- [ ] Add framebuffer readback helpers that:
+- [x] Add a render harness module, for example `tests/support/render_capture.py`.
+- [x] Add framebuffer readback helpers that:
   - bind the intended framebuffer/render target;
   - call draw;
   - flush/finish before reading pixels;
   - read the correct color attachment;
   - report clear diagnostics for all-black or empty frames.
-- [ ] Add image artifact helpers:
+- [x] Add image artifact helpers:
   - deterministic output path;
   - per-test artifact naming;
   - optional JSON metadata next to the screenshot.
-- [ ] Add visual smoke tests for:
+- [x] Add visual smoke tests for:
   - fake fixture table, terrain, objectives, and models;
   - HUD text/panel region presence;
   - live-core-smoke battlefield projection, if stable in headless mode;
   - one movement-draft overlay after the Phase 12 driver creates it.
-- [ ] Add documentation for when to use semantic pixel checks, loose image diffs, or manual
+- [x] Add documentation for when to use semantic pixel checks, loose image diffs, or manual
   validation.
 
 ## Acceptance Criteria
 
-- [ ] Headless render tests can run in CI or a Codex shell without a visible GUI when Arcade supports
+- [x] Headless render tests can run in CI or a Codex shell without a visible GUI when Arcade supports
   the environment.
-- [ ] Render captures fail with actionable diagnostics instead of silently returning all-black
+- [x] Render captures fail with actionable diagnostics instead of silently returning all-black
   buffers.
-- [ ] Visual artifacts are saved on failure and can be attached to PR reviews or bug reports.
-- [ ] At least one GUI workflow test combines Phase 12 event driving with Phase 13 render evidence.
-- [ ] The README or testing docs explain local requirements for headless rendering.
-- [ ] Full repository gates pass.
+- [x] Visual artifacts are saved on failure and can be attached to PR reviews or bug reports.
+- [x] At least one GUI workflow test combines Phase 12 event driving with Phase 13 render evidence.
+- [x] The README or testing docs explain local requirements for headless rendering.
+- [x] Full repository gates pass.
 
 ## Testing Strategy
 
@@ -84,10 +84,27 @@ tests unless a surface is stable enough to justify them.
 
 After implementation:
 
-- [ ] Run the headless render tests locally.
-- [ ] Inspect at least one generated screenshot artifact.
-- [ ] Confirm an intentionally bad render readback fails with a useful diagnostic.
+- [x] Run the headless render tests locally.
+- [x] Inspect at least one generated screenshot artifact.
+- [x] Confirm an intentionally bad render readback fails with a useful diagnostic.
 - [ ] Confirm normal GUI launch still works outside headless mode.
+
+## Implementation Notes
+
+- Added `tests/support/render_capture.py`, which captures the real `ArcadeWarhammerWindow` draw
+  path through the explicit `window.ctx.screen` framebuffer, calls `window.on_draw()`, synchronizes
+  with `window.ctx.finish()`, and reads RGBA bytes from color attachment `0`.
+- Added `GuiTestDriver.capture_frame(...)` so Phase 12 event scripts can render the current window
+  state and assert visual evidence without leaving the driver API.
+- Added semantic pixel checks for nonblank frames, expected broad color clusters, HUD text regions,
+  projected battlefield regions, movement overlays after event-driver actions, and live-core-smoke
+  projections.
+- Added PNG plus JSON artifact bundle helpers. Failure diagnostics include artifact paths and
+  metadata with framebuffer size, byte length, unique color count, and common colors.
+- README documents Linux EGL/OpenGL runtime requirements and the
+  `WARHAMMER40K_ARCADE_UI_RENDER_ARTIFACT_DIR` override.
+- The normal GUI launch remains a manual validation item because pytest intentionally runs Arcade in
+  headless mode.
 
 ## Phase Closeout Milestone
 

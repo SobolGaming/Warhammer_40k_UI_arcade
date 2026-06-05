@@ -36,6 +36,16 @@ uv run pytest
 uv run pre-commit run --all-files
 ```
 
+## Headless render tests
+
+The GUI event and render-evidence tests run Arcade in headless mode through pytest. On Linux, the
+headless framebuffer path requires EGL/OpenGL runtime libraries. The GitHub Actions test job installs
+`libegl1` and `libgl1-mesa-dri`; local Linux machines need equivalent packages available.
+
+Render evidence helpers save PNG and JSON artifact bundles only when a semantic visual check fails,
+unless a test explicitly requests a success artifact. Set `WARHAMMER40K_ARCADE_UI_RENDER_ARTIFACT_DIR`
+to override the default local artifact directory `.test-artifacts/render`.
+
 ## Purpose
 
 The core engine is a strict bottom-up reconstruction of the Warhammer 40,000 rules engine. This UI
