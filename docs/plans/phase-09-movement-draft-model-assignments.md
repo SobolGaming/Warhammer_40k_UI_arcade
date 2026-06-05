@@ -40,6 +40,7 @@ Reviewed against the local `Warhammer_40k_AI` checkout on 2026-06-04.
   - proposal unit model refs;
   - active selected model subset;
   - drafted paths by model;
+  - assignment group IDs for subsets drafted together;
   - unassigned or unchanged model hints;
   - payload preview.
 - [ ] Seed movement request-selection from the currently inspected model when that model belongs to
@@ -76,6 +77,13 @@ Reviewed against the local `Warhammer_40k_AI` checkout on 2026-06-04.
   - estimated over-budget path;
   - obvious table-bound and self-overlap warnings;
   - "engine validates movement" reminder.
+- [ ] Expose movement visual-summary data for later Phase 12:
+  - per-model path points;
+  - final ghost-base poses;
+  - active assignment group;
+  - assigned/unassigned state;
+  - advisory warning state;
+  - grouped-path relationships for subsets drafted together.
 - [ ] Remove or retire the old `unit_simple` default as an accidental behavior.
 
 ## Acceptance Criteria
@@ -89,6 +97,8 @@ Reviewed against the local `Warhammer_40k_AI` checkout on 2026-06-04.
 - [ ] The UI does not submit the movement payload in this phase.
 - [ ] Local hints are visually and textually advisory.
 - [ ] Existing camera pan/zoom and world-space path rendering continue to work.
+- [ ] Movement assignment state can be converted into a summary-friendly view model without reading
+  mutable engine internals.
 
 ## Tests
 
@@ -102,6 +112,7 @@ Reviewed against the local `Warhammer_40k_AI` checkout on 2026-06-04.
 - [ ] Request drift clears or reconciles movement assignments.
 - [ ] Render primitive tests for active, assigned, and unassigned movement selection overlays.
 - [ ] HUD view-model tests for assignment completeness and advisory hints.
+- [ ] Tests for movement visual-summary source data generated from assignment groups.
 
 ## Manual Validation Checklist
 

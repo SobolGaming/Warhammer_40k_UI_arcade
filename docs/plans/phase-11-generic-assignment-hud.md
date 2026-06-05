@@ -35,6 +35,9 @@ For future Stratagems, it can show:
 The HUD is "generic" because the layout and review behavior are reusable. The payload builders
 remain operation-specific so this HUD does not become a private rules engine.
 
+The same backing data should also be usable by later visual action summaries. The HUD is the list
+view of the workspace; Phase 12 adds the battlefield picture view of the same workspace.
+
 ## Workspace Concept In Plain Language
 
 A workspace is temporary local scratch space for one pending engine request. It is like a tray where
@@ -72,7 +75,8 @@ state. The engine remains the only authority after submission.
   - unassigned refs;
   - readiness state;
   - advisory hints;
-  - authoritative diagnostics, when present.
+  - authoritative diagnostics, when present;
+  - summary group IDs and refs for later visual summary overlays.
 - [ ] Add movement-specific adapters into the generic HUD:
   - movement action;
   - proposal kind;
@@ -88,6 +92,12 @@ state. The engine remains the only authority after submission.
   - assigned but inactive entities;
   - unassigned candidate entities;
   - invalid or warning-highlighted preview entities.
+- [ ] Add visual-summary pre-plumbing:
+  - expose assignment groups in a stable order;
+  - expose safe source and target refs;
+  - expose advisory/diagnostic severity;
+  - expose readiness state;
+  - do not draw the full action summary yet.
 - [ ] Add compact HUD layout:
   - current request header;
   - assignment list;
@@ -117,6 +127,8 @@ state. The engine remains the only authority after submission.
 - [ ] The HUD can show request-scoped state without clearing ordinary inspect selection.
 - [ ] Preference settings can hide or compact the HUD without changing behavior or legality.
 - [ ] Unsupported workspaces produce visible diagnostics rather than blank panels.
+- [ ] The HUD view model contains enough stable group/ref data for Phase 12 to build visual summary
+  overlays from the same workspace state.
 
 ## Tests
 
@@ -126,6 +138,7 @@ state. The engine remains the only authority after submission.
 - [ ] Preference tests for assignment HUD settings.
 - [ ] Regression tests proving authoritative diagnostics are visually distinct from local hints.
 - [ ] Fake-client chained request tests for the optional chain breadcrumb display.
+- [ ] Tests that assignment HUD summary groups remain stable across selection focus changes.
 
 ## Manual Validation Checklist
 

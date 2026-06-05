@@ -10,6 +10,7 @@ Concrete phases:
 - [Phase 9 - Movement draft model assignments](phase-09-movement-draft-model-assignments.md)
 - [Phase 10 - Movement proposal submission and diagnostics](phase-10-movement-proposal-submission-diagnostics.md)
 - [Phase 11 - Generic assignment HUD](phase-11-generic-assignment-hud.md)
+- [Phase 12 - Action visual summary overlays](phase-12-action-visual-summary-overlays.md)
 
 Preliminary future plans:
 
@@ -54,6 +55,12 @@ The same checklist idea should work for movement first, then later for shooting 
 Movement might show "model 1 has path A, model 2 has path B, model 3 is unassigned." Shooting might
 show "these weapons target that unit, those weapons target another unit." A Stratagem might show
 "friendly target slot has two units, enemy target slot is still empty."
+
+The action visual summary is the battlefield picture of the same workspace. If the Generic
+Assignment HUD is the checklist, the visual summary is the map overlay: green/grey movement paths,
+red shooting links, or a Stratagem marker with lines to affected units. It should be togglable, with
+a dim version available during normal work and a brighter review version when the player is checking
+the current assignment before submission.
 
 ## Problem Statement
 
@@ -415,6 +422,15 @@ requests and does not choose answers locally.
   unassigned refs, and request context.
 - Add render primitives for multi-selection highlights that distinguish inspect selection,
   request-selection, active assignment group, and assigned-but-not-active groups.
+
+### Phase 12 - Action Visual Summary Overlays
+
+- Build visual summaries from the same workspace/HUD assignment groups.
+- Support dim always-on and bright review modes.
+- Start with movement path summaries.
+- Prepare generic source-to-target links and icon markers for future shooting, Stratagem, and
+  placement tools.
+- Keep summaries advisory and preference-backed.
 
 ### Preliminary - Shooting Declaration Tool
 

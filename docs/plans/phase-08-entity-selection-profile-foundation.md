@@ -80,7 +80,9 @@ current answer.
   - stable ID;
   - optional owner player ID;
   - optional parent refs;
-  - optional display label.
+  - optional display label;
+  - optional visual anchor point when the current projection/request exposes one;
+  - typed diagnostic when no safe visual anchor exists.
 - [ ] Add an `EntityLayer` registry:
   - model;
   - model group;
@@ -132,6 +134,11 @@ current answer.
   - unavailable entity layers;
   - candidate IDs that no longer exist in the refreshed projection;
   - selection cardinality violations.
+- [ ] Preserve summary-friendly selection metadata for later phases:
+  - stable display labels;
+  - selected entity visual anchors;
+  - parent/child relationships safe for the viewer;
+  - no guessed anchors for hidden or unavailable entities.
 
 ## Acceptance Criteria
 
@@ -145,6 +152,8 @@ current answer.
   movement or shooting tools.
 - [ ] Existing inspect selection and selected-unit HUD behavior keep working.
 - [ ] Preferences can bind the new selection commands without defining legal actions or rules.
+- [ ] Entity refs provide enough safe metadata for later visual summary overlays to draw selected
+  entities without reinterpreting game rules.
 
 ## Tests
 
@@ -158,6 +167,7 @@ current answer.
 - [ ] Regression tests that Tab still prioritizes finite-option focus when finite options are
   pending.
 - [ ] Preference tests for the new command IDs and hotkey conflict diagnostics.
+- [ ] Tests for visual-anchor presence and unavailable-anchor diagnostics.
 
 ## Manual Validation Checklist
 

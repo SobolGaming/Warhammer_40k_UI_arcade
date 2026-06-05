@@ -57,7 +57,9 @@ hard-coded Stratagem names.
 6. The player switches slots and repeats until required slots are complete.
 7. The assignment HUD shows each slot, selected entities, missing required selections, and preview
    hints.
-8. The UI builds the exact target-binding payload shape required by the request.
+8. The action visual summary can show a Stratagem marker/icon and lines to selected target
+   entities.
+9. The UI builds the exact target-binding payload shape required by the request.
 
 ## Preliminary Tasks
 
@@ -70,6 +72,11 @@ hard-coded Stratagem names.
   - objective marker click to objective ID;
   - card click to card ID.
 - [ ] Add target-slot assignment HUD rows.
+- [ ] Add action visual summary adapter:
+  - Stratagem marker/icon;
+  - lines to selected target entities;
+  - distinct friendly/enemy/objective/card slot treatments;
+  - dim and review modes.
 - [ ] Add incomplete/unsupported diagnostics.
 - [ ] Build target-binding payload previews without spending CP or applying effects.
 
@@ -80,6 +87,7 @@ hard-coded Stratagem names.
 - [ ] Supported target-slot requests can be filled with additive/subtractive selection.
 - [ ] Target slot cardinality is displayed as a local completeness hint.
 - [ ] The UI preserves all engine-issued context and submits no invented target IDs.
+- [ ] Supported target-slot assignments can produce a visual summary from the same workspace data.
 
 ## Contract Questions To Revisit
 

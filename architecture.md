@@ -46,8 +46,9 @@ under `docs/plans/`.
 | 9 | Planned | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
 | 10 | Planned | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
 | 11 | Planned | Generic assignment HUD | [phase-11](docs/plans/phase-11-generic-assignment-hud.md) |
-| 12 | Planned | HUD ergonomics pass | [phase-12](docs/plans/phase-12-hud-ergonomics.md) |
-| 13 | Planned | Packaging, CI, and regression hardening | [phase-13](docs/plans/phase-13-packaging-ci-regression.md) |
+| 12 | Planned | Action visual summary overlays | [phase-12](docs/plans/phase-12-action-visual-summary-overlays.md) |
+| 13 | Planned | HUD ergonomics pass | [phase-13](docs/plans/phase-13-hud-ergonomics.md) |
+| 14 | Planned | Packaging, CI, and regression hardening | [phase-14](docs/plans/phase-14-packaging-ci-regression.md) |
 
 ## Cross-cutting architectural rules
 
@@ -120,8 +121,10 @@ movement path drafting:
 Planned modules from later phases:
 
 - `input` — later command flows beyond finite decisions and movement drafting.
-- `hud` — generic assignment review, movement submission diagnostics, and later phase-specific
-  ergonomics.
+- `hud` — generic assignment review, action visual summary controls, movement submission
+  diagnostics, and later phase-specific ergonomics.
+- `render` — action visual summary primitives for movement paths, source-to-target links, icons,
+  and review/dim summary states.
 - `state` — request-scoped entity selection, assignment workspaces, and other local-only workflow
   state beyond movement drafts.
 
@@ -227,6 +230,12 @@ request is being answered, which entities are selected, which entities are assig
 are still unassigned, whether the payload preview is ready, and whether messages are local preview
 hints or authoritative engine diagnostics.
 
+Phase 12 adds a battlefield-level visual summary for the same workspace. If the assignment HUD is
+the checklist, the visual summary is the map overlay: dim green/grey paths for movement, future red
+source-to-target lines for shooting, and future Stratagem markers with lines to affected units. The
+summary is togglable and preference-backed. A subdued summary may remain visible while working, and
+a brighter review summary can appear when the player actively checks selections before submission.
+
 ## Runtime modes
 
 - **Local in-process session** — initial wrapper implemented in `core_client`; later phases will
@@ -290,6 +299,8 @@ finite movement action selection
   selection, layer cycling, assignment workspaces, and request drift reconciliation.
 - Future assignment HUD tests for active/assigned/unassigned entity rows and preview-vs-engine
   diagnostic separation.
+- Future action visual summary tests for dim/review modes, summary view models, movement path
+  overlays, source-to-target links, icon markers, request drift cleanup, and preference defaults.
 - Manual validation checklists for user-facing graphical workflows because live GUI interaction is
   only partially automatable.
 - Future movement submission tests for exact preservation of engine-issued movement mode and Fall
@@ -348,7 +359,7 @@ finite movement action selection
   UI result IDs, explicit request/option ID submission through `UiCoreClient`, parameterized
   proposal display without finite submission, viewer-scoped event cursor refresh, visible
   diagnostics, and a Tab regression fix that prevents hover-only selection.
-- 2026-06-04: Refreshed plans against `Warhammer_40k_AI` `main` at `16d0adf`. Phase 7/8 remain
+- 2026-06-04: Refreshed plans against `Warhammer_40k_AI` `main` at `16d0adf`. Movement plans remain
   movement-only but now explicitly preserve engine-issued `movement_phase_action`,
   `movement_mode`, and Fall Back `fall_back_mode` context. Placement, shooting declaration,
   Stratagem target-binding, and ranged attack-resolution decisions are acknowledged as future UI
@@ -363,3 +374,6 @@ finite movement action selection
   assignment explicit, moves movement submission to Phase 10, adds a generic assignment HUD in
   Phase 11, and keeps shooting/Stratagem assignment plans preliminary until their core contracts
   stabilize.
+- 2026-06-04: Added Phase 12 action visual summary overlays so the assignment workspace can also
+  drive togglable battlefield summaries, such as dim/review movement paths, future shooting target
+  lines, and future Stratagem affected-unit markers.

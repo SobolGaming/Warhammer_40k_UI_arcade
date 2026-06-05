@@ -1,12 +1,13 @@
-# Phase 12 - HUD ergonomics pass
+# Phase 13 - HUD ergonomics pass
 
 ## Goal
 
 Improve decision-making speed and reduce cognitive load.
 
-This phase should consume the Phase 4 preferences framework and the Phase 11 generic assignment HUD
-for overlay defaults, HUD defaults, assignment review, and hotkeys instead of hard-coding user
-workflow assumptions into render, input, or HUD modules.
+This phase should consume the Phase 4 preferences framework, the Phase 11 generic assignment HUD,
+and the Phase 12 action visual summaries for overlay defaults, HUD defaults, assignment review,
+summary overlays, and hotkeys instead of hard-coding user workflow assumptions into render, input,
+or HUD modules.
 
 ## Tasks
 
@@ -53,7 +54,7 @@ workflow assumptions into render, input, or HUD modules.
 
 ## Closeout milestone
 
-**Milestone 12: "Usable Movement Client"**
+**Milestone 13: "Usable Movement Client"**
 
 The UI is no longer only a technical prototype; it is comfortable enough for repeated manual
 movement-phase testing.

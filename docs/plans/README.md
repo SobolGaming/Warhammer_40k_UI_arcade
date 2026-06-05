@@ -19,8 +19,9 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 9 | [Movement draft model assignments](phase-09-movement-draft-model-assignments.md) | Per-Model Movement Planner |
 | 10 | [Movement proposal submission and diagnostics](phase-10-movement-proposal-submission-diagnostics.md) | End-to-End Movement UI |
 | 11 | [Generic assignment HUD](phase-11-generic-assignment-hud.md) | Assignment Review HUD |
-| 12 | [HUD ergonomics pass](phase-12-hud-ergonomics.md) | Usable Movement Client |
-| 13 | [Packaging, CI, and regression hardening](phase-13-packaging-ci-regression.md) | Development-Ready UI Repo |
+| 12 | [Action visual summary overlays](phase-12-action-visual-summary-overlays.md) | Action Summary Overlays |
+| 13 | [HUD ergonomics pass](phase-13-hud-ergonomics.md) | Usable Movement Client |
+| 14 | [Packaging, CI, and regression hardening](phase-14-packaging-ci-regression.md) | Development-Ready UI Repo |
 
 ## Umbrella And Preliminary Plans
 

@@ -1,4 +1,4 @@
-# Phase 13 - Packaging, CI, and regression hardening
+# Phase 14 - Packaging, CI, and regression hardening
 
 ## Goal
 
@@ -41,7 +41,7 @@ Make the UI reliable enough to use during engine development.
 
 ## Closeout milestone
 
-**Milestone 13: "Development-Ready UI Repo"**
+**Milestone 14: "Development-Ready UI Repo"**
 
 The UI repo is stable enough to use as a companion project while the core engine continues evolving.
 

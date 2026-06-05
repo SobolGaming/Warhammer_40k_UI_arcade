@@ -37,8 +37,9 @@ Based on the local core checkout reviewed on 2026-06-04:
 5. The selected attacker models/weapons are assigned to that target.
 6. The player repeats until the declaration is complete.
 7. The assignment HUD shows assigned and unassigned weapons/models.
-8. The UI builds a `ShootingDeclarationProposal` preview.
-9. A later concrete phase submits through the parameterized path.
+8. The action visual summary can show source-to-target lines, bundled by attacker/target group.
+9. The UI builds a `ShootingDeclarationProposal` preview.
+10. A later concrete phase submits through the parameterized path.
 
 ## Preliminary Tasks
 
@@ -57,6 +58,11 @@ Based on the local core checkout reviewed on 2026-06-04:
 - [ ] Add payload preview generation for `ShootingDeclarationProposal`.
 - [ ] Add unsupported diagnostics if the request payload lacks required candidate metadata.
 - [ ] Add assignment HUD rows for attacker model/weapon to target-unit bindings.
+- [ ] Add action visual summary adapter:
+  - red/orange lines from attacker model or weapon group to target unit;
+  - bundled links for repeated same-target assignments;
+  - target labels/counts;
+  - dim and review modes.
 
 ## Preliminary Acceptance Criteria
 
@@ -66,6 +72,7 @@ Based on the local core checkout reviewed on 2026-06-04:
 - [ ] UI distinguishes unassigned weapons/models from assigned ones.
 - [ ] UI can build a JSON-safe shooting declaration preview.
 - [ ] UI does not submit or mutate authoritative shooting state until the concrete submission phase.
+- [ ] UI can render a visual target summary from the same assignment data shown in the HUD.
 
 ## Contract Questions To Revisit
 
