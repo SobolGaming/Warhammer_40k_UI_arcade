@@ -173,7 +173,7 @@ def install_crash_report_excepthook(
         exc_value: BaseException,
         tb: TracebackType | None,
     ) -> None:
-        if isinstance(exc_value, (KeyboardInterrupt, SystemExit)):
+        if isinstance(exc_value, KeyboardInterrupt | SystemExit):
             previous_hook(exc_type, exc_value, tb)
             return
         if isinstance(exc_value, Exception):
