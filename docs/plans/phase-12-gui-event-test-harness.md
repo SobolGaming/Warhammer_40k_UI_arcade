@@ -110,6 +110,8 @@ After implementation:
 - Added event-harness regression coverage for model click selection, selected-unit action hotkey
   opening/canceling, keyboard finite submission, movement waypoint drafting, movement-ready
   preview creation, the mouse-hover ready-state regression, and fake-client movement submission.
+- GitHub Actions installs `libegl1` and `libgl1-mesa-dri` in the test job so pyglet/Arcade can
+  create headless OpenGL contexts on Ubuntu runners.
 - Future GUI-visible bugs should usually get a short pytest script that starts from
   `GuiTestDriver.phase6_debug()` or a purpose-built driver factory for the relevant fixture.
 
