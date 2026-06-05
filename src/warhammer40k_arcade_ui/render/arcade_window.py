@@ -158,6 +158,47 @@ class ArcadeWarhammerWindow(arcade.Window):
         return self._selection_state
 
     @property
+    def battlefield_view(self) -> BattlefieldView:
+        """Current viewer-scoped battlefield projection."""
+
+        return self._battlefield_view
+
+    @property
+    def pending_decision(self) -> UiDecision | None:
+        """Current pending engine decision exposed to the UI."""
+
+        return self._pending_decision
+
+    @property
+    def finite_state(self) -> FiniteDecisionUiState:
+        """Current finite-decision UI state."""
+
+        return self._finite_state
+
+    @property
+    def movement_draft(self) -> MovementDraft | None:
+        """Current local movement draft, if one is active."""
+
+        return self._movement_draft
+
+    @property
+    def event_cursor(self) -> int:
+        """Current viewer event cursor."""
+
+        return self._event_cursor
+
+    @property
+    def context_menu(self) -> ContextMenuView | None:
+        """Current context menu view model, if the selected unit has finite actions."""
+
+        return build_context_menu(
+            view=self._battlefield_view,
+            selection=self._selection_state,
+            pending_decision=self._pending_decision,
+            fallback_anchor_world=self._mouse_world_position,
+        )
+
+    @property
     def preference_diagnostics(self) -> tuple[PreferenceDiagnostic, ...]:
         """Diagnostics produced while loading UI preferences."""
 

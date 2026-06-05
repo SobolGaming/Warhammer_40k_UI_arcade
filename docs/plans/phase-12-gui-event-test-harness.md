@@ -47,17 +47,17 @@ inside the process through direct handler calls or pyglet-style `dispatch_event(
 
 ## Tasks
 
-- [ ] Define `tests/support/gui_driver.py` or equivalent with a small `GuiTestDriver`.
-- [ ] Add a test window factory that can construct the current Arcade window in a deterministic
+- [x] Define `tests/support/gui_driver.py` or equivalent with a small `GuiTestDriver`.
+- [x] Add a test window factory that can construct the current Arcade window in a deterministic
   fixture mode without launching `arcade.run()`.
-- [ ] Add event-driver methods that route through window handlers or `dispatch_event(...)`:
+- [x] Add event-driver methods that route through window handlers or `dispatch_event(...)`:
   - key press/release;
   - mouse press/release;
   - mouse motion;
   - frame stepping with `on_update`.
-- [ ] Add world/screen coordinate helpers using the existing camera transforms.
-- [ ] Add state-inspection helpers that read existing UI state without mutating it.
-- [ ] Add regression tests for current player-facing flows:
+- [x] Add world/screen coordinate helpers using the existing camera transforms.
+- [x] Add state-inspection helpers that read existing UI state without mutating it.
+- [x] Add regression tests for current player-facing flows:
   - select a model by click;
   - open selected-unit actions by hotkey;
   - select a finite option by keyboard;
@@ -65,26 +65,26 @@ inside the process through direct handler calls or pyglet-style `dispatch_event(
   - mark movement ready;
   - verify mouse hover does not clear ready movement;
   - cancel/close menus where existing behavior supports it.
-- [ ] Document how future phases should add driver-level regression tests for GUI-visible
+- [x] Document how future phases should add driver-level regression tests for GUI-visible
   behavior.
 
 ## Acceptance Criteria
 
-- [ ] Tests can drive existing UI event handlers without opening a visible OS-controlled window.
-- [ ] A new GUI bug can usually be reproduced as a short driver script in pytest.
-- [ ] Existing selection, context-menu, finite-decision, and movement-draft workflows have at least
+- [x] Tests can drive existing UI event handlers without opening a visible OS-controlled window.
+- [x] A new GUI bug can usually be reproduced as a short driver script in pytest.
+- [x] Existing selection, context-menu, finite-decision, and movement-draft workflows have at least
   one event-harness test.
-- [ ] Driver helpers expose stable user-level assertions instead of requiring tests to inspect
+- [x] Driver helpers expose stable user-level assertions instead of requiring tests to inspect
   unrelated private fields.
-- [ ] The harness does not bypass the UI-facing core client facade or submit invented engine
+- [x] The harness does not bypass the UI-facing core client facade or submit invented engine
   decisions.
-- [ ] Full repository gates pass.
+- [x] Full repository gates pass.
 
 ## Testing Strategy
 
 - Prefer ordinary pure state tests for non-rendering logic.
 - Use this harness for event wiring and player workflow tests.
-- Add one regression test per GUI bug when practical.
+- Add appropriate regression tests when GUI bugs are discovered.
 - Keep tests deterministic by using fixed fixtures, explicit coordinates, and explicit frame counts.
 - Do not assert exact pixel output in this phase.
 
@@ -92,11 +92,26 @@ inside the process through direct handler calls or pyglet-style `dispatch_event(
 
 After implementation:
 
-- [ ] Run the new event-harness tests with `uv run pytest`.
+- [x] Run the new event-harness tests with `uv run pytest tests/test_gui_event_driver.py`.
 - [ ] Manually exercise one covered workflow in the GUI and confirm the automated test steps match
   the real interaction.
 - [ ] When a GUI bug is found, confirm the harness can reproduce it or document why it requires the
   Phase 13 headless render layer or a later OS smoke layer.
+
+## Implementation Notes
+
+- Added `GuiTestDriver.phase6_debug()` as a deterministic headless Arcade window factory for the
+  current finite-decision and movement-draft debug workflow.
+- Driver actions call the production `ArcadeWarhammerWindow` event handlers directly, except key
+  release, which routes through pyglet `dispatch_event(...)` because the window currently has no
+  custom release handler.
+- Added narrow read-only window properties for test inspection of battlefield view, pending
+  decision, finite state, movement draft, event cursor, and current context menu.
+- Added event-harness regression coverage for model click selection, selected-unit action hotkey
+  opening/canceling, keyboard finite submission, movement waypoint drafting, movement-ready
+  preview creation, the mouse-hover ready-state regression, and fake-client movement submission.
+- Future GUI-visible bugs should usually get a short pytest script that starts from
+  `GuiTestDriver.phase6_debug()` or a purpose-built driver factory for the relevant fixture.
 
 ## Phase Closeout Milestone
 
