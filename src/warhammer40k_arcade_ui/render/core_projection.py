@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from typing import cast
 
 from warhammer40k_arcade_ui.core_client.protocol import JsonObject, JsonValue, UiGameView
@@ -18,6 +20,12 @@ from warhammer40k_arcade_ui.render.view_models import (
 
 _MM_PER_INCH = 25.4
 _DEFAULT_PRESENTATION_BASE_RADIUS_INCHES = 32.0 / _MM_PER_INCH / 2.0
+_SOURCE_TERRAIN_FOOTPRINT_RE = re.compile(
+    r":(?P<preset>ruin_rect_(?P<width>\d+)x(?P<depth>\d+)_variant\d+):"
+    r"rotation-(?P<rotation_degrees>-?\d+(?:\.\d+)?):"
+    r"origin-(?P<origin_x>\d+(?:\.\d+)?)-(?P<origin_y>\d+(?:\.\d+)?)$"
+)
+_FOOTPRINT_BOUNDS_TOLERANCE = 1.0e-4
 
 
 class CoreProjectionRenderError(ValueError):
@@ -111,12 +119,7 @@ def _terrain_from_mission_setup(mission_setup: JsonObject) -> tuple[TerrainFootp
         TerrainFootprintView(
             terrain_id=_required_string(feature, "feature_id"),
             label=_required_string(feature, "feature_kind"),
-            footprint=_centered_rectangle_polygon(
-                center_x=_required_float(feature, "footprint_center_x_inches"),
-                center_y=_required_float(feature, "footprint_center_y_inches"),
-                width=_required_positive_float(feature, "footprint_width_inches"),
-                height=_required_positive_float(feature, "footprint_depth_inches"),
-            ),
+            footprint=_terrain_display_footprint(feature),
         )
         for feature in (
             _json_object("terrain_feature", value)
@@ -183,6 +186,87 @@ def _marker_radius_inches(marker: JsonObject) -> float:
     return _required_positive_float(marker, "marker_diameter_mm") / _MM_PER_INCH / 2.0
 
 
+def _terrain_display_footprint(feature: JsonObject) -> tuple[tuple[float, float], ...]:
+    fallback = _centered_rectangle_polygon(
+        center_x=_required_float(feature, "footprint_center_x_inches"),
+        center_y=_required_float(feature, "footprint_center_y_inches"),
+        width=_required_positive_float(feature, "footprint_width_inches"),
+        height=_required_positive_float(feature, "footprint_depth_inches"),
+    )
+    source_id = _optional_string_value(feature, "source_id")
+    if source_id is None:
+        return fallback
+    source_footprint = _rotated_source_terrain_footprint(source_id)
+    if source_footprint is None:
+        return fallback
+    _validate_source_footprint_matches_bounds(
+        feature=feature,
+        source_footprint=source_footprint,
+    )
+    return source_footprint
+
+
+def _rotated_source_terrain_footprint(
+    source_id: str,
+) -> tuple[tuple[float, float], ...] | None:
+    match = _SOURCE_TERRAIN_FOOTPRINT_RE.search(source_id)
+    if match is None:
+        return None
+    width = _positive_float_from_match(match.group("width"), "source terrain width")
+    depth = _positive_float_from_match(match.group("depth"), "source terrain depth")
+    rotation_degrees = _float_from_match(
+        match.group("rotation_degrees"),
+        "source terrain rotation",
+    )
+    origin_x = _float_from_match(match.group("origin_x"), "source terrain origin x")
+    origin_y = _float_from_match(match.group("origin_y"), "source terrain origin y")
+    radians = math.radians(rotation_degrees)
+    cos_r = math.cos(radians)
+    sin_r = math.sin(radians)
+    return tuple(
+        (
+            origin_x + (corner_x * cos_r) - (corner_y * sin_r),
+            origin_y + (corner_x * sin_r) + (corner_y * cos_r),
+        )
+        for corner_x, corner_y in (
+            (0.0, 0.0),
+            (width, 0.0),
+            (width, depth),
+            (0.0, depth),
+        )
+    )
+
+
+def _validate_source_footprint_matches_bounds(
+    *,
+    feature: JsonObject,
+    source_footprint: tuple[tuple[float, float], ...],
+) -> None:
+    center_x = _required_float(feature, "footprint_center_x_inches")
+    center_y = _required_float(feature, "footprint_center_y_inches")
+    width = _required_positive_float(feature, "footprint_width_inches")
+    height = _required_positive_float(feature, "footprint_depth_inches")
+    expected_bounds = (
+        center_x - (width / 2.0),
+        center_y - (height / 2.0),
+        center_x + (width / 2.0),
+        center_y + (height / 2.0),
+    )
+    actual_bounds = _polygon_bounds(source_footprint)
+    if any(
+        not math.isclose(
+            actual,
+            expected,
+            rel_tol=0.0,
+            abs_tol=_FOOTPRINT_BOUNDS_TOLERANCE,
+        )
+        for actual, expected in zip(actual_bounds, expected_bounds, strict=True)
+    ):
+        raise CoreProjectionRenderError(
+            "terrain source footprint does not match projected footprint bounds."
+        )
+
+
 def _centered_rectangle_polygon(
     *,
     center_x: float,
@@ -214,6 +298,15 @@ def _rectangle_polygon(
         (max_x, min_y),
         (max_x, max_y),
         (min_x, max_y),
+    )
+
+
+def _polygon_bounds(polygon: tuple[tuple[float, float], ...]) -> tuple[float, float, float, float]:
+    return (
+        min(point[0] for point in polygon),
+        min(point[1] for point in polygon),
+        max(point[0] for point in polygon),
+        max(point[1] for point in polygon),
     )
 
 
@@ -251,6 +344,32 @@ def _required_positive_float(payload: JsonObject, key: str) -> float:
     if value <= 0.0:
         raise CoreProjectionRenderError(f"{key} must be positive.")
     return value
+
+
+def _optional_string_value(payload: JsonObject, key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if type(value) is not str:
+        raise CoreProjectionRenderError(f"{key} must be a string.")
+    stripped = value.strip()
+    if not stripped:
+        raise CoreProjectionRenderError(f"{key} must not be empty.")
+    return stripped
+
+
+def _float_from_match(value: str, field_name: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise CoreProjectionRenderError(f"{field_name} must be finite.")
+    return number
+
+
+def _positive_float_from_match(value: str, field_name: str) -> float:
+    number = _float_from_match(value, field_name)
+    if number <= 0.0:
+        raise CoreProjectionRenderError(f"{field_name} must be positive.")
+    return number
 
 
 def _display_suffix(value: str) -> str:

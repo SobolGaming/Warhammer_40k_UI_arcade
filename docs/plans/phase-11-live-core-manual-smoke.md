@@ -140,6 +140,9 @@ After implementation:
   refresh.
 - [ ] If invalid, confirm the diagnostic code/message comes from the engine and the draft remains
   available for retry when the engine emits a compatible retry request.
+- [ ] Confirm diagonal live-core terrain slots render as rotated footprints rather than large
+  axis-aligned overlap boxes. The engine still owns authoritative terrain occupancy; this visual
+  footprint comes from core source rotation provenance when present.
 
 ## Implementation Closeout
 
@@ -155,6 +158,9 @@ Implemented on 2026-06-05.
 - Added `render.core_projection` to build a renderable `BattlefieldView` from the viewer-scoped
   core `GameViewPayload` shape, including mission table dimensions, deployment zones, objective
   markers, terrain footprints, and placed units/models.
+- Live-core terrain rendering now uses core source rotation/origin provenance for visible ruin
+  footprints when that provenance matches the projected engine footprint bounds. If no recognized
+  provenance is present, the UI falls back to the engine-projected axis-aligned footprint.
 - The existing finite-decision, context menu, movement draft, movement submission, authoritative
   diagnostics, event refresh, and projection-refresh paths are reused; no new decision IDs,
   proposal kinds, or validation paths were added.
