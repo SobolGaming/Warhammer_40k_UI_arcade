@@ -18,8 +18,13 @@ Make the UI reliable enough to use during engine development.
   - finite movement option request
   - movement proposal request
   - Fall Back movement proposal request with `fall_back_mode`
+  - Charge Move proposal request with `proposal_kind: "charge_move"` and target/no-move context
   - accepted movement response
   - invalid movement response
+  - normalized `pending_proposal` metadata containing `request_id`, `decision_type`, `actor_id`,
+    and `proposal_kind`
+  - finite fight activation request
+  - finite fight interrupt request
   - unsupported non-movement parameterized request, such as shooting declaration or Stratagem target
     proposal, to prove generic proposal display does not force movement parsing
   - default UI preferences profile
@@ -57,3 +62,14 @@ The UI repo is stable enough to use as a companion project while the core engine
 | `hud` | View-model generation | Finite options shown are exactly pending engine options. |
 | integration | End-to-end finite + movement flow | Select Normal Move, submit path, refresh view, clear draft. |
 | static QA | No private mutation path | Only `core_client` may import engine adapter/session modules. |
+
+## Core Update Regression Targets
+
+Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05. CI fixtures should cover the new
+adapter-visible request families without requiring their full UI tools to exist yet:
+
+- `pending_proposal` metadata must be complete for every parameterized family the UI parses.
+- `charge_move` must remain unsupported or charge-specific; it must not be submitted through Normal
+  Move/Fall Back code paths.
+- `select_fight_activation` and `resolve_fight_interrupt` finite requests must render and submit
+  exact engine option IDs, including pass/decline options.

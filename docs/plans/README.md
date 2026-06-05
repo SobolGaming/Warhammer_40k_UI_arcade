@@ -39,6 +39,10 @@ for a numbered phase.
 - [Forensic event replay](preliminary-forensic-event-replay.md) - preliminary future plan for
   replaying forensic trace UI events through a `--play-events` workflow, with explicit engine-side
   deterministic replay needs called out.
+- [Charge move assignment tool](preliminary-charge-move-assignment-tool.md) - preliminary future
+  plan for Charge Move proposal requests after charge roll resolution.
+- [Fight order UI](preliminary-fight-order-ui.md) - preliminary future plan for richer finite
+  Fight phase activation and interrupt presentation.
 - [Shooting declaration assignment tool](preliminary-shooting-declaration-assignment-tool.md) -
   preliminary future plan for model/weapon-to-target assignment.
 - [Stratagem target-binding assignment tool](preliminary-stratagem-target-binding-tool.md) -

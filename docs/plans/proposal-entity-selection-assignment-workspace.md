@@ -14,6 +14,8 @@ Concrete phases:
 
 Preliminary future plans:
 
+- [Preliminary - Charge move assignment tool](preliminary-charge-move-assignment-tool.md)
+- [Preliminary - Fight order UI](preliminary-fight-order-ui.md)
 - [Preliminary - Shooting declaration assignment tool](preliminary-shooting-declaration-assignment-tool.md)
 - [Preliminary - Stratagem target-binding assignment tool](preliminary-stratagem-target-binding-tool.md)
 
@@ -85,7 +87,23 @@ The same class of problem appears outside movement:
 
 ## Contract Assessment
 
-Reviewed against `Warhammer_40k_AI` local checkout on 2026-06-04.
+Reviewed against `Warhammer_40k_AI` local checkout on 2026-06-04, with a follow-up impact review
+against `main` at `2d4d730` on 2026-06-05.
+
+### Adapter Projection Metadata
+
+The core projection now normalizes pending proposal metadata into `GameViewPayload.pending_proposal`
+for parameterized requests. The UI should treat that outer `pending_proposal` object as the primary
+request-identity source for assignment workspaces:
+
+- `request_id`
+- `decision_type`
+- `actor_id`
+- `proposal_kind`
+
+Operation-specific adapters can still inspect nested proposal payloads for movement, placement,
+shooting, Stratagem, or charge details, but they should not mine nested payloads to recover missing
+request identity. A missing `request_id` remains a hard contract error.
 
 ### Movement
 
@@ -107,6 +125,42 @@ long as it preserves the pending request context:
 
 The engine remains responsible for rejecting invalid movement, coherency, terrain, budget,
 engagement, Fall Back, and mode-context violations.
+
+Unchanged models should be represented explicitly with start/end no-op paths in both the witness and
+`model_movements`; they should not be omitted from the aggregate movement answer.
+
+### Charge Move
+
+The core now exposes Charge Move as `submit_movement_proposal` with proposal kind `charge_move`.
+This is related to movement drafting but should not be treated as a Normal Move/Fall Back adapter.
+The request is emitted after `select_charging_unit` resolves a reachable charge roll and requires
+charge-specific context:
+
+- `proposal_request_id`
+- `proposal_kind: "charge_move"`
+- `unit_instance_id`
+- `movement_phase_action: "charge_move"`
+- `movement_mode: "charge"`
+- `charge_target_unit_instance_ids`
+- `PathWitness` when targets are selected
+
+The core also supports a deliberate no-move answer using empty target IDs with no witness. A
+concrete charge tool should therefore include target review and no-move selection, not just path
+lines. Until that tool exists, the generic workspace/HUD should show a visible unsupported
+`charge_move` state and must not submit a normal movement-shaped payload for it.
+
+### Fight Order
+
+The core now exposes fight ordering through finite requests:
+
+- `select_fight_activation`
+- `resolve_fight_interrupt`
+
+Options use `fight:<fight_type>:<unit_instance_id>`, where `fight_type` can be `normal` or
+`overrun`. Other finite options such as `eligible_to_fight_pass` and `decline_fight_interrupt` are
+engine-issued choices. The UI can submit these through the existing finite decision path, but future
+HUD work should display the engine-provided ordering band, interrupt/reaction context, and
+pass/decline options without inferring eligibility, pass distance, or interrupt availability.
 
 ### Shooting
 
@@ -331,15 +385,11 @@ Replace Phase 7's `unit_simple` movement draft behavior with a model-assignment 
    path transform to all models in the proposal unit.
 6. Each model path is stored independently.
 7. The aggregate payload preview includes all drafted model paths in `witness.model_paths`.
-8. The UI displays completeness hints for models in the proposal unit that have no path or only an
-   unchanged start pose.
+8. The UI displays completeness hints for models in the proposal unit that have no path yet, and it
+   serializes unchanged models as explicit start/end no-op paths once the answer is ready.
 9. The UI may show advisory budget/coherency/table-bound hints, but only the engine validates.
 10. Phase 10 movement submission should not proceed until this aggregate path model replaces the
     current all-model synchronized movement behavior.
-
-Open implementation detail: decide whether unchanged models must be explicitly represented with a
-start/end no-op path or omitted from `model_movements`. The `PathWitness` itself must remain
-compatible with the engine's current required witness shape.
 
 ## Shooting-Specific Future Use
 
@@ -439,6 +489,20 @@ requests and does not choose answers locally.
 - Generate `ShootingDeclarationProposal` payload previews.
 - Submit through the same parameterized path in the later shooting phase.
 
+### Preliminary - Charge Move Assignment Tool
+
+- Consume `charge_move` proposal requests after Charge roll resolution.
+- Present reachable target context and an explicit no-move choice.
+- Draft charge-specific per-model paths and target assignments without reusing Normal Move
+  assumptions.
+- Submit through the parameterized path only after a charge-specific payload adapter exists.
+
+### Preliminary - Fight Order UI
+
+- Improve finite-decision presentation for fight activation and fight interrupt requests.
+- Highlight engine-issued eligible units and ordering bands.
+- Keep pass/decline/interrupt consumption fully engine-owned.
+
 ### Preliminary - Stratagem Target-Binding Tool
 
 - Consume `submit_stratagem_target_proposal` only when the request exposes enough role/candidate
@@ -458,6 +522,8 @@ Add deterministic tests before live GUI validation:
 - movement subset drafting and aggregate payload shape;
 - shooting request fixture conversion into candidate refs;
 - unsupported parameterized request diagnostics;
+- charge move unsupported diagnostics until a concrete charge adapter exists;
+- fight activation/interrupt finite context summaries;
 - chained-resolution state refresh after accepted fake-client submissions.
 
 ## Manual Validation Checklist
@@ -484,7 +550,5 @@ After implementation, provide manual checks for:
   metadata for UI layer cycling, or do we need a projection enhancement?
 - Do Stratagem target-binding proposal requests need a standardized `target_schema` /
   `target_slots` payload before the UI can support additive multi-target binding?
-- For movement payloads, should unchanged models be represented as explicit no-op paths for witness
-  completeness, or omitted from `model_movements` while still present in `witness.model_paths`?
 - Should chain auto-follow be always enabled, or preference-controlled for users who want to inspect
   each accepted event before the next request takes focus?

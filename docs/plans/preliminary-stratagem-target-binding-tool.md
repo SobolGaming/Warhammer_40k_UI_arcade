@@ -16,13 +16,16 @@ parameterized Stratagem target proposal.
 
 ## Current Contract Assumptions
 
-Based on the local core checkout reviewed on 2026-06-04:
+Based on the local core checkout reviewed on 2026-06-04 and follow-up impact review on
+2026-06-05:
 
 - Fully bound `use_stratagem` finite options should remain finite options. The UI should display
   and submit the engine option; it should not decompose the target binding into editable local
   selections.
 - Parameterized target binding uses `submit_stratagem_target_proposal` with proposal kind
   `stratagem_target_binding`.
+- The projected `pending_proposal` object should provide the request identity metadata:
+  `request_id`, `decision_type`, `actor_id`, and `proposal_kind`.
 - Some Stratagem proposals may not yet expose enough structured role/candidate metadata for a rich
   GUI tool.
 - The UI must not infer target legality, target counts, CP spend, affected-unit IDs, or restriction

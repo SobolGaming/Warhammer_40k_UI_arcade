@@ -123,6 +123,20 @@ Implemented on 2026-06-05.
 - No new engine proposal kind, finite option ID, payload shape, or visibility behavior was added;
   the existing adapter contract already covers this UI behavior.
 
+## Post-Implementation Core Impact Review
+
+Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
+
+- The core now normalizes `pending_proposal` request metadata, including `request_id`, on projected
+  parameterized requests. That aligns with the UI boundary requirement that every parameterized
+  submission is anchored by an explicit request ID.
+- The core now exposes `charge_move` as a movement proposal family. This phase's implemented
+  movement submission path should remain limited to the Move Units proposal kinds it was built for:
+  Normal Move, Advance, and Fall Back. Charge Move needs a charge-specific adapter because it
+  carries target selection and no-move semantics.
+- Charge Move invalid diagnostics can reuse the same display pattern once the charge-specific
+  adapter exists, but retry compatibility must include charge-specific target and mode context.
+
 ## Automated verification
 
 Focused checks run during implementation:
