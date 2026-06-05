@@ -12,6 +12,8 @@ plans separate from engine/core documentation.
 - `ui-configuration.md` — Phase 4 notes for the shareable UI preferences framework.
 - `preferences/` — documented portable example profiles for the default, dense-debug, and
   keyboard-heavy configurations.
+- Crash diagnostic bundle usage is documented in the root `README.md` under
+  "Crash diagnostic bundles".
 
 The active documentation foundation is `plans/`, `README.md`, `architecture.md`,
 `ui-configuration.md`, and `preferences/`. Add detailed protocol notes, movement flow notes, and

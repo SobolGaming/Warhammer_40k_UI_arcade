@@ -50,10 +50,10 @@ class FakeArcadeRuntime:
 
 
 def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, Path | None, bool | None, str | None, Path | None]] = []
+    calls: list[tuple[str, Path | None, bool | None, str | None, Path | None, Path | None]] = []
 
     def fake_configure_logging() -> None:
-        calls.append(("configure_logging", None, None, None, None))
+        calls.append(("configure_logging", None, None, None, None, None))
 
     def fake_run_app(
         *,
@@ -61,7 +61,12 @@ def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) 
         live_core_smoke: bool = False,
         event_trace_level: str | None = None,
         event_trace_file: Path | None = None,
+        trace_writer: object | None = None,
+        crash_report_context: object | None = None,
+        crash_report_dir: Path | None = None,
     ) -> None:
+        assert trace_writer is not None
+        assert crash_report_context is not None
         calls.append(
             (
                 "run_app",
@@ -69,6 +74,7 @@ def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) 
                 live_core_smoke,
                 event_trace_level,
                 event_trace_file,
+                crash_report_dir,
             )
         )
 
@@ -84,17 +90,20 @@ def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) 
             "payload",
             "--event-trace-file",
             "/tmp/ui-trace.jsonl",
+            "--crash-report-dir",
+            "/tmp/ui-crashes",
         ]
     )
 
     assert calls == [
-        ("configure_logging", None, None, None, None),
+        ("configure_logging", None, None, None, None, None),
         (
             "run_app",
             Path("docs/preferences/keyboard-heavy.yaml"),
             True,
             "payload",
             Path("/tmp/ui-trace.jsonl"),
+            Path("/tmp/ui-crashes"),
         ),
     ]
 
@@ -129,6 +138,8 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
             "summary",
             "--event-trace-file",
             "/tmp/trace.jsonl",
+            "--crash-report-dir",
+            "/tmp/crashes",
         ]
     )
 
@@ -136,6 +147,7 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
     assert parsed.live_core_smoke is True
     assert parsed.event_trace_level == "summary"
     assert parsed.event_trace_file == Path("/tmp/trace.jsonl")
+    assert parsed.crash_report_dir == Path("/tmp/crashes")
 
 
 def test_phase7_debug_env_alias_enables_debug_fixture(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -19,6 +19,11 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiDecision,
     UiGameView,
 )
+from warhammer40k_arcade_ui.diagnostics.crash_report import (
+    CrashReportContext,
+    CrashReportError,
+    write_crash_report,
+)
 from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
     ForensicTraceWriter,
     NoOpTraceWriter,
@@ -97,6 +102,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         viewer_player_id: str = "player_1",
         event_cursor: int = 0,
         trace_writer: ForensicTraceWriter | None = None,
+        crash_report_context: CrashReportContext | None = None,
+        crash_report_dir: Path | None = None,
     ) -> None:
         resolved_config = config or AppConfig()
         super().__init__(
@@ -146,6 +153,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._right_mouse_drag_distance_px = 0.0
         self._fatal_exit_deadline_monotonic: float | None = None
         self._trace_writer = trace_writer or NoOpTraceWriter()
+        self._crash_report_context = crash_report_context or CrashReportContext(
+            runtime_mode="arcade_window",
+            trace_path=self._trace_writer.trace_path,
+        )
+        self._crash_report_dir = crash_report_dir
+        self._last_crash_report_path: Path | None = None
         self._trace_event(
             category="ui",
             event_name="ui.window_created",
@@ -201,6 +214,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         """Current local movement draft, if one is active."""
 
         return self._movement_draft
+
+    @property
+    def last_crash_report_path(self) -> Path | None:
+        """Most recent crash diagnostic report path, if one was written."""
+
+        return self._last_crash_report_path
 
     @property
     def event_cursor(self) -> int:
@@ -734,12 +753,14 @@ class ArcadeWarhammerWindow(arcade.Window):
         exc: FatalGameEngineException,
     ) -> FiniteDecisionUiState:
         logger.exception("Fatal game engine error during Arcade UI interaction.")
+        crash_report_path = self._write_fatal_crash_report(exc)
         self._trace_event(
             category="ui",
             event_name="ui.fatal_game_engine_error",
             summary={
                 "exception_type": type(exc).__name__,
                 "detail": _fatal_game_engine_error_detail(exc),
+                "crash_report_path": None if crash_report_path is None else str(crash_report_path),
             },
         )
         self._movement_draft = None
@@ -748,12 +769,22 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         self._fatal_exit_deadline_monotonic = time.monotonic() + FATAL_ENGINE_EXIT_DELAY_SECONDS
         return self._finite_state.with_fatal_game_engine_error(
-            message=(
-                "Fatal game engine error. "
-                f"Closing in {FATAL_ENGINE_EXIT_DELAY_SECONDS:.0f} seconds."
-            ),
+            message=_fatal_game_engine_error_message(crash_report_path),
             detail=_fatal_game_engine_error_detail(exc),
         )
+
+    def _write_fatal_crash_report(self, exc: FatalGameEngineException) -> Path | None:
+        try:
+            result = write_crash_report(
+                exception=exc,
+                context=self._current_crash_report_context(),
+                report_dir=self._crash_report_dir,
+            )
+        except CrashReportError:
+            logger.exception("Crash report capture failed.")
+            return None
+        self._last_crash_report_path = result.report_path
+        return result.report_path
 
     def _set_finite_state(self, state: FiniteDecisionUiState) -> None:
         self._finite_state = state
@@ -983,6 +1014,18 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_cursor=self._event_cursor,
         )
 
+    def _current_crash_report_context(self) -> CrashReportContext:
+        trace_context = self._trace_context()
+        return self._crash_report_context.with_updates(
+            preferences_source=self._preference_source_label,
+            viewer_player_id=self._viewer_player_id,
+            game_id=trace_context.game_id,
+            request_id=trace_context.request_id,
+            status_kind=trace_context.status_kind,
+            event_cursor=trace_context.event_cursor,
+            trace_path=self._trace_writer.trace_path,
+        )
+
 
 def _context_menu_action_at(
     *,
@@ -1024,6 +1067,13 @@ def _fatal_game_engine_error_detail(exc: FatalGameEngineException) -> str:
     if type(exc) is KeyError:
         return f"Missing engine projection field: {exc!s}."
     return f"{type(exc).__name__}: {exc}"
+
+
+def _fatal_game_engine_error_message(crash_report_path: Path | None) -> str:
+    base = f"Fatal game engine error. Closing in {FATAL_ENGINE_EXIT_DELAY_SECONDS:.0f} seconds."
+    if crash_report_path is None:
+        return base
+    return f"{base} Crash report: {crash_report_path}"
 
 
 def _hud_event_lines(

@@ -21,6 +21,7 @@ uv run warhammer40k-arcade-ui
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --event-trace summary --event-trace-file /tmp/ui-trace.jsonl
+uv run warhammer40k-arcade-ui --crash-report-dir /tmp/ui-crashes
 uv run pytest
 ```
 
@@ -74,6 +75,23 @@ reach `EVENT_TRACE_MAX_BYTES` bytes, defaulting to 5 MB.
 Trace rows are viewer-scoped and redact token-like fields such as `github_token`, `access_token`,
 `authorization`, `password`, and `api_key`. Attach the JSONL file to bug reports alongside the exact
 launch command and any render evidence artifacts.
+
+## Crash diagnostic bundles
+
+Fatal UI, parser, projection, or game-engine client errors write a compact crash bundle before the
+window exits. By default, bundles are written under
+`~/.local/state/warhammer40k-arcade-ui/crash-bundles/`. Use either runtime option to choose another
+directory:
+
+```bash
+WARHAMMER40K_ARCADE_UI_CRASH_REPORT_DIR=/tmp/ui-crashes uv run warhammer40k-arcade-ui
+uv run warhammer40k-arcade-ui --crash-report-dir /tmp/ui-crashes
+```
+
+Each bundle contains `crash-report.json` with the stack trace, UI version/commit metadata when
+available, runtime mode, preferences source, active request/status context, recent forensic trace
+tail when tracing is enabled, and references to recent render evidence artifacts. Token-like launch
+arguments are redacted. Attach the bundle and the launch command to issue reports.
 
 ## Purpose
 
@@ -156,6 +174,7 @@ warhammer40k-arcade-ui/
         protocol.py
       diagnostics/
         __init__.py
+        crash_report.py
         forensic_trace.py
       hud/
         __init__.py
