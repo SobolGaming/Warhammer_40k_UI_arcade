@@ -167,19 +167,19 @@ WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 uv run warhammer40k-arcade-ui \
   --ui-prefs docs/preferences/default.yaml
 ```
 
-- [ ] Select a model from the visible infantry unit.
-- [ ] Open the selected-unit actions menu with Space.
-- [ ] Choose the Normal Move finite option.
-- [ ] Confirm the finite choice with Enter.
-- [ ] Verify the HUD changes to a movement draft/proposal-required panel for the selected unit.
-- [ ] Left-click on the table to add movement waypoints.
-- [ ] Move the mouse and verify the endpoint preview follows the cursor.
-- [ ] Verify movement path, waypoint, final ghost base, and movement budget overlays render in world
+- [x] Select a model from the visible infantry unit.
+- [x] Open the selected-unit actions menu with Space.
+- [x] Choose the Normal Move finite option.
+- [x] Confirm the finite choice with Enter.
+- [x] Verify the HUD changes to a movement draft/proposal-required panel for the selected unit.
+- [x] Left-click on the table to add movement waypoints.
+- [x] Move the mouse and verify the endpoint preview follows the cursor.
+- [x] Verify movement path, waypoint, final ghost base, and movement budget overlays render in world
   space.
-- [ ] Pan or zoom the camera and verify the path remains anchored to the table.
-- [ ] Right-click without dragging to remove the last waypoint.
-- [ ] Press Enter and verify the panel reports the draft as ready; no authoritative model movement
+- [x] Pan or zoom the camera and verify the path remains anchored to the table.
+- [x] Right-click without dragging to remove the last waypoint.
+- [x] Press Enter and verify the panel reports the draft as ready; no authoritative model movement
   should occur in Phase 7.
-- [ ] Press Escape and verify the local draft clears.
-- [ ] Try a non-movement parameterized request, if available in a later fixture, and verify it is
+- [x] Press Escape and verify the local draft clears.
+- [x] Try a non-movement parameterized request, if available in a later fixture, and verify it is
   shown as unsupported by the movement draft tool rather than activating movement drafting.
