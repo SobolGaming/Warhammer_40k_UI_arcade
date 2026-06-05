@@ -87,9 +87,9 @@ Active command IDs:
 
 `toggle_overlay` bindings must include an `overlay_id`.
 
-The entity-selection commands are Phase 8 request-scoped selection commands. They are registered
-and preference-bindable in this build so profiles can be shared early; the movement assignment UI
-will wire them into live model-subset movement behavior in the next movement phases.
+The entity-selection commands are request-scoped selection commands. Phase 9 wires them into the
+movement assignment UI while a movement draft is active. They still configure only local UI
+behavior; they do not define legal movement, proposal kinds, or validation rules.
 
 ## Overlay IDs
 
