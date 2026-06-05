@@ -51,11 +51,13 @@ class FakeCoreClient:
     movement_submissions: list[SubmittedMovementPayload] = field(
         default_factory=_new_movement_submissions
     )
+    advance_call_count: int = 0
 
     def start_game(self, config: object) -> UiClientStatus:
         return self.status
 
     def advance_until_decision_or_terminal(self) -> UiClientStatus:
+        self.advance_call_count += 1
         return self.status
 
     def get_view(self, viewer_player_id: str) -> UiGameView:

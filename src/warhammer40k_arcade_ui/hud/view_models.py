@@ -83,6 +83,7 @@ class MovementDraftPanelView:
     remaining_budget_inches: float | None
     ready: bool
     hint_lines: tuple[str, ...]
+    diagnostic_lines: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,14 +225,21 @@ def build_movement_draft_panel(
     *,
     movement_draft: MovementDraft | None,
     pending_decision: UiDecision | None,
+    status_message: str | None = None,
+    diagnostics: tuple[UiInvalidDiagnostic, ...] = (),
 ) -> MovementDraftPanelView | None:
     """Build movement draft HUD content without treating previews as authoritative."""
 
     if movement_draft is not None:
-        return MovementDraftPanelView(
-            status_line="Movement draft ready"
+        status_line = (
+            status_message
+            if diagnostics and status_message is not None
+            else "Movement draft ready"
             if movement_draft.is_ready
-            else "Movement draft preview",
+            else "Movement draft preview"
+        )
+        return MovementDraftPanelView(
+            status_line=status_line,
             request_id=movement_draft.proposal_request_id,
             unit_id=movement_draft.selected_unit_id,
             proposal_kind=movement_draft.proposal_kind,
@@ -248,6 +256,7 @@ def build_movement_draft_panel(
             remaining_budget_inches=movement_draft.remaining_budget_inches,
             ready=movement_draft.is_ready,
             hint_lines=movement_draft.local_hint_lines,
+            diagnostic_lines=_diagnostic_lines(diagnostics),
         )
     unsupported_label = unsupported_parameterized_tool_label(pending_decision)
     if unsupported_label is not None:
@@ -269,12 +278,39 @@ def build_movement_draft_panel(
             remaining_budget_inches=None,
             ready=False,
             hint_lines=("Proposal visible; movement draft tool is not applicable.",),
+            diagnostic_lines=_diagnostic_lines(diagnostics),
         )
     movement_proposal = None if pending_decision is None else pending_decision.movement_proposal
     if movement_proposal is None:
-        return None
+        if not diagnostics:
+            return None
+        return MovementDraftPanelView(
+            status_line=status_message or "Movement submission diagnostic",
+            request_id=None if pending_decision is None else pending_decision.request_id,
+            unit_id=None,
+            proposal_kind=None,
+            movement_phase_action=None,
+            movement_mode=None,
+            fall_back_mode=None,
+            active_layer=None,
+            active_model_ids=(),
+            assigned_model_count=0,
+            total_model_count=0,
+            unchanged_model_count=0,
+            current_segment_inches=None,
+            total_path_inches=None,
+            remaining_budget_inches=None,
+            ready=False,
+            hint_lines=(),
+            diagnostic_lines=_diagnostic_lines(diagnostics),
+        )
+    status_line = (
+        status_message
+        if diagnostics and status_message is not None
+        else "Movement proposal pending"
+    )
     return MovementDraftPanelView(
-        status_line="Movement proposal pending",
+        status_line=status_line,
         request_id=movement_proposal.request_id,
         unit_id=movement_proposal.unit_instance_id,
         proposal_kind=movement_proposal.proposal_kind,
@@ -291,6 +327,7 @@ def build_movement_draft_panel(
         remaining_budget_inches=None,
         ready=False,
         hint_lines=("Requested unit is not selected.",),
+        diagnostic_lines=_diagnostic_lines(diagnostics),
     )
 
 
@@ -378,7 +415,12 @@ def _action_from_option(option: UiFiniteOption) -> ContextMenuAction:
 
 
 def _diagnostic_lines(diagnostics: tuple[UiInvalidDiagnostic, ...]) -> tuple[str, ...]:
-    return tuple(f"{diagnostic.violation_code}: {diagnostic.message}" for diagnostic in diagnostics)
+    return tuple(_diagnostic_line(diagnostic) for diagnostic in diagnostics)
+
+
+def _diagnostic_line(diagnostic: UiInvalidDiagnostic) -> str:
+    field = "" if diagnostic.field is None else f" [{diagnostic.field}]"
+    return f"{diagnostic.violation_code}{field}: {diagnostic.message}"
 
 
 def _disabled_reason(payload: JsonValue) -> str | None:

@@ -34,6 +34,12 @@ from warhammer40k_arcade_ui.state.movement_draft import (
     movement_proposal_for_selected_unit,
     unsupported_parameterized_tool_label,
 )
+from warhammer40k_arcade_ui.state.movement_submission import (
+    MovementProposalSubmission,
+    MovementSubmissionResult,
+    prepare_movement_submission,
+    submit_movement_draft,
+)
 from warhammer40k_arcade_ui.state.selection import (
     ModelHit,
     SelectionState,
@@ -58,6 +64,8 @@ __all__ = [
     "MovementDraft",
     "MovementDraftError",
     "MovementModelPath",
+    "MovementProposalSubmission",
+    "MovementSubmissionResult",
     "SelectionCardinality",
     "SelectionState",
     "build_entity_selection_profile",
@@ -70,9 +78,11 @@ __all__ = [
     "model_hits_at",
     "movement_entity_selection_profile",
     "movement_proposal_for_selected_unit",
+    "prepare_movement_submission",
     "selected_model",
     "selected_unit",
     "submit_finite_option",
+    "submit_movement_draft",
     "unit_center",
     "unit_entity_ref",
     "unsupported_entity_selection_profile",

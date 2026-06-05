@@ -1,6 +1,6 @@
 # Arcade UI Architecture Build Order
 
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 This document is the build-order roadmap for the Arcade UI client that drives the
 [`Warhammer_40k_AI`](https://github.com/SobolGaming/Warhammer_40k_AI) core engine.
@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-9 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-10 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -44,7 +44,7 @@ under `docs/plans/`.
 | 7 | Complete | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
 | 8 | Complete | Entity selection profile foundation | [phase-08](docs/plans/phase-08-entity-selection-profile-foundation.md) |
 | 9 | Complete | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
-| 10 | Planned | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
+| 10 | Complete | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
 | 11 | Planned | Generic assignment HUD | [phase-11](docs/plans/phase-11-generic-assignment-hud.md) |
 | 12 | Planned | Action visual summary overlays | [phase-12](docs/plans/phase-12-action-visual-summary-overlays.md) |
 | 13 | Planned | HUD ergonomics pass | [phase-13](docs/plans/phase-13-hud-ergonomics.md) |
@@ -70,10 +70,10 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-9 provide the runnable shell, core client boundary, inspectable render foundation,
+Phases 0-10 provide the runnable shell, core client boundary, inspectable render foundation,
 shareable UI preference framework, local selection/HUD state, finite decision submission, local
 movement path drafting, request-scoped entity-selection foundation, and per-model movement draft
-assignments:
+assignments with authoritative movement proposal submission:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
@@ -87,14 +87,16 @@ assignments:
   core engine adapter/session APIs.
 - `warhammer40k_arcade_ui.core_client.fake_client` — deterministic fake client for UI tests.
 - `warhammer40k_arcade_ui.render.view_models` — read-only battlefield render view models parsed from
-  deterministic fixture/projection payloads.
+  deterministic fixture/projection payloads, plus supported refresh from render-shaped payloads or
+  core battlefield runtime model-placement projections.
 - `warhammer40k_arcade_ui.render.camera` — world-space camera, pan/zoom, and screen/world
   coordinate conversion.
 - `warhammer40k_arcade_ui.render.primitives` — pure table, deployment-zone, objective, terrain,
   unit, model-base, movement assignment overlay, and HUD primitive generation.
 - `warhammer40k_arcade_ui.render.arcade_window` — `ArcadeWarhammerWindow` consuming render
   primitives for drawing, right/middle-drag panning, mouse-wheel zoom, mouse coordinate display,
-  finite hotkeys, context-menu actions, and local movement-assignment input.
+  finite hotkeys, context-menu actions, local movement-assignment input, and ready movement draft
+  submission.
 - `warhammer40k_arcade_ui.render.default_fixture` — deterministic launch-time battlefield fixture
   used until live projections are connected.
 - `warhammer40k_arcade_ui.preferences.schema` — typed preference dataclasses, versioned parsing,
@@ -116,13 +118,17 @@ assignments:
   state, request-scoped entity selection, model assignment groups, advisory measurement/hint
   generation, summary-friendly assignment rows, and JSON-safe payload preview construction that
   preserves engine-issued movement context and includes explicit no-op paths for unchanged models.
+- `warhammer40k_arcade_ui.state.movement_submission` — local movement submission orchestration:
+  deterministic result IDs, explicit request-ID preservation, UI-boundary stale/not-ready/unsupported
+  diagnostics, parameterized movement payload submission, accepted-state auto-follow, viewer-scoped
+  event refresh, and safe same-context retry handling.
 - `warhammer40k_arcade_ui.state.entity_selection` — request-scoped entity refs, layer registry,
   profile builders, alias rules, local add/subtract/toggle state transitions, request drift
   reconciliation, and visual-anchor diagnostics for movement and finite unit-selection profiles.
 - `warhammer40k_arcade_ui.input.commands` — preference-backed local hotkey matching.
 - `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, finite-decision
-  panel, movement draft panel, and debug inspector view models derived from projection data and
-  current pending requests.
+  panel, movement draft/diagnostic panel, and debug inspector view models derived from projection
+  data and current pending requests.
 
 Planned modules from later phases:
 
@@ -237,6 +243,14 @@ Phase 9's movement draft payload preview represents every model in the proposal 
 no drafted movement are encoded as explicit start/end no-op paths in both `witness.model_paths` and
 `model_movements`; the UI does not omit unchanged models or submit the proposal in this phase.
 
+Phase 10 submits that aggregate payload to the engine through the parameterized submission path. The
+UI keeps `request_id` explicit, rejects stale/not-ready/unsupported movement submissions before
+calling the client, displays authoritative `proposal_validation` diagnostics, and clears local draft
+state only after a non-invalid engine response and refreshed projection. Rule-invalid movement can
+reuse the last drafted paths only when the engine emits a fresh movement proposal request with the
+same unit, proposal kind, source movement action IDs, movement action, `movement_mode`, and Fall
+Back `fall_back_mode`.
+
 The Generic Assignment HUD is the visible review surface for that workspace. It should show what
 request is being answered, which entities are selected, which entities are assigned, which entities
 are still unassigned, whether the payload preview is ready, and whether messages are local preview
@@ -315,8 +329,10 @@ finite movement action selection
   overlays, source-to-target links, icon markers, request drift cleanup, and preference defaults.
 - Manual validation checklists for user-facing graphical workflows because live GUI interaction is
   only partially automatable.
-- Future movement submission tests for exact preservation of engine-issued movement mode and Fall
-  Back mode context through parameterized engine submission.
+- Movement submission tests for exact request/payload/result-ID preservation, stale request
+  rejection before client submission, unsupported parameterized request diagnostics, accepted draft
+  clearing and auto-follow, invalid diagnostic display, same-context retry retargeting, and render
+  projection model-position refresh.
 - Future static checks to keep direct engine imports isolated to `core_client`.
 
 ## Known deferred work

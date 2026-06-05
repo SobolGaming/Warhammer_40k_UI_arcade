@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Self, cast
 
 type Point = tuple[float, float]
@@ -273,11 +273,113 @@ class BattlefieldView:
             hud=HudView.from_payload(view["hud"]),
         )
 
+    def with_hud(
+        self,
+        *,
+        phase_label: str,
+        active_player_id: str,
+        pending_decision_summary: str,
+        event_log_lines: tuple[str, ...],
+    ) -> BattlefieldView:
+        """Return this battlefield view with refreshed HUD labels."""
+
+        return replace(
+            self,
+            hud=HudView(
+                phase_label=phase_label,
+                active_player_id=active_player_id,
+                pending_decision_summary=pending_decision_summary,
+                event_log_lines=event_log_lines,
+            ),
+        )
+
+    def with_model_positions(self, positions_by_model_id: dict[str, Point]) -> BattlefieldView:
+        """Return this view with matching model positions refreshed from a projection."""
+
+        if not positions_by_model_id:
+            return self
+        return replace(
+            self,
+            units=tuple(
+                replace(
+                    unit,
+                    models=tuple(
+                        replace(model, position=positions_by_model_id[model.model_id])
+                        if model.model_id in positions_by_model_id
+                        else model
+                        for model in unit.models
+                    ),
+                )
+                for unit in self.units
+            ),
+        )
+
+    def refreshed_from_projection(
+        self,
+        *,
+        battlefield_state: object,
+        phase_label: str,
+        active_player_id: str,
+        pending_decision_summary: str,
+        event_log_lines: tuple[str, ...],
+    ) -> BattlefieldView:
+        """Return a render view refreshed from supported UI/core projection shapes."""
+
+        updated_view = self
+        if _looks_like_render_battlefield_view_payload(battlefield_state):
+            updated_view = BattlefieldView.from_payload(battlefield_state)
+        elif _looks_like_core_battlefield_runtime_payload(battlefield_state):
+            updated_view = self.with_model_positions(
+                _model_positions_from_core_battlefield_payload(battlefield_state)
+            )
+        return updated_view.with_hud(
+            phase_label=phase_label,
+            active_player_id=active_player_id,
+            pending_decision_summary=pending_decision_summary,
+            event_log_lines=event_log_lines,
+        )
+
 
 def _required_object(name: str, payload: object) -> dict[str, object]:
     if type(payload) is not dict:
         raise RenderViewModelError(f"{name} must be an object.")
     return cast(dict[str, object], payload)
+
+
+def _looks_like_render_battlefield_view_payload(payload: object) -> bool:
+    return type(payload) is dict and "table" in payload and "units" in payload and "hud" in payload
+
+
+def _looks_like_core_battlefield_runtime_payload(payload: object) -> bool:
+    return type(payload) is dict and "placed_armies" in payload
+
+
+def _model_positions_from_core_battlefield_payload(payload: object) -> dict[str, Point]:
+    battlefield = _required_object("battlefield_state", payload)
+    positions: dict[str, Point] = {}
+    for placed_army in _required_list(battlefield, "placed_armies"):
+        placed_army_payload = _required_object("placed_army", placed_army)
+        for unit_placement in _required_list(placed_army_payload, "unit_placements"):
+            unit_placement_payload = _required_object("unit_placement", unit_placement)
+            for model_placement in _required_list(unit_placement_payload, "model_placements"):
+                model_placement_payload = _required_object("model_placement", model_placement)
+                model_id = _required_string(model_placement_payload, "model_instance_id")
+                positions[model_id] = _pose_position(
+                    _required_value(model_placement_payload, "pose")
+                )
+    return positions
+
+
+def _pose_position(payload: object) -> Point:
+    pose = _required_object("pose", payload)
+    position = _required_object("position", _required_value(pose, "position"))
+    point = (
+        _numeric_to_float("pose.position.x", _required_value(position, "x")),
+        _numeric_to_float("pose.position.y", _required_value(position, "y")),
+    )
+    _validate_finite_float("pose.position.x", point[0])
+    _validate_finite_float("pose.position.y", point[1])
+    return point
 
 
 def _required_list(payload: dict[str, object], key: str) -> list[object]:

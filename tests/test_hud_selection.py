@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
+from warhammer40k_arcade_ui.core_client.protocol import (
+    UiDecision,
+    UiFiniteOption,
+    UiInvalidDiagnostic,
+)
 from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
     build_debug_inspector,
@@ -206,6 +210,37 @@ def test_movement_draft_panel_reports_unsupported_parameterized_request() -> Non
     assert panel is not None
     assert panel.status_line == "Unsupported proposal tool: shooting_declaration"
     assert panel.proposal_kind == "shooting_declaration"
+
+
+def test_movement_draft_panel_surfaces_authoritative_diagnostics() -> None:
+    view = default_battlefield_view()
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=_movement_proposal_decision(),
+    )
+    assert draft is not None
+
+    panel = build_movement_draft_panel(
+        movement_draft=draft,
+        pending_decision=_movement_proposal_decision(),
+        status_message="Normal Move path is not legal.",
+        diagnostics=(
+            UiInvalidDiagnostic(
+                violation_code="movement_budget_exceeded",
+                message="Normal Move path exceeds the movement budget.",
+                field="witness",
+                proposal_request_id="decision-request-000005",
+                proposal_kind="normal_move",
+            ),
+        ),
+    )
+
+    assert panel is not None
+    assert panel.status_line == "Normal Move path is not legal."
+    assert panel.diagnostic_lines == (
+        "movement_budget_exceeded [witness]: Normal Move path exceeds the movement budget.",
+    )
 
 
 def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> None:

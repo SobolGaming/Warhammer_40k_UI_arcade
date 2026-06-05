@@ -416,11 +416,17 @@ class MovementDraft:
     def is_for(self, *, selection: SelectionState, pending_decision: UiDecision | None) -> bool:
         """Return whether this draft still matches the selected unit and pending request."""
 
+        if selection.selected_unit_id != self.selected_unit_id:
+            return False
+        return self.matches_proposal_context(pending_decision=pending_decision)
+
+    def matches_proposal_context(self, *, pending_decision: UiDecision | None) -> bool:
+        """Return whether this draft matches the current movement proposal context."""
+
         proposal = None if pending_decision is None else pending_decision.movement_proposal
         return (
             proposal is not None
             and proposal.decision_type == MOVEMENT_PROPOSAL_DECISION_TYPE
-            and selection.selected_unit_id == self.selected_unit_id
             and proposal.unit_instance_id == self.selected_unit_id
             and proposal.request_id == self.proposal_request_id
             and proposal.proposal_kind == self.proposal_kind
@@ -428,6 +434,42 @@ class MovementDraft:
             and _context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY) == self.movement_mode
             and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
         )
+
+    def can_retry_for(self, *, pending_decision: UiDecision | None) -> bool:
+        """Return whether a fresh movement request can safely reuse this draft's paths."""
+
+        proposal = None if pending_decision is None else pending_decision.movement_proposal
+        return (
+            proposal is not None
+            and proposal.decision_type == MOVEMENT_PROPOSAL_DECISION_TYPE
+            and proposal.unit_instance_id == self.selected_unit_id
+            and proposal.proposal_kind == self.proposal_kind
+            and proposal.source_decision_request_id == self.source_decision_request_id
+            and proposal.source_decision_result_id == self.source_decision_result_id
+            and proposal.movement_phase_action == self.movement_phase_action
+            and _context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY) == self.movement_mode
+            and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
+        )
+
+    def with_retry_request(
+        self,
+        *,
+        view: BattlefieldView,
+        pending_decision: UiDecision,
+    ) -> MovementDraft:
+        """Retarget drafted paths to a fresh same-context retry proposal request."""
+
+        if not self.can_retry_for(pending_decision=pending_decision):
+            raise MovementDraftError("Retry movement draft must match the new proposal context.")
+        proposal = pending_decision.movement_proposal
+        if proposal is None:
+            raise MovementDraftError("Retry movement draft requires a movement proposal.")
+        return replace(
+            self,
+            proposal_request_id=proposal.request_id,
+            ready_payload=None,
+            cursor_preview_point=None,
+        ).with_recomputed_hints(view=view)
 
     def replace_model_selection(
         self,

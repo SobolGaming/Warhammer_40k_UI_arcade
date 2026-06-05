@@ -585,6 +585,7 @@ def _movement_draft_panel_primitives(
     if panel.ready:
         lines.append("Payload preview: ready")
     lines.extend(panel.hint_lines)
+    lines.extend(f"Invalid: {line}" for line in panel.diagnostic_lines)
     return tuple(
         TextPrimitive(
             layer="movement_draft_panel",
