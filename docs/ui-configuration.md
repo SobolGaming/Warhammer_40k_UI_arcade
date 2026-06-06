@@ -25,6 +25,7 @@ Available built-in profiles:
 - `default`
 - `dense-debug`
 - `keyboard-heavy`
+- `command-bench`
 
 ## Use A Profile
 
@@ -33,6 +34,7 @@ Launch with a specific JSON or YAML profile:
 ```bash
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
+uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml
 ```
 
 If `--ui-prefs` is omitted, the app looks for the platform default preferences file:
@@ -73,6 +75,11 @@ requests, proposal kinds, validation behavior, or visibility rules.
 
 Assignment review settings:
 
+- `layout_preset`: `compass_ring` or `command_bench`.
+- `zones`: known presentation-only HUD zone settings. Each zone supports:
+  - `visible`: whether to show the zone socket;
+  - `size_px`: preferred size in pixels;
+  - `collapsed`: show the zone as a small socket for later expansion.
 - `show_assignment_hud`: show or hide the request-scoped Assignment Review panel.
 - `assignment_hud_mode`: `compact` or `detailed`.
 - `show_assignment_warning_markers`: show color-independent warning markers for advisory hints and
@@ -84,6 +91,16 @@ Example:
 
 ```yaml
 hud:
+  layout_preset: compass_ring
+  zones:
+    top_ribbon:
+      visible: true
+      size_px: 68
+      collapsed: false
+    left_rail:
+      visible: true
+      size_px: 224
+      collapsed: false
   show_phase: true
   show_active_player: true
   show_event_log: true
@@ -158,8 +175,9 @@ the current build.
 ## Diagnostics
 
 The loader reports typed diagnostics for unsupported schema versions, unknown top-level or nested
-fields, unknown command IDs, unknown overlay IDs, duplicate hotkey bindings, invalid keys, invalid
-modifiers, and recognized-but-inactive planned settings.
+fields, unknown command IDs, unknown overlay IDs, unknown HUD layout presets, unknown HUD zone IDs,
+invalid HUD zone sizes, duplicate hotkey bindings, invalid keys, invalid modifiers, and
+recognized-but-inactive planned settings.
 
 Unknown settings that a tool needs to preserve should live under `extensions` so the base UI can
 round-trip them as JSON-safe values without treating them as first-party behavior.

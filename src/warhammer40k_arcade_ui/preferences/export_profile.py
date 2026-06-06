@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from warhammer40k_arcade_ui.preferences.defaults import (
+    command_bench_preferences,
     default_preferences,
     dense_debug_preferences,
     keyboard_heavy_preferences,
@@ -21,7 +22,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Export Warhammer 40k Arcade UI preferences.")
     parser.add_argument(
         "--profile",
-        choices=("default", "dense-debug", "keyboard-heavy"),
+        choices=("default", "dense-debug", "keyboard-heavy", "command-bench"),
         default="default",
     )
     parser.add_argument("--format", choices=("json", "yaml"), default="yaml")
@@ -46,6 +47,8 @@ def _profile_from_name(name: str) -> UiPreferences:
         return dense_debug_preferences()
     if name == "keyboard-heavy":
         return keyboard_heavy_preferences()
+    if name == "command-bench":
+        return command_bench_preferences()
     raise ValueError("unknown profile")
 
 

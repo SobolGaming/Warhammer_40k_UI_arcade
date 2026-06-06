@@ -63,6 +63,36 @@ selection:
   cycle_overlapping_bases: true
   show_debug_inspector: false
 hud:
+  layout_preset: compass_ring
+  zones:
+    top_ribbon:
+      visible: true
+      size_px: 68
+      collapsed: false
+    left_rail:
+      visible: true
+      size_px: 224
+      collapsed: false
+    right_inspector:
+      visible: true
+      size_px: 276
+      collapsed: false
+    bottom_workbench:
+      visible: true
+      size_px: 156
+      collapsed: false
+    left_player_bench:
+      visible: true
+      size_px: 240
+      collapsed: false
+    right_opponent_bench:
+      visible: true
+      size_px: 240
+      collapsed: false
+    bottom_command_bench:
+      visible: true
+      size_px: 220
+      collapsed: false
   show_phase: true
   show_active_player: true
   show_event_log: true

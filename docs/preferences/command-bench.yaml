@@ -1,18 +1,13 @@
 schema_version: '1'
-profile_name: dense-debug
+profile_name: command-bench
 overlays:
   default_on_model_selection:
   - selected_model
-  - coherency
-  - engagement_range
   default_on_unit_selection:
   - selected_unit
-  - objective_control_context
-  - cover
   default_on_movement_draft:
   - movement_path_draft
   - movement_budget
-  - coherency
   enabled_by_default:
   - debug_coordinates
 hotkeys:
@@ -66,9 +61,9 @@ hotkeys:
 selection:
   default_mouse_button: left
   cycle_overlapping_bases: true
-  show_debug_inspector: true
+  show_debug_inspector: false
 hud:
-  layout_preset: compass_ring
+  layout_preset: command_bench
   zones:
     top_ribbon:
       visible: true
@@ -105,13 +100,11 @@ hud:
   show_selected_model_panel: true
   show_selected_unit_panel: true
   show_assignment_hud: true
-  assignment_hud_mode: detailed
+  assignment_hud_mode: compact
   show_assignment_warning_markers: true
   show_chain_breadcrumbs: true
-  text_scale: 0.9
-  high_contrast: true
+  text_scale: 1.0
+  high_contrast: false
 experimental:
-  planned_settings:
-    hud.minimap_enabled: true
-    render.cached_text_objects: true
+  planned_settings: {}
 extensions: {}

@@ -7,6 +7,7 @@ import time
 from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
+from typing import Any
 
 import arcade
 
@@ -29,6 +30,7 @@ from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
     NoOpTraceWriter,
     TraceContext,
 )
+from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, build_hud_layout
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
@@ -153,6 +155,10 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._right_mouse_press_screen: tuple[float, float] | None = None
         self._right_mouse_drag_distance_px = 0.0
         self._fatal_exit_deadline_monotonic: float | None = None
+        self._hud_zone_manager: Any | None = _create_hud_zone_manager(self)
+        if self._hud_zone_manager is not None:
+            self._hud_zone_manager.enable()
+        self._hud_zone_layout_signature: tuple[object, ...] | None = None
         self._trace_writer = trace_writer or NoOpTraceWriter()
         self._crash_report_context = crash_report_context or CrashReportContext(
             runtime_mode="arcade_window",
@@ -311,6 +317,13 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_cursor=self._event_cursor,
             preference_source_label=self._preference_source_label,
         )
+        hud_layout = build_hud_layout(
+            preferences=self._preferences,
+            viewport_width_px=self.width,
+            viewport_height_px=self.height,
+        )
+        self._sync_hud_zone_widgets(hud_layout)
+        hud_zone_widgets_available = self._hud_zone_manager is not None
         world_primitives = build_world_primitives(
             self._battlefield_view,
             self._selection_state,
@@ -327,9 +340,13 @@ class ArcadeWarhammerWindow(arcade.Window):
             movement_draft_panel=movement_draft_panel,
             assignment_hud_panel=assignment_hud_panel,
             debug_inspector=debug_inspector,
+            hud_layout=hud_layout,
+            include_layout_skeleton=not hud_zone_widgets_available,
         )
         _draw_world_primitives(world_primitives, self._camera)
-        _draw_text_primitives(hud_primitives, self._camera)
+        if self._hud_zone_manager is not None:
+            self._hud_zone_manager.draw()
+        _draw_world_primitives(hud_primitives, self._camera)
 
     def on_resize(self, width: int, height: int) -> None:
         """Keep camera viewport dimensions aligned with the Arcade window."""
@@ -1037,6 +1054,20 @@ class ArcadeWarhammerWindow(arcade.Window):
             trace_path=self._trace_writer.trace_path,
         )
 
+    def _sync_hud_zone_widgets(self, hud_layout: HudLayoutView) -> None:
+        if self._hud_zone_manager is None:
+            return
+        from warhammer40k_arcade_ui.hud.widgets import (
+            install_hud_zone_widgets,
+            layout_signature,
+        )
+
+        signature = layout_signature(hud_layout)
+        if signature == self._hud_zone_layout_signature:
+            return
+        install_hud_zone_widgets(manager=self._hud_zone_manager, layout=hud_layout)
+        self._hud_zone_layout_signature = signature
+
 
 def _context_menu_action_at(
     *,
@@ -1058,6 +1089,15 @@ def _context_menu_action_at(
     if action_index < 0 or action_index >= len(menu.actions):
         return None
     return menu.actions[action_index]
+
+
+def _create_hud_zone_manager(window: arcade.Window) -> Any | None:
+    try:
+        from arcade.gui import UIManager
+    except AttributeError:
+        return None
+
+    return UIManager(window=window)
 
 
 def _pending_decision_summary(pending_decision: UiDecision | None) -> str:
@@ -1120,14 +1160,6 @@ def _draw_world_primitives(
             _draw_polyline_primitive(primitive, camera)
         elif type(primitive) is TextPrimitive:
             _draw_text_primitive(primitive, camera)
-
-
-def _draw_text_primitives(
-    primitives: tuple[TextPrimitive, ...],
-    camera: WorldCamera,
-) -> None:
-    for primitive in primitives:
-        _draw_text_primitive(primitive, camera)
 
 
 def _draw_polygon_primitive(primitive: PolygonPrimitive, camera: WorldCamera) -> None:

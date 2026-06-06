@@ -16,6 +16,7 @@ from warhammer40k_arcade_ui.preferences import (
     parse_preferences_payload,
 )
 from warhammer40k_arcade_ui.preferences.defaults import (
+    command_bench_preferences,
     dense_debug_preferences,
     keyboard_heavy_preferences,
 )
@@ -166,6 +167,8 @@ def test_assignment_hud_preferences_round_trip() -> None:
     result = parse_preferences_payload(default_preferences().to_payload())
 
     assert result.preferences is not None
+    assert result.preferences.hud.layout_preset == "compass_ring"
+    assert result.preferences.hud.zones[0].zone_id == "top_ribbon"
     assert result.preferences.hud.show_assignment_hud is True
     assert result.preferences.hud.assignment_hud_mode == "compact"
     assert result.preferences.hud.show_assignment_warning_markers is True
@@ -182,6 +185,26 @@ def test_invalid_assignment_hud_mode_is_diagnostic() -> None:
 
     assert result.preferences is not None
     assert "invalid_assignment_hud_mode" in _codes(result.diagnostics)
+
+
+def test_invalid_hud_layout_preferences_are_diagnostic() -> None:
+    payload = default_preferences().to_payload()
+    hud = payload["hud"]
+    assert type(hud) is dict
+    hud["layout_preset"] = "wide_open"
+    zones = hud["zones"]
+    assert type(zones) is dict
+    zones["unknown_zone"] = {"visible": True, "size_px": 200, "collapsed": False}
+    zones["left_rail"] = {"visible": True, "size_px": 1, "collapsed": False}
+
+    result = parse_preferences_payload(payload)
+
+    assert result.preferences is not None
+    assert {
+        "invalid_hud_layout_preset",
+        "unknown_hud_zone_id",
+        "invalid_hud_zone_size",
+    }.issubset(_codes(result.diagnostics))
 
 
 def test_unknown_top_level_key_is_diagnostic_but_extensions_are_preserved() -> None:
@@ -214,6 +237,7 @@ def test_documented_example_profiles_load() -> None:
         "default": default_preferences().to_payload(),
         "dense-debug": dense_debug_preferences().to_payload(),
         "keyboard-heavy": keyboard_heavy_preferences().to_payload(),
+        "command-bench": command_bench_preferences().to_payload(),
     }
 
     loaded_names: set[str] = set()
@@ -223,7 +247,7 @@ def test_documented_example_profiles_load() -> None:
         assert result.preferences.to_payload() == expected_payloads[result.preferences.profile_name]
         loaded_names.add(result.preferences.profile_name)
 
-    assert loaded_names == {"default", "dense-debug", "keyboard-heavy"}
+    assert loaded_names == {"default", "dense-debug", "keyboard-heavy", "command-bench"}
 
 
 def test_dense_debug_profile_includes_planned_setting_diagnostics() -> None:
