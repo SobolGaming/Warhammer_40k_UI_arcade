@@ -165,6 +165,8 @@ def build_hud_primitives(
     primitives: list[RenderPrimitive] = []
     if hud_layout is not None and include_layout_skeleton:
         primitives.extend(_hud_layout_primitives(hud_layout))
+    elif hud_layout is not None:
+        primitives.extend(_hud_layout_label_primitives(hud_layout))
     top_origin, top_max_lines = _top_status_placement(
         hud_layout=hud_layout,
         viewport_height_px=viewport_height_px,
@@ -481,6 +483,13 @@ def _hud_layout_primitives(layout: HudLayoutView) -> tuple[RenderPrimitive, ...]
                 coordinate_space="screen",
             )
         )
+    primitives.extend(_hud_layout_label_primitives(layout))
+    return tuple(primitives)
+
+
+def _hud_layout_label_primitives(layout: HudLayoutView) -> tuple[TextPrimitive, ...]:
+    primitives: list[TextPrimitive] = []
+    for region in layout.regions:
         state = "collapsed" if region.collapsed else "open"
         primitives.append(
             TextPrimitive(

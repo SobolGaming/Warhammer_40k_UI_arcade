@@ -248,6 +248,35 @@ def test_hud_layout_primitives_include_configurable_zone_skeleton() -> None:
     assert all(primitive.coordinate_space == "screen" for primitive in primitives)
 
 
+def test_hud_layout_labels_remain_primitives_when_widget_shell_is_active() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    layout = build_hud_layout(
+        preferences=preferences,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+    )
+
+    primitives = build_hud_primitives(
+        view=view,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+        mouse_world_position=None,
+        hud_layout=layout,
+        include_layout_skeleton=False,
+    )
+
+    polygon_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is PolygonPrimitive
+    ]
+    texts = _text_lines(primitives)
+    assert "hud_zone_left_rail" not in polygon_layers
+    assert "hud_zone_right_inspector" not in polygon_layers
+    assert "Army rolodex rail [open]" in texts
+    assert "Inspector panel [open]" in texts
+    assert "Action workbench [open]" in texts
+
+
 def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> None:
     payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     view = BattlefieldView.from_payload(payload)
