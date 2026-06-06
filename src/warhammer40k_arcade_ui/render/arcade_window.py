@@ -35,6 +35,7 @@ from warhammer40k_arcade_ui.hud.action_summary import (
     ActionSummaryIntensity,
     build_action_visual_summary,
 )
+from warhammer40k_arcade_ui.hud.ergonomics import build_hud_ergonomics_view
 from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, build_hud_layout
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
@@ -53,6 +54,7 @@ from warhammer40k_arcade_ui.preferences.io import PreferencesLoadResult, load_pr
 from warhammer40k_arcade_ui.preferences.schema import UiPreferences
 from warhammer40k_arcade_ui.render.camera import WorldCamera, WorldPoint
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
+from warhammer40k_arcade_ui.render.hud_ergonomics import build_ergonomic_hud_primitives
 from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
     PolygonPrimitive,
@@ -350,6 +352,15 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         if hud_zone_widgets_available:
             self._sync_hud_zone_widgets(hud_layout)
+        ergonomic_hud = build_hud_ergonomics_view(
+            view=self._battlefield_view,
+            preferences=self._preferences,
+            unit_panel=unit_panel,
+            finite_decision_panel=finite_decision_panel,
+            movement_draft_panel=movement_draft_panel,
+            assignment_hud_panel=assignment_hud_panel,
+            event_log_lines=self._finite_state.event_log_lines,
+        )
         world_primitives = build_world_primitives(
             self._battlefield_view,
             self._selection_state,
@@ -361,19 +372,28 @@ class ArcadeWarhammerWindow(arcade.Window):
             viewport_width_px=self.width,
             viewport_height_px=self.height,
             mouse_world_position=self._mouse_world_position,
-            unit_panel=unit_panel,
+            unit_panel=None,
             context_menu=context_menu,
-            finite_decision_panel=finite_decision_panel,
-            movement_draft_panel=movement_draft_panel,
-            assignment_hud_panel=assignment_hud_panel,
+            finite_decision_panel=None,
+            movement_draft_panel=None,
+            assignment_hud_panel=None,
             debug_inspector=debug_inspector,
             hud_layout=hud_layout,
             include_layout_skeleton=not hud_zone_widgets_available,
+            include_layout_labels=False,
+            include_status_text=False,
+        )
+        ergonomic_primitives = build_ergonomic_hud_primitives(
+            ergonomics=ergonomic_hud,
+            hud_layout=hud_layout,
+            viewport_width_px=self.width,
+            viewport_height_px=self.height,
         )
         _draw_world_primitives(world_primitives, self._camera)
+        _draw_world_primitives(hud_primitives, self._camera)
         if hud_zone_widgets_available and self._hud_zone_manager is not None:
             self._hud_zone_manager.draw()
-        _draw_world_primitives(hud_primitives, self._camera)
+        _draw_world_primitives(ergonomic_primitives, self._camera)
 
     def on_resize(self, width: int, height: int) -> None:
         """Keep camera viewport dimensions aligned with the Arcade window."""

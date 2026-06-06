@@ -159,13 +159,15 @@ def build_hud_primitives(
     debug_inspector: DebugInspectorView | None = None,
     hud_layout: HudLayoutView | None = None,
     include_layout_skeleton: bool = True,
+    include_layout_labels: bool = True,
+    include_status_text: bool = True,
 ) -> tuple[RenderPrimitive, ...]:
     """Build screen-space HUD primitives that remain fixed during camera movement."""
 
     primitives: list[RenderPrimitive] = []
     if hud_layout is not None and include_layout_skeleton:
         primitives.extend(_hud_layout_primitives(hud_layout))
-    elif hud_layout is not None:
+    elif hud_layout is not None and include_layout_labels:
         primitives.extend(_hud_layout_label_primitives(hud_layout))
     top_origin, top_max_lines = _top_status_placement(
         hud_layout=hud_layout,
@@ -182,24 +184,25 @@ def build_hud_primitives(
         ),
         max_lines=top_max_lines,
     )
-    primitives.extend(
-        TextPrimitive(
-            layer="hud",
-            text=line,
-            position=(top_origin[0], top_origin[1] - (index * 18.0)),
-            color=HUD_TEXT,
-            font_size=13.0,
-            coordinate_space="screen",
+    if include_status_text:
+        primitives.extend(
+            TextPrimitive(
+                layer="hud",
+                text=line,
+                position=(top_origin[0], top_origin[1] - (index * 18.0)),
+                color=HUD_TEXT,
+                font_size=13.0,
+                coordinate_space="screen",
+            )
+            for index, line in enumerate(lines)
         )
-        for index, line in enumerate(lines)
-    )
     legacy_lines = (
         f"Phase: {view.hud.phase_label}",
         f"Active: {view.hud.active_player_id}",
         f"Pending: {view.hud.pending_decision_summary}",
         f"Events: {event_text}",
     )
-    if hud_layout is None:
+    if hud_layout is None and include_status_text:
         primitives = [
             TextPrimitive(
                 layer="hud",

@@ -62,7 +62,7 @@ def test_headless_capture_renders_fake_fixture_world_and_hud(
     assert_color_present(
         capture,
         color=HUD_TEXT,
-        min_pixels=700,
+        min_pixels=150,
         artifact_name="fake-fixture-hud-text",
         artifact_dir=tmp_path,
         region=(0, driver.window.height - 180, 560, 180),
