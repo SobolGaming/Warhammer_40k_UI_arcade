@@ -58,6 +58,13 @@ hotkeys:
   key: d
   modifiers:
   - ctrl
+- command_id: toggle_action_summary
+  key: v
+  modifiers: []
+- command_id: review_action_summary
+  key: v
+  modifiers:
+  - shift
 selection:
   default_mouse_button: left
   cycle_overlapping_bases: true
@@ -102,6 +109,8 @@ hud:
   show_assignment_hud: true
   assignment_hud_mode: compact
   show_assignment_warning_markers: true
+  action_summary_default: dim
+  action_summary_max_labels: 6
   show_chain_breadcrumbs: true
   text_scale: 1.0
   high_contrast: false

@@ -109,6 +109,16 @@ def command_registry() -> dict[str, CommandDefinition]:
             label="Toggle debug inspector",
             status="active",
         ),
+        "toggle_action_summary": CommandDefinition(
+            command_id="toggle_action_summary",
+            label="Toggle current action visual summary",
+            status="active",
+        ),
+        "review_action_summary": CommandDefinition(
+            command_id="review_action_summary",
+            label="Toggle bright review mode for the current action summary",
+            status="active",
+        ),
     }
 
 

@@ -23,6 +23,7 @@ from warhammer40k_arcade_ui.preferences.registries import (
     planned_setting_registry,
 )
 from warhammer40k_arcade_ui.preferences.schema import (
+    ActionSummaryDefault,
     ExperimentalPreferenceFlags,
     HotkeyBinding,
     HudPreferences,
@@ -35,6 +36,7 @@ from warhammer40k_arcade_ui.preferences.schema import (
 )
 
 __all__ = [
+    "ActionSummaryDefault",
     "CommandDefinition",
     "ExperimentalPreferenceFlags",
     "HotkeyBinding",

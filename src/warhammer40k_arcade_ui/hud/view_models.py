@@ -11,6 +11,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiFiniteOption,
     UiInvalidDiagnostic,
 )
+from warhammer40k_arcade_ui.hud.action_summary import ActionSummaryIntensity
 from warhammer40k_arcade_ui.preferences.schema import AssignmentHudMode, UiPreferences
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
@@ -166,6 +167,7 @@ class DebugInspectorView:
     selected_unit_id: str | None
     proposal_kind: str | None
     cursor_position: WorldPoint | None
+    action_summary_intensity: ActionSummaryIntensity
     event_cursor: int
     preference_source_label: str
 
@@ -183,6 +185,7 @@ class DebugInspectorView:
             f"Selected unit: {self.selected_unit_id or 'none'}",
             f"Proposal kind: {self.proposal_kind or 'none'}",
             f"Cursor: {cursor}",
+            f"Action summary: {self.action_summary_intensity}",
             f"Event cursor: {self.event_cursor}",
             f"UI prefs: {self.preference_source_label}",
         )
@@ -459,6 +462,7 @@ def build_debug_inspector(
     selection: SelectionState,
     pending_decision: UiDecision | None,
     cursor_position: WorldPoint | None,
+    action_summary_intensity: ActionSummaryIntensity = "hidden",
     event_cursor: int,
     preference_source_label: str,
 ) -> DebugInspectorView | None:
@@ -472,6 +476,7 @@ def build_debug_inspector(
         selected_unit_id=selection.selected_unit_id,
         proposal_kind=None if proposal is None else proposal.proposal_kind,
         cursor_position=cursor_position,
+        action_summary_intensity=action_summary_intensity,
         event_cursor=event_cursor,
         preference_source_label=preference_source_label,
     )

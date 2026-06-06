@@ -6,6 +6,10 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
+from warhammer40k_arcade_ui.hud.action_summary import (
+    ActionVisualSummary,
+    ActionVisualSummaryGroup,
+)
 from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, HudRegionView, ScreenRect
 from warhammer40k_arcade_ui.hud.view_models import (
     AssignmentHudGroupView,
@@ -48,6 +52,12 @@ MOVEMENT_GHOST_FILL: Color = (102, 220, 180, 54)
 MOVEMENT_ACTIVE: Color = (132, 232, 255, 255)
 MOVEMENT_ASSIGNED: Color = (122, 214, 156, 210)
 MOVEMENT_UNASSIGNED: Color = (184, 190, 186, 135)
+ACTION_SUMMARY_DIM: Color = (138, 210, 164, 105)
+ACTION_SUMMARY_REVIEW: Color = (136, 245, 172, 238)
+ACTION_SUMMARY_WARNING_DIM: Color = (255, 178, 92, 125)
+ACTION_SUMMARY_WARNING_REVIEW: Color = (255, 191, 96, 245)
+ACTION_SUMMARY_GHOST_DIM: Color = (138, 210, 164, 34)
+ACTION_SUMMARY_GHOST_REVIEW: Color = (136, 245, 172, 74)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +114,7 @@ def build_world_primitives(
     view: BattlefieldView,
     selection_state: SelectionState | None = None,
     movement_draft: MovementDraft | None = None,
+    action_summary: ActionVisualSummary | None = None,
 ) -> tuple[RenderPrimitive, ...]:
     """Build deterministic world-space primitives from a battlefield view model."""
 
@@ -125,6 +136,8 @@ def build_world_primitives(
     primitives.extend(_objective_primitives(view))
     primitives.extend(_terrain_primitives(view))
     primitives.extend(_unit_primitives(view))
+    if action_summary is not None:
+        primitives.extend(_action_visual_summary_primitives(action_summary))
     if selection_state is not None:
         primitives.extend(_selection_primitives(view, selection_state))
         if movement_draft is not None:
@@ -715,6 +728,80 @@ def _movement_draft_primitives(
                 )
             )
     return tuple(primitives)
+
+
+def _action_visual_summary_primitives(
+    summary: ActionVisualSummary,
+) -> tuple[RenderPrimitive, ...]:
+    primitives: list[RenderPrimitive] = []
+    if summary.operation_kind == "unsupported":
+        return ()
+    label_count = 0
+    for group in summary.groups:
+        color = _action_summary_color(summary, group)
+        line_width = 1.1 if summary.intensity == "dim" else 2.2
+        if group.has_path:
+            primitives.append(
+                PolylinePrimitive(
+                    layer=f"action_summary_{summary.intensity}_path",
+                    points=group.path_points,
+                    color=color,
+                    line_width=line_width,
+                )
+            )
+        if group.ghost_center is not None and group.ghost_radius is not None:
+            primitives.append(
+                CirclePrimitive(
+                    layer=f"action_summary_{summary.intensity}_ghost_base",
+                    center=group.ghost_center,
+                    radius=group.ghost_radius,
+                    fill_color=_action_summary_ghost_fill(summary, group),
+                    outline_color=color,
+                    line_width=0.9 if summary.intensity == "dim" else 1.6,
+                )
+            )
+        if (
+            summary.intensity == "review"
+            and group.ghost_center is not None
+            and label_count < summary.max_labels
+        ):
+            primitives.append(
+                TextPrimitive(
+                    layer="action_summary_review_label",
+                    text=group.label,
+                    position=(group.ghost_center[0], group.ghost_center[1] + 0.72),
+                    color=color,
+                    font_size=8.0,
+                    coordinate_space="world",
+                    anchor_x="center",
+                    anchor_y="center",
+                )
+            )
+            label_count += 1
+    return tuple(primitives)
+
+
+def _action_summary_color(
+    summary: ActionVisualSummary,
+    group: ActionVisualSummaryGroup,
+) -> Color:
+    if group.color_role == "warning" or group.state in {"warning", "invalid"}:
+        return (
+            ACTION_SUMMARY_WARNING_DIM
+            if summary.intensity == "dim"
+            else ACTION_SUMMARY_WARNING_REVIEW
+        )
+    return ACTION_SUMMARY_DIM if summary.intensity == "dim" else ACTION_SUMMARY_REVIEW
+
+
+def _action_summary_ghost_fill(
+    summary: ActionVisualSummary,
+    group: ActionVisualSummaryGroup,
+) -> Color:
+    if group.color_role == "warning" or group.state in {"warning", "invalid"}:
+        color = _action_summary_color(summary, group)
+        return (color[0], color[1], color[2], 36 if summary.intensity == "dim" else 80)
+    return ACTION_SUMMARY_GHOST_DIM if summary.intensity == "dim" else ACTION_SUMMARY_GHOST_REVIEW
 
 
 def _context_menu_primitives(menu: ContextMenuView) -> tuple[TextPrimitive, ...]:

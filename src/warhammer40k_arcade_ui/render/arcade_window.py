@@ -30,6 +30,10 @@ from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
     NoOpTraceWriter,
     TraceContext,
 )
+from warhammer40k_arcade_ui.hud.action_summary import (
+    ActionSummaryIntensity,
+    build_action_visual_summary,
+)
 from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, build_hud_layout
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
@@ -152,6 +156,9 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         self._mouse_world_position: WorldPoint | None = None
         self._movement_draft: MovementDraft | None = None
+        self._action_summary_intensity: ActionSummaryIntensity = (
+            self._preferences.hud.action_summary_default
+        )
         self._right_mouse_press_screen: tuple[float, float] | None = None
         self._right_mouse_drag_distance_px = 0.0
         self._fatal_exit_deadline_monotonic: float | None = None
@@ -223,6 +230,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         return self._movement_draft
 
     @property
+    def action_summary_intensity(self) -> ActionSummaryIntensity:
+        """Current advisory action-summary display intensity."""
+
+        return self._action_summary_intensity
+
+    @property
     def last_crash_report_path(self) -> Path | None:
         """Most recent crash diagnostic report path, if one was written."""
 
@@ -270,6 +283,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                     "camera_zoom": self._camera.zoom,
                     "unit_count": len(self._battlefield_view.units),
                     "movement_draft_active": self._movement_draft is not None,
+                    "action_summary_intensity": self._action_summary_intensity,
                 },
             )
         self.clear()
@@ -314,8 +328,16 @@ class ArcadeWarhammerWindow(arcade.Window):
             selection=self._selection_state,
             pending_decision=self._pending_decision,
             cursor_position=self._mouse_world_position,
+            action_summary_intensity=self._action_summary_intensity,
             event_cursor=self._event_cursor,
             preference_source_label=self._preference_source_label,
+        )
+        action_summary = build_action_visual_summary(
+            movement_draft=self._movement_draft,
+            pending_decision=self._pending_decision,
+            diagnostics=self._finite_state.diagnostics,
+            intensity=self._action_summary_intensity,
+            max_labels=self._preferences.hud.action_summary_max_labels,
         )
         hud_layout = build_hud_layout(
             preferences=self._preferences,
@@ -328,6 +350,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._battlefield_view,
             self._selection_state,
             self._movement_draft,
+            action_summary,
         )
         hud_primitives = build_hud_primitives(
             view=self._battlefield_view,
@@ -572,6 +595,10 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         if invocation.command_id == "toggle_debug_inspector":
             self._selection_state = self._selection_state.toggle_debug_inspector()
+        elif invocation.command_id == "toggle_action_summary":
+            self._toggle_action_summary()
+        elif invocation.command_id == "review_action_summary":
+            self._toggle_action_summary_review()
         elif invocation.command_id == "show_selected_unit":
             self._selection_state = self._selection_state.show_selected_unit_panel()
         elif invocation.command_id == "show_selected_model":
@@ -933,6 +960,28 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
             return True
         return False
+
+    def _toggle_action_summary(self) -> None:
+        if self._action_summary_intensity == "hidden":
+            preferred = self._preferences.hud.action_summary_default
+            self._action_summary_intensity = "dim" if preferred == "hidden" else preferred
+        else:
+            self._action_summary_intensity = "hidden"
+        self._trace_event(
+            category="ui",
+            event_name="ui.action_summary_toggled",
+            summary={"intensity": self._action_summary_intensity},
+        )
+
+    def _toggle_action_summary_review(self) -> None:
+        self._action_summary_intensity = (
+            "dim" if self._action_summary_intensity == "review" else "review"
+        )
+        self._trace_event(
+            category="ui",
+            event_name="ui.action_summary_review_toggled",
+            summary={"intensity": self._action_summary_intensity},
+        )
 
     def _context_menu_action_at(self, world_point: WorldPoint) -> ContextMenuAction | None:
         menu = build_context_menu(

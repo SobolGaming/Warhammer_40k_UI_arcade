@@ -394,6 +394,7 @@ def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> 
         "Selected unit: intercessor_squad",
         "Proposal kind: none",
         "Cursor: 12.00, 13.50 in",
+        "Action summary: hidden",
         "Event cursor: 7",
         "UI prefs: keyboard-heavy.yaml",
     )

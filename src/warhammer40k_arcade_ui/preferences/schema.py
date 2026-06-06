@@ -19,11 +19,15 @@ SCHEMA_VERSION = "1"
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, JsonValue]
 type AssignmentHudMode = Literal["compact", "detailed"]
+type ActionSummaryDefault = Literal["hidden", "dim", "review"]
 type HudLayoutPreset = Literal["compass_ring", "command_bench"]
 
 _VALID_MODIFIERS = frozenset(("ctrl", "alt", "shift", "meta"))
 _VALID_MOUSE_BUTTONS = frozenset(("left", "right", "middle"))
 _VALID_ASSIGNMENT_HUD_MODES: frozenset[AssignmentHudMode] = frozenset(("compact", "detailed"))
+_VALID_ACTION_SUMMARY_DEFAULTS: frozenset[ActionSummaryDefault] = frozenset(
+    ("hidden", "dim", "review")
+)
 _VALID_HUD_LAYOUT_PRESETS: frozenset[HudLayoutPreset] = frozenset(("compass_ring", "command_bench"))
 _HUD_ZONE_SIZE_LIMITS = {
     "top_ribbon": (40, 140),
@@ -167,6 +171,8 @@ class HudPreferences:
     show_assignment_hud: bool
     assignment_hud_mode: AssignmentHudMode
     show_assignment_warning_markers: bool
+    action_summary_default: ActionSummaryDefault
+    action_summary_max_labels: int
     show_chain_breadcrumbs: bool
     text_scale: float
     high_contrast: bool
@@ -186,6 +192,8 @@ class HudPreferences:
             "show_assignment_hud": self.show_assignment_hud,
             "assignment_hud_mode": self.assignment_hud_mode,
             "show_assignment_warning_markers": self.show_assignment_warning_markers,
+            "action_summary_default": self.action_summary_default,
+            "action_summary_max_labels": self.action_summary_max_labels,
             "show_chain_breadcrumbs": self.show_chain_breadcrumbs,
             "text_scale": self.text_scale,
             "high_contrast": self.high_contrast,
@@ -504,6 +512,8 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
                 "show_assignment_hud",
                 "assignment_hud_mode",
                 "show_assignment_warning_markers",
+                "action_summary_default",
+                "action_summary_max_labels",
                 "show_chain_breadcrumbs",
                 "text_scale",
                 "high_contrast",
@@ -521,6 +531,19 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
                 field="hud.text_scale",
                 message="HUD text_scale must be between 0.5 and 2.0.",
                 value=str(text_scale),
+            )
+        )
+    action_summary_max_labels = _required_int(
+        section, "action_summary_max_labels", diagnostics, "hud"
+    )
+    if action_summary_max_labels < 0 or action_summary_max_labels > 20:
+        diagnostics.append(
+            _diagnostic(
+                severity="error",
+                code="invalid_action_summary_max_labels",
+                field="hud.action_summary_max_labels",
+                message="hud.action_summary_max_labels must be between 0 and 20.",
+                value=str(action_summary_max_labels),
             )
         )
     return HudPreferences(
@@ -565,6 +588,13 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
             diagnostics,
             "hud",
         ),
+        action_summary_default=_action_summary_default(
+            section,
+            "action_summary_default",
+            diagnostics,
+            "hud",
+        ),
+        action_summary_max_labels=action_summary_max_labels,
         show_chain_breadcrumbs=_required_bool(
             section,
             "show_chain_breadcrumbs",
@@ -925,6 +955,28 @@ def _assignment_hud_mode(
         )
     )
     return "compact"
+
+
+def _action_summary_default(
+    payload: dict[str, object],
+    key: str,
+    diagnostics: list[PreferenceDiagnostic],
+    prefix: str,
+) -> ActionSummaryDefault:
+    field = f"{prefix}.{key}"
+    value = payload.get(key)
+    if type(value) is str and value in _VALID_ACTION_SUMMARY_DEFAULTS:
+        return value
+    diagnostics.append(
+        _diagnostic(
+            severity="error",
+            code="invalid_action_summary_default",
+            field=field,
+            message="hud.action_summary_default must be hidden, dim, or review.",
+            value=str(value),
+        )
+    )
+    return "hidden"
 
 
 def _string_list(

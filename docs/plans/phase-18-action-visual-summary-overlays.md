@@ -44,6 +44,24 @@ more independently positioned text panels.
 Earlier phases should prepare for this by preserving visual summary-friendly data, but they should
 not implement the full overlay system before the HUD/workspace is stable.
 
+## Phase 18 Implementation Scope
+
+Plan review found the goals complete, but the original task list intentionally spans future
+shooting, Stratagem, placement, charge, and fight tools that do not yet have concrete UI workspaces.
+This implementation therefore keeps Phase 18 to the first safe slice:
+
+- preference-backed action-summary visibility and review intensity controls;
+- generic advisory summary view models;
+- movement summary adapter from the existing movement assignment workspace;
+- dim/review movement path, ghost-base, and capped label primitives;
+- debug/HUD visibility of active summary mode;
+- explicit unsupported summary diagnostics for request families that do not yet have their own
+  operation-specific workspace.
+
+Later phases should add shooting target links, Stratagem icons, charge-specific summaries, and
+fight-order highlights only when those tools expose concrete workspace data. The UI must not infer
+those geometries from rules knowledge or from private interpretation of core requests.
+
 ## Core Update Impact Notes
 
 Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
@@ -194,38 +212,38 @@ Preliminary:
 
 ## Tasks
 
-- [ ] Add action visual summary command and preferences:
+- [x] Add action visual summary command and preferences:
   - toggle action summary;
   - force review summary;
   - dim summary default;
   - hide summary default.
-- [ ] Add action visual summary view models:
+- [x] Add action visual summary view models:
   - generic summary;
   - generic summary group;
   - diagnostic/advisory severity;
   - source/target/path/icon fields.
-- [ ] Add movement summary adapter from movement assignment workspace.
+- [x] Add movement summary adapter from movement assignment workspace.
 - [ ] Add render primitives for:
-  - dim path lines;
-  - review path lines;
-  - source-to-target links;
-  - icon markers;
-  - grouped/bundled links;
-  - warning/diagnostic highlights.
-- [ ] Add HUD integration:
-  - assignment HUD can request review summary mode;
+  - [x] dim path lines;
+  - [x] review path lines;
+  - [ ] source-to-target links;
+  - [ ] icon markers;
+  - [ ] grouped/bundled links;
+  - [x] warning/diagnostic highlights.
+- [x] Add HUD integration:
+  - preference-backed hotkey can request review summary mode;
   - debug inspector can show active summary state;
   - summary state resets/reconciles on request drift.
-- [ ] Add visual clutter controls:
+- [x] Add visual clutter controls:
   - opacity tiers;
   - grouped labels;
   - maximum label count before bundling;
   - color-independent warning markers.
-- [ ] Add unsupported operation handling:
+- [x] Add unsupported operation handling:
   - no summary for unsupported proposal tools;
   - visible diagnostic in the assignment HUD;
   - no guessed lines or icons.
-- [ ] Add preliminary adapters or explicit unsupported diagnostics for newly projected core
+- [x] Add preliminary adapters or explicit unsupported diagnostics for newly projected core
   request families:
   - `charge_move` proposal summaries;
   - `select_fight_activation` finite summaries;
@@ -233,27 +251,27 @@ Preliminary:
 
 ## Acceptance Criteria
 
-- [ ] Player can toggle the current action visual summary on/off.
-- [ ] Player can switch between dim summary and bright review summary.
-- [ ] Movement assignments render from the same data shown in the Generic Assignment HUD.
-- [ ] Summary overlays clear or rebuild when the pending request changes.
-- [ ] Summary overlays do not mutate authoritative state.
-- [ ] Unsupported operations fail visibly in the HUD and do not draw guessed summaries.
-- [ ] Preferences can configure summary defaults without defining legal actions or validation.
-- [ ] Charge Move and fight-order request families are either summarized from explicit workspace
+- [x] Player can toggle the current action visual summary on/off.
+- [x] Player can switch between dim summary and bright review summary.
+- [x] Movement assignments render from the same data shown in the Generic Assignment HUD.
+- [x] Summary overlays clear or rebuild when the pending request changes.
+- [x] Summary overlays do not mutate authoritative state.
+- [x] Unsupported operations fail visibly in the HUD and do not draw guessed summaries.
+- [x] Preferences can configure summary defaults without defining legal actions or validation.
+- [x] Charge Move and fight-order request families are either summarized from explicit workspace
   data or visibly unsupported; neither silently reuses normal movement rendering.
 
 ## Tests
 
-- [ ] View-model tests for dim/review summary modes.
-- [ ] Movement summary adapter tests for one model, multi-model subset, and grouped paths.
-- [ ] Render primitive tests for movement summary lines and ghost bases.
+- [x] View-model tests for dim/review summary modes.
+- [x] Movement summary adapter tests for one model, multi-model subset, and grouped paths.
+- [x] Render primitive tests for movement summary lines and ghost bases.
 - [ ] Render primitive tests for source-to-target links using deterministic fake assignment data.
-- [ ] Preference tests for summary toggle/default settings.
-- [ ] Request-drift tests proving summary state is cleared or reconciled.
-- [ ] Diagnostics tests proving local advisory warnings and authoritative invalid diagnostics are
+- [x] Preference tests for summary toggle/default settings.
+- [x] Request-drift tests proving summary state is cleared or reconciled.
+- [x] Diagnostics tests proving local advisory warnings and authoritative invalid diagnostics are
   visually distinct.
-- [ ] Unsupported/placeholder summary tests for `charge_move`, `select_fight_activation`, and
+- [x] Unsupported/placeholder summary tests for `charge_move`, `select_fight_activation`, and
   `resolve_fight_interrupt`.
 
 ## Manual Validation Checklist
@@ -272,3 +290,50 @@ Preliminary:
 
 The UI can show a battlefield-level visual summary of the current request workspace, starting with
 movement and ready for later shooting, Stratagem, and placement tools.
+
+## Implementation Notes
+
+- Added `hud.action_summary` as the shared advisory view-model and movement adapter layer.
+- Added `hud.action_summary_default` and `hud.action_summary_max_labels` as presentation-only
+  preferences.
+- Added `toggle_action_summary` and `review_action_summary` command IDs. Built-in profiles bind
+  them to `v` and `shift+v`.
+- Movement summaries render from `MovementDraft.assignment_views()`, the same source used by the
+  Generic Assignment HUD.
+- Unsupported future operations return explicit diagnostics and no drawable geometry.
+
+## Automated Verification
+
+Run at closeout:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src tests
+uv run pyright
+uv run pytest tests/
+uv run pre-commit run --all-files
+```
+
+Completed during implementation:
+
+- `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .` - passed.
+- `UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .` - passed.
+- `UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests` - passed.
+- `UV_CACHE_DIR=/tmp/uv-cache uv run pyright` - passed.
+- `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/` - 156 passed, 3 existing Arcade
+  `draw_text` performance warnings.
+- `PRE_COMMIT_HOME=/tmp/pre-commit-cache UV_CACHE_DIR=/tmp/uv-cache uv run pre-commit run
+  --all-files` - passed after network approval to fetch configured hook repositories.
+
+## Manual Validation Checklist
+
+- Launch with `uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`.
+- Select a unit and open/make a movement draft.
+- Confirm the default dim action summary is visible while movement paths are assigned.
+- Press `v` and confirm the action summary hides; press `v` again and confirm it returns.
+- Press `shift+v` and confirm review mode draws brighter paths and final ghost-base labels.
+- Press `ctrl+d` and confirm the debug inspector includes `Action summary: ...`.
+- Use `docs/preferences/dense-debug.yaml` and confirm the summary starts in review intensity.
+- Use a non-movement unsupported proposal fixture or live request and confirm the HUD reports
+  unsupported summary behavior without guessed battlefield lines.
