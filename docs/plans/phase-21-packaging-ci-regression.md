@@ -1,4 +1,4 @@
-# Phase 20 - Packaging, CI, and regression hardening
+# Phase 21 - Packaging, CI, and regression hardening
 
 ## Goal
 
@@ -46,7 +46,7 @@ Make the UI reliable enough to use during engine development.
 
 ## Closeout milestone
 
-**Milestone 15: "Development-Ready UI Repo"**
+**Milestone 16: "Development-Ready UI Repo"**
 
 The UI repo is stable enough to use as a companion project while the core engine continues evolving.
 

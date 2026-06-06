@@ -53,8 +53,9 @@ under `docs/plans/`.
 | 16 | Complete | Generic assignment HUD | [phase-16](docs/plans/phase-16-generic-assignment-hud.md) |
 | 17 | Complete | HUD zone layout framework | [phase-17](docs/plans/phase-17-hud-zone-layout-framework.md) |
 | 18 | Complete | Action visual summary overlays | [phase-18](docs/plans/phase-18-action-visual-summary-overlays.md) |
-| 19 | Planned | HUD ergonomics pass | [phase-19](docs/plans/phase-19-hud-ergonomics.md) |
-| 20 | Planned | Packaging, CI, and regression hardening | [phase-20](docs/plans/phase-20-packaging-ci-regression.md) |
+| 19 | Planned | HUD widget toolkit | [phase-19](docs/plans/phase-19-hud-widget-toolkit.md) |
+| 20 | Planned | HUD ergonomics pass | [phase-20](docs/plans/phase-20-hud-ergonomics.md) |
+| 21 | Planned | Packaging, CI, and regression hardening | [phase-21](docs/plans/phase-21-packaging-ci-regression.md) |
 
 ## Cross-cutting architectural rules
 

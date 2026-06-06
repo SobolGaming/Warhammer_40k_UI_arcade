@@ -26,8 +26,9 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 16 | [Generic assignment HUD](phase-16-generic-assignment-hud.md) | Assignment Review HUD |
 | 17 | [HUD zone layout framework](phase-17-hud-zone-layout-framework.md) | Configurable HUD Shell |
 | 18 | [Action visual summary overlays](phase-18-action-visual-summary-overlays.md) | Action Summary Overlays |
-| 19 | [HUD ergonomics pass](phase-19-hud-ergonomics.md) | Usable Movement Client |
-| 20 | [Packaging, CI, and regression hardening](phase-20-packaging-ci-regression.md) | Development-Ready UI Repo |
+| 19 | [HUD widget toolkit](phase-19-hud-widget-toolkit.md) | HUD Component Toolkit |
+| 20 | [HUD ergonomics pass](phase-20-hud-ergonomics.md) | Usable Movement Client |
+| 21 | [Packaging, CI, and regression hardening](phase-21-packaging-ci-regression.md) | Development-Ready UI Repo |
 
 ## Umbrella And Preliminary Plans
 
