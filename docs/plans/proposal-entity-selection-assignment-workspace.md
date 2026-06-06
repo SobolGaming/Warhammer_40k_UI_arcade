@@ -10,7 +10,8 @@ Concrete phases:
 - [Phase 9 - Movement draft model assignments](phase-09-movement-draft-model-assignments.md)
 - [Phase 10 - Movement proposal submission and diagnostics](phase-10-movement-proposal-submission-diagnostics.md)
 - [Phase 16 - Generic assignment HUD](phase-16-generic-assignment-hud.md)
-- [Phase 17 - Action visual summary overlays](phase-17-action-visual-summary-overlays.md)
+- [Phase 17 - HUD zone layout framework](phase-17-hud-zone-layout-framework.md)
+- [Phase 18 - Action visual summary overlays](phase-18-action-visual-summary-overlays.md)
 
 Preliminary future plans:
 
@@ -473,7 +474,7 @@ requests and does not choose answers locally.
 - Add render primitives for multi-selection highlights that distinguish inspect selection,
   request-selection, active assignment group, and assigned-but-not-active groups.
 
-### Phase 17 - Action Visual Summary Overlays
+### Phase 18 - Action Visual Summary Overlays
 
 - Build visual summaries from the same workspace/HUD assignment groups.
 - Support dim always-on and bright review modes.

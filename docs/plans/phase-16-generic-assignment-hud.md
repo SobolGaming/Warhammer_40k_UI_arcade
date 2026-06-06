@@ -36,7 +36,8 @@ The HUD is "generic" because the layout and review behavior are reusable. The pa
 remain operation-specific so this HUD does not become a private rules engine.
 
 The same backing data should also be usable by later visual action summaries. The HUD is the list
-view of the workspace; Phase 17 adds the battlefield picture view of the same workspace.
+view of the workspace; Phase 18 adds the battlefield picture view of the same workspace after
+Phase 17 creates the configurable HUD zone shell.
 
 ## Workspace Concept In Plain Language
 
@@ -155,7 +156,7 @@ Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05.
 - [x] The HUD can show request-scoped state without clearing ordinary inspect selection.
 - [x] Preference settings can hide or compact the HUD without changing behavior or legality.
 - [x] Unsupported workspaces produce visible diagnostics rather than blank panels.
-- [x] The HUD view model contains enough stable group/ref data for Phase 17 to build visual summary
+- [x] The HUD view model contains enough stable group/ref data for Phase 18 to build visual summary
   overlays from the same workspace state.
 - [x] Normalized `pending_proposal` metadata is displayed and preserved for supported and
   unsupported parameterized request families.
@@ -200,7 +201,7 @@ Implemented on 2026-06-05.
 - Added `AssignmentHudPanelView` and `AssignmentHudGroupView` in `hud.view_models` as a reusable
   request-scoped checklist model. The view model carries request ID, decision type, actor ID,
   operation kind, proposal kind, active layer, selected/assigned/unassigned refs, readiness state,
-  advisory hints, authoritative diagnostics, stable group IDs, and source/target refs for Phase 17
+  advisory hints, authoritative diagnostics, stable group IDs, and source/target refs for Phase 18
   visual summary overlays.
 - Added a movement assignment HUD adapter using the existing Phase 9 `MovementDraft` assignment
   rows. The HUD shows active movement selection, moved assignment groups, unassigned/no-op models,

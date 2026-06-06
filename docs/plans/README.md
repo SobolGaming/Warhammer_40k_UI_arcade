@@ -24,9 +24,10 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 14 | [Forensic event trace](phase-14-forensic-event-trace.md) | Forensic Event Trace |
 | 15 | [Crash diagnostic bundles](phase-15-crash-diagnostic-bundles.md) | Actionable Crash Bundles |
 | 16 | [Generic assignment HUD](phase-16-generic-assignment-hud.md) | Assignment Review HUD |
-| 17 | [Action visual summary overlays](phase-17-action-visual-summary-overlays.md) | Action Summary Overlays |
-| 18 | [HUD ergonomics pass](phase-18-hud-ergonomics.md) | Usable Movement Client |
-| 19 | [Packaging, CI, and regression hardening](phase-19-packaging-ci-regression.md) | Development-Ready UI Repo |
+| 17 | [HUD zone layout framework](phase-17-hud-zone-layout-framework.md) | Configurable HUD Shell |
+| 18 | [Action visual summary overlays](phase-18-action-visual-summary-overlays.md) | Action Summary Overlays |
+| 19 | [HUD ergonomics pass](phase-19-hud-ergonomics.md) | Usable Movement Client |
+| 20 | [Packaging, CI, and regression hardening](phase-20-packaging-ci-regression.md) | Development-Ready UI Repo |
 
 ## Umbrella And Preliminary Plans
 

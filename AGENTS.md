@@ -106,9 +106,10 @@ Build bottom-up:
 14. forensic UI/core event tracing
 15. crash diagnostic bundles
 16. generic assignment HUD
-17. action visual summary overlays
-18. HUD ergonomics
-19. packaging, CI, regression fixtures, and import-boundary audits
+17. configurable HUD zone layout framework
+18. action visual summary overlays
+19. HUD ergonomics
+20. packaging, CI, regression fixtures, and import-boundary audits
 
 Do not add shooting, fight, charge, AI, training, or private rule logic before the movement
 decision path is trustworthy end to end.

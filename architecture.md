@@ -51,9 +51,10 @@ under `docs/plans/`.
 | 14 | Complete | Forensic event trace | [phase-14](docs/plans/phase-14-forensic-event-trace.md) |
 | 15 | Complete | Crash diagnostic bundles | [phase-15](docs/plans/phase-15-crash-diagnostic-bundles.md) |
 | 16 | Complete | Generic assignment HUD | [phase-16](docs/plans/phase-16-generic-assignment-hud.md) |
-| 17 | Planned | Action visual summary overlays | [phase-17](docs/plans/phase-17-action-visual-summary-overlays.md) |
-| 18 | Planned | HUD ergonomics pass | [phase-18](docs/plans/phase-18-hud-ergonomics.md) |
-| 19 | Planned | Packaging, CI, and regression hardening | [phase-19](docs/plans/phase-19-packaging-ci-regression.md) |
+| 17 | Planned | HUD zone layout framework | [phase-17](docs/plans/phase-17-hud-zone-layout-framework.md) |
+| 18 | Planned | Action visual summary overlays | [phase-18](docs/plans/phase-18-action-visual-summary-overlays.md) |
+| 19 | Planned | HUD ergonomics pass | [phase-19](docs/plans/phase-19-hud-ergonomics.md) |
+| 20 | Planned | Packaging, CI, and regression hardening | [phase-20](docs/plans/phase-20-packaging-ci-regression.md) |
 
 ## Cross-cutting architectural rules
 
@@ -142,6 +143,10 @@ assignments with authoritative movement proposal submission plus opt-in live-cor
 Planned modules from later phases:
 
 - `input` — later command flows beyond finite decisions and movement drafting.
+- `hud.layouts` — named HUD zone/region/panel presets, configurable geometry, and empty Arcade
+  widget container definitions for Compass Ring and Command Bench layouts.
+- `hud.widgets` — later Arcade-native status chips, panel shells, icon slots, scroll/overflow
+  helpers, and component classes that populate the layout zones.
 - `hud` — action visual summary controls and later phase-specific ergonomics.
 - `render` — action visual summary primitives for movement paths, source-to-target links, icons,
   and review/dim summary states.
@@ -274,7 +279,7 @@ request is being answered, which entities are selected, which entities are assig
 are still unassigned, whether the payload preview is ready, and whether messages are local preview
 hints or authoritative engine diagnostics.
 
-Phase 17 adds a battlefield-level visual summary for the same workspace. If the assignment HUD is
+Phase 18 adds a battlefield-level visual summary for the same workspace. If the assignment HUD is
 the checklist, the visual summary is the map overlay: dim green/grey paths for movement, future red
 source-to-target lines for shooting, and future Stratagem markers with lines to affected units. The
 summary is togglable and preference-backed. A subdued summary may remain visible while working, and
