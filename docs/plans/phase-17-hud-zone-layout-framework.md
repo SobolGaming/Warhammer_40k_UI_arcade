@@ -293,11 +293,11 @@ Automated tests added or updated:
 
 Manual validation checklist:
 
-- [ ] Launch `uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml` and confirm
+- [x] Launch `uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml` and confirm
   the Compass Ring sockets appear.
-- [ ] Launch `uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml` and
+- [x] Launch `uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml` and
   confirm the Command Bench bottom region appears.
-- [ ] Resize the window and confirm the sockets rebuild cleanly.
-- [ ] Select a model/unit and confirm ordinary selection still works.
-- [ ] Start a movement draft and confirm proposal, movement, and assignment text no longer occupy
+- [x] Resize the window and confirm the sockets rebuild cleanly.
+- [x] Select a model/unit and confirm ordinary selection still works.
+- [x] Start a movement draft and confirm proposal, movement, and assignment text no longer occupy
   the exact same left-column stack.
