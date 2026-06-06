@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
+from warhammer40k_arcade_ui.hud import preview as hud_preview
 from warhammer40k_arcade_ui.hud.composition import (
     HudCompositionValidationResult,
     load_hud_composition,
@@ -272,6 +276,20 @@ def test_hud_preview_headless_writes_png_and_metadata(tmp_path: Path) -> None:
     assert (tmp_path / "workbench_preview-movement_budget_ring.json").exists()
 
 
+def test_interactive_preview_clears_each_frame_without_start_render(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = FakePreviewRuntime()
+    monkeypatch.setattr(hud_preview, "_load_arcade", lambda: runtime)
+
+    hud_preview.run_interactive_preview(primitives=(), width=320, height=240, title="HUD Preview")
+
+    assert runtime.window is not None
+    assert runtime.window.clear_calls == 2
+    assert runtime.run_calls == 1
+    assert runtime.start_render_calls == 0
+
+
 def test_hud_preview_reports_invalid_yaml_with_exit_code() -> None:
     payload = {
         "schema_version": 1,
@@ -287,6 +305,92 @@ def test_hud_preview_reports_invalid_yaml_with_exit_code() -> None:
 
     assert result.profile is None
     assert "unknown_widget_type" in _codes(result)
+
+
+class FakePreviewWindow:
+    """Test double for the interactive HUD preview window."""
+
+    def __init__(self) -> None:
+        self.clear_calls = 0
+        self.on_draw: Callable[[], None] | None = None
+
+    def clear(self) -> None:
+        self.clear_calls += 1
+
+    def push_handlers(self, *, on_draw: Callable[[], None]) -> None:
+        self.on_draw = on_draw
+
+
+class FakePreviewRuntime:
+    """Test double for the Arcade runtime used by interactive preview."""
+
+    def __init__(self) -> None:
+        self.window: FakePreviewWindow | None = None
+        self.run_calls = 0
+        self.start_render_calls = 0
+
+    def Window(self, **_kwargs: object) -> FakePreviewWindow:
+        self.window = FakePreviewWindow()
+        return self.window
+
+    def run(self) -> None:
+        self.run_calls += 1
+        assert self.window is not None
+        assert self.window.on_draw is not None
+        self.window.on_draw()
+        self.window.on_draw()
+
+    def start_render(self) -> None:
+        self.start_render_calls += 1
+        raise AssertionError("interactive preview must use window.clear(), not start_render()")
+
+    def draw_polygon_filled(
+        self,
+        _points: tuple[tuple[float, float], ...],
+        _color: tuple[int, int, int, int],
+    ) -> None:
+        return None
+
+    def draw_polygon_outline(
+        self,
+        _points: tuple[tuple[float, float], ...],
+        _color: tuple[int, int, int, int],
+        _line_width: float,
+    ) -> None:
+        return None
+
+    def draw_circle_filled(
+        self,
+        _x: float,
+        _y: float,
+        _radius: float,
+        _color: tuple[int, int, int, int],
+    ) -> None:
+        return None
+
+    def draw_circle_outline(
+        self,
+        _x: float,
+        _y: float,
+        _radius: float,
+        _color: tuple[int, int, int, int],
+        _line_width: float,
+    ) -> None:
+        return None
+
+    def draw_line(
+        self,
+        _start_x: float,
+        _start_y: float,
+        _end_x: float,
+        _end_y: float,
+        _color: tuple[int, int, int, int],
+        _line_width: float,
+    ) -> None:
+        return None
+
+    def draw_text(self, *_args: object, **_kwargs: object) -> None:
+        return None
 
 
 def _codes(result: HudCompositionValidationResult) -> set[str]:

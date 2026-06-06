@@ -784,6 +784,9 @@ without creating one-off render code for each future feature.
   reference and does not merge legal actions, rule validation, or decision IDs into preferences.
 - Arcade GUI widget clipping/scrolling still needs to be proven before Phase 20 depends on it. This
   phase provides deterministic primitive-level parent-relative placement and text truncation.
+- Fixed the interactive preview draw loop to use `Window.clear()` per frame instead of
+  `arcade.start_render()`. `start_render()` is only valid for one-shot static scripts and crashes on
+  repeated `on_draw` dispatch.
 
 ## Automated Verification
 

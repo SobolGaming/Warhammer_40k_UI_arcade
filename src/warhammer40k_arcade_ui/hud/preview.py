@@ -69,6 +69,11 @@ class PreviewWindow(Protocol):
 
     ctx: PreviewContext
 
+    def clear(self) -> None:
+        """Clear the active framebuffer for the next draw."""
+
+        ...
+
     def close(self) -> None:
         """Close the preview window."""
 
@@ -157,7 +162,6 @@ def render_headless_artifacts(
 
     arcade_runtime = _load_arcade()
     window_factory = cast(Callable[..., PreviewWindow], getattr(arcade_runtime, "Window"))  # noqa: B009
-    start_render = cast(Callable[[], None], getattr(arcade_runtime, "start_render"))  # noqa: B009
     window = window_factory(
         width=width,
         height=height,
@@ -168,7 +172,7 @@ def render_headless_artifacts(
     try:
         framebuffer = cast(ReadableFramebuffer, window.ctx.screen)
         framebuffer.use()
-        start_render()
+        window.clear()
         _draw_primitives(arcade_runtime, primitives)
         window.ctx.finish()
         rgba = framebuffer.read(
@@ -200,13 +204,12 @@ def run_interactive_preview(
 
     arcade_runtime = _load_arcade()
     window_factory = cast(Callable[..., PreviewWindow], getattr(arcade_runtime, "Window"))  # noqa: B009
-    start_render = cast(Callable[[], None], getattr(arcade_runtime, "start_render"))  # noqa: B009
     run_arcade = cast(Callable[[], None], getattr(arcade_runtime, "run"))  # noqa: B009
 
     window = window_factory(width=width, height=height, title=title, resizable=True)
 
     def on_draw() -> None:
-        start_render()
+        window.clear()
         _draw_primitives(arcade_runtime, primitives)
 
     push_handlers = cast(Callable[..., object], getattr(window, "push_handlers"))  # noqa: B009
