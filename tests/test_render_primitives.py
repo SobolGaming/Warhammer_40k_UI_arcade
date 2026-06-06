@@ -13,6 +13,11 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiFiniteOption,
     UiInvalidDiagnostic,
 )
+from warhammer40k_arcade_ui.hud.action_summary import (
+    ActionVisualSummary,
+    ActionVisualSummaryGroup,
+    build_action_visual_summary,
+)
 from warhammer40k_arcade_ui.hud.layouts import build_hud_layout
 from warhammer40k_arcade_ui.hud.view_models import (
     build_assignment_hud_panel,
@@ -131,6 +136,67 @@ def test_movement_draft_builds_path_waypoint_ghost_and_budget_primitives() -> No
     assert circle_layers.count("movement_ghost_base") == 1
     assert "movement_waypoint" in circle_layers
     assert "movement_budget_ring" in circle_layers
+
+
+def test_action_visual_summary_builds_dim_path_and_ghost_primitives() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=_movement_proposal_decision(),
+    )
+    assert draft is not None
+    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0))
+    summary = build_action_visual_summary(
+        movement_draft=draft,
+        pending_decision=_movement_proposal_decision(),
+        diagnostics=(),
+        intensity="dim",
+        max_labels=6,
+    )
+    assert summary is not None
+
+    primitives = build_world_primitives(view, action_summary=summary)
+
+    line_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is PolylinePrimitive
+    ]
+    circle_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is CirclePrimitive
+    ]
+    assert "action_summary_dim_path" in line_layers
+    assert "action_summary_dim_ghost_base" in circle_layers
+
+
+def test_action_visual_summary_review_mode_labels_are_capped() -> None:
+    view = default_battlefield_view()
+    summary = ActionVisualSummary(
+        request_id="decision-request-000005",
+        operation_kind="movement",
+        intensity="review",
+        groups=(
+            _summary_group("group-1", "first", (7.0, 18.0), (10.0, 18.0)),
+            _summary_group("group-2", "second", (7.0, 22.0), (10.0, 22.0)),
+        ),
+        diagnostic_lines=(),
+        ready=True,
+        max_labels=1,
+    )
+
+    primitives = build_world_primitives(view, action_summary=summary)
+
+    review_labels = [
+        primitive.text
+        for primitive in _text_primitives(primitives)
+        if primitive.layer == "action_summary_review_label"
+    ]
+    assert review_labels == ["first"]
 
 
 def test_hud_primitives_are_screen_space_and_include_mouse_coordinates() -> None:
@@ -555,6 +621,27 @@ def _unit_payload(unit: UnitView) -> dict[str, object]:
             for model in unit.models
         ],
     }
+
+
+def _summary_group(
+    group_id: str,
+    label: str,
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> ActionVisualSummaryGroup:
+    return ActionVisualSummaryGroup(
+        group_id=group_id,
+        label=label,
+        state="assigned",
+        source_ref_keys=(f"model:{label}",),
+        target_ref_keys=(),
+        path_points=(start, end),
+        ghost_center=end,
+        ghost_radius=1.0,
+        icon_id=None,
+        color_role="movement",
+        summary_lines=("Path: 3.00 in",),
+    )
 
 
 def _movement_proposal_decision() -> UiDecision:

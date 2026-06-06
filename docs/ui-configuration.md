@@ -84,6 +84,10 @@ Assignment review settings:
 - `assignment_hud_mode`: `compact` or `detailed`.
 - `show_assignment_warning_markers`: show color-independent warning markers for advisory hints and
   diagnostics.
+- `action_summary_default`: `hidden`, `dim`, or `review` for the advisory battlefield summary
+  overlay when the UI starts.
+- `action_summary_max_labels`: maximum number of bright review labels drawn over the battlefield
+  before visual labels are suppressed to reduce clutter.
 - `show_chain_breadcrumbs`: show recent existing event-log lines as chain breadcrumbs in the
   Assignment Review panel.
 
@@ -110,6 +114,8 @@ hud:
   show_assignment_hud: true
   assignment_hud_mode: detailed
   show_assignment_warning_markers: true
+  action_summary_default: dim
+  action_summary_max_labels: 6
   show_chain_breadcrumbs: true
   text_scale: 1.0
   high_contrast: false
@@ -133,12 +139,21 @@ Active command IDs:
 - `cycle_entity_layer`
 - `select_current_entity_group`
 - `toggle_debug_inspector`
+- `toggle_action_summary`
+- `review_action_summary`
 
 `toggle_overlay` bindings must include an `overlay_id`.
 
 The entity-selection commands are request-scoped selection commands. Phase 9 wires them into the
 movement assignment UI while a movement draft is active. They still configure only local UI
 behavior; they do not define legal movement, proposal kinds, or validation rules.
+
+The action-summary commands are advisory presentation controls:
+
+- `toggle_action_summary`: toggle the current action summary between hidden and the configured
+  default visible mode.
+- `review_action_summary`: toggle bright review mode for checking the current workspace before
+  submission.
 
 ## Overlay IDs
 

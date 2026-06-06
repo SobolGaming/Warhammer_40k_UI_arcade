@@ -1,6 +1,6 @@
 # Arcade UI Architecture Build Order
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 This document is the build-order roadmap for the Arcade UI client that drives the
 [`Warhammer_40k_AI`](https://github.com/SobolGaming/Warhammer_40k_AI) core engine.
@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-11 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-18 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -51,8 +51,8 @@ under `docs/plans/`.
 | 14 | Complete | Forensic event trace | [phase-14](docs/plans/phase-14-forensic-event-trace.md) |
 | 15 | Complete | Crash diagnostic bundles | [phase-15](docs/plans/phase-15-crash-diagnostic-bundles.md) |
 | 16 | Complete | Generic assignment HUD | [phase-16](docs/plans/phase-16-generic-assignment-hud.md) |
-| 17 | Planned | HUD zone layout framework | [phase-17](docs/plans/phase-17-hud-zone-layout-framework.md) |
-| 18 | Planned | Action visual summary overlays | [phase-18](docs/plans/phase-18-action-visual-summary-overlays.md) |
+| 17 | Complete | HUD zone layout framework | [phase-17](docs/plans/phase-17-hud-zone-layout-framework.md) |
+| 18 | Complete | Action visual summary overlays | [phase-18](docs/plans/phase-18-action-visual-summary-overlays.md) |
 | 19 | Planned | HUD ergonomics pass | [phase-19](docs/plans/phase-19-hud-ergonomics.md) |
 | 20 | Planned | Packaging, CI, and regression hardening | [phase-20](docs/plans/phase-20-packaging-ci-regression.md) |
 
@@ -76,10 +76,12 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-11 provide the runnable shell, core client boundary, inspectable render foundation,
+Phases 0-18 provide the runnable shell, core client boundary, inspectable render foundation,
 shareable UI preference framework, local selection/HUD state, finite decision submission, local
-movement path drafting, request-scoped entity-selection foundation, and per-model movement draft
-assignments with authoritative movement proposal submission plus opt-in live-core smoke startup:
+movement path drafting, request-scoped entity-selection foundation, per-model movement draft
+assignments with authoritative movement proposal submission, opt-in live-core smoke startup,
+scriptable GUI/render diagnostics, crash bundles, configurable HUD zones, the Generic Assignment
+HUD, and advisory action visual summaries:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
@@ -102,7 +104,8 @@ assignments with authoritative movement proposal submission plus opt-in live-cor
 - `warhammer40k_arcade_ui.render.camera` — world-space camera, pan/zoom, and screen/world
   coordinate conversion.
 - `warhammer40k_arcade_ui.render.primitives` — pure table, deployment-zone, objective, terrain,
-  unit, model-base, movement assignment overlay, and HUD primitive generation.
+  unit, model-base, movement assignment overlay, action visual summary overlay, and HUD primitive
+  generation.
 - `warhammer40k_arcade_ui.render.arcade_window` — `ArcadeWarhammerWindow` consuming render
   primitives for drawing, right/middle-drag panning, mouse-wheel zoom, mouse coordinate display,
   finite hotkeys, context-menu actions, local movement-assignment input, and ready movement draft
@@ -140,6 +143,9 @@ assignments with authoritative movement proposal submission plus opt-in live-cor
   Command Bench presets, center-viewport preservation, and panel overflow line-capacity helpers.
 - `warhammer40k_arcade_ui.hud.widgets` — lazy Arcade GUI placeholder widgets for drawing the active
   HUD zone shell in the live window without making non-window tests import `arcade.gui`.
+- `warhammer40k_arcade_ui.hud.action_summary` — advisory action visual summary models and adapters
+  derived from existing assignment workspaces and diagnostics, currently supporting movement paths
+  and explicit unsupported diagnostics for future request families.
 - `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, finite-decision
   panel, movement draft/diagnostic panel, generic assignment review HUD, and debug inspector view
   models derived from projection data and current pending requests.
@@ -147,9 +153,9 @@ assignments with authoritative movement proposal submission plus opt-in live-cor
 Planned modules from later phases:
 
 - `input` — later command flows beyond finite decisions and movement drafting.
-- `hud` — action visual summary controls, real content widgets, and later phase-specific ergonomics.
-- `render` — action visual summary primitives for movement paths, source-to-target links, icons,
-  and review/dim summary states.
+- `hud` — real content widgets and later phase-specific ergonomics.
+- `render` — future action visual summary primitives for source-to-target links, icons, and
+  operation-specific summaries beyond movement.
 - `state` — assignment workspaces and other local-only workflow state beyond movement drafts and
   entity selection.
 

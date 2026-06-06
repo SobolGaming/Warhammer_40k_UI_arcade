@@ -26,6 +26,10 @@ uv run warhammer40k-arcade-ui --crash-report-dir /tmp/ui-crashes
 uv run pytest
 ```
 
+While movement drafting, press `v` to show/hide the advisory action summary overlay and `shift+v`
+to switch into the brighter review summary. These overlays visualize local workspace intent only;
+the core engine still owns validation and state mutation.
+
 ## Local quality gates
 
 Run these before opening a pull request:

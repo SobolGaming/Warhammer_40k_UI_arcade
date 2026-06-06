@@ -106,11 +106,17 @@ def test_hotkeys_are_matched_from_preferences() -> None:
 
     debug = command_for_key(preferences=preferences, key="d", modifiers=("ctrl",))
     unit_panel = command_for_key(preferences=preferences, key="u")
+    summary_toggle = command_for_key(preferences=preferences, key="v")
+    summary_review = command_for_key(preferences=preferences, key="v", modifiers=("shift",))
 
     assert debug is not None
     assert debug.command_id == "toggle_debug_inspector"
     assert unit_panel is not None
     assert unit_panel.command_id == "show_selected_unit"
+    assert summary_toggle is not None
+    assert summary_toggle.command_id == "toggle_action_summary"
+    assert summary_review is not None
+    assert summary_review.command_id == "review_action_summary"
 
 
 def _overlapping_view() -> BattlefieldView:
