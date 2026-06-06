@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import replace
 from itertools import pairwise
@@ -344,8 +345,11 @@ class ArcadeWarhammerWindow(arcade.Window):
             viewport_width_px=self.width,
             viewport_height_px=self.height,
         )
-        self._sync_hud_zone_widgets(hud_layout)
-        hud_zone_widgets_available = self._hud_zone_manager is not None
+        hud_zone_widgets_available = (
+            self._hud_zone_manager is not None and not _headless_rendering_enabled()
+        )
+        if hud_zone_widgets_available:
+            self._sync_hud_zone_widgets(hud_layout)
         world_primitives = build_world_primitives(
             self._battlefield_view,
             self._selection_state,
@@ -367,7 +371,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             include_layout_skeleton=not hud_zone_widgets_available,
         )
         _draw_world_primitives(world_primitives, self._camera)
-        if self._hud_zone_manager is not None:
+        if hud_zone_widgets_available and self._hud_zone_manager is not None:
             self._hud_zone_manager.draw()
         _draw_world_primitives(hud_primitives, self._camera)
 
@@ -1147,6 +1151,14 @@ def _create_hud_zone_manager(window: arcade.Window) -> Any | None:
         return None
 
     return UIManager(window=window)
+
+
+def _headless_rendering_enabled() -> bool:
+    return _truthy_env("PYGLET_HEADLESS") or _truthy_env("ARCADE_HEADLESS")
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").casefold() in {"1", "true", "yes", "on"}
 
 
 def _pending_decision_summary(pending_decision: UiDecision | None) -> str:

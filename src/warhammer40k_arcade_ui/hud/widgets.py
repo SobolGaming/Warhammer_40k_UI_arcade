@@ -12,7 +12,6 @@ from warhammer40k_arcade_ui.hud.layouts import HudLayoutView
 
 PANEL_BACKGROUND = Color(14, 18, 20, 122)
 PANEL_BORDER = Color(164, 177, 170, 148)
-PANEL_LABEL = Color(178, 190, 184, 255)
 
 
 def layout_signature(layout: HudLayoutView) -> tuple[object, ...]:
@@ -55,16 +54,3 @@ def install_hud_zone_widgets(
         ).with_background(color=PANEL_BACKGROUND)
         panel = panel.with_border(width=1, color=PANEL_BORDER)
         add_widget(panel, layer=0)
-        state = "collapsed" if region.collapsed else "open"
-        add_widget(
-            arcade.gui.UILabel(
-                text=f"{region.label} [{state}]",
-                x=region.rect.x + 10.0,
-                y=region.rect.top - 18.0,
-                font_size=10,
-                text_color=PANEL_LABEL,
-                width=max(1.0, region.rect.width - 20.0),
-                height=16.0,
-            ),
-            layer=1,
-        )
