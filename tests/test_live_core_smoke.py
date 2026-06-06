@@ -25,14 +25,19 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     assert decision is not None
     assert decision.decision_type == "select_movement_unit"
     assert decision.actor_id == "player-a"
-    assert decision.options[0].option_id == "army-alpha:intercessor-unit-1"
+    assert [option.option_id for option in decision.options] == [
+        "army-alpha:intercessor-unit-1",
+        "army-alpha:intercessor-unit-3",
+    ]
     assert startup.viewer_player_id == "player-a"
     assert startup.event_cursor > 0
     assert startup.battlefield_view.table.width == 60.0
     assert startup.battlefield_view.table.height == 44.0
     assert [unit.unit_id for unit in startup.battlefield_view.units] == [
         "army-alpha:intercessor-unit-1",
+        "army-alpha:intercessor-unit-3",
         "army-beta:intercessor-unit-2",
+        "army-beta:intercessor-unit-4",
     ]
     assert startup.battlefield_view.units[0].models[0].model_id == (
         "army-alpha:intercessor-unit-1:core-intercessor-like:001"
@@ -119,11 +124,12 @@ def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> N
     )
 
     assert accepted_status.status_kind == "waiting_for_decision"
-    assert _required_object_value(accepted_status.payload)["phase_body_status"] == (
-        "fire_overwatch_reaction_pending"
-    )
     assert accepted_status.decision is not None
-    assert accepted_status.decision.decision_type == "submit_stratagem_target_proposal"
+    assert accepted_status.decision.decision_type == "select_movement_unit"
+    assert [option.option_id for option in accepted_status.decision.options] == [
+        "army-alpha:intercessor-unit-3"
+    ]
+    assert _required_object_value(accepted_status.payload)["legal_unit_count"] == 1
     assert "movement_activation_completed" in _event_types(event_delta.events)
 
 

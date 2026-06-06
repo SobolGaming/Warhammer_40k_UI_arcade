@@ -129,13 +129,18 @@ After implementation:
   `phase6`/`phase10` fake debug request.
 - [ ] Confirm the finite-decision HUD starts at real `select_movement_unit` with the option
   `army-alpha:intercessor-unit-1`.
+- [ ] Confirm the live projection contains two player-a units and two player-b units:
+  `army-alpha:intercessor-unit-1`, `army-alpha:intercessor-unit-3`,
+  `army-beta:intercessor-unit-2`, and `army-beta:intercessor-unit-4`.
 - [ ] Press Enter to select the engine-emitted movement unit option.
 - [ ] Click a player-a model on the table, open the selected-unit actions menu, and choose
   `Normal Move`.
 - [ ] Select the whole unit, draft a short translated path, press Enter once, and confirm only a
   local payload preview is ready.
-- [ ] Press Enter again and confirm the engine response either advances to the next live pending
-  decision, such as a Fire Overwatch reaction prompt, or shows an authoritative invalid diagnostic.
+- [ ] Press Enter again and confirm the engine response advances to the next live pending decision.
+  In the current two-unit smoke scenario, this should return to `select_movement_unit` with the
+  remaining player-a unit `army-alpha:intercessor-unit-3`; later responses may advance to reaction
+  prompts once all active movement units have been handled.
 - [ ] If accepted, confirm local draft overlays clear and model bases move only after projection
   refresh.
 - [ ] If invalid, confirm the diagnostic code/message comes from the engine and the draft remains

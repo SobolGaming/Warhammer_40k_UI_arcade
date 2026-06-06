@@ -103,7 +103,9 @@ def test_driver_can_launch_live_core_smoke_and_submit_real_finite_choice() -> No
         assert driver.pending_decision_type == "select_movement_unit"
         assert driver.battlefield_unit_ids == (
             "army-alpha:intercessor-unit-1",
+            "army-alpha:intercessor-unit-3",
             "army-beta:intercessor-unit-2",
+            "army-beta:intercessor-unit-4",
         )
 
         unit_position = driver.first_model_position_for_unit("army-alpha:intercessor-unit-1")
