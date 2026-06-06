@@ -12,6 +12,7 @@ plans separate from engine/core documentation.
 - `ui-configuration.md` — Phase 4 notes for the shareable UI preferences framework.
 - `preferences/` — documented portable example profiles for the default, dense-debug,
   keyboard-heavy, and command-bench configurations.
+- `hud/` — Phase 19 HUD composition YAML profiles and preview-only examples for widget review.
 - Crash diagnostic bundle usage is documented in the root `README.md` under
   "Crash diagnostic bundles".
 

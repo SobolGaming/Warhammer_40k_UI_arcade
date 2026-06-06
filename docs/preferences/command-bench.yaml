@@ -71,6 +71,7 @@ selection:
   show_debug_inspector: false
 hud:
   layout_preset: command_bench
+  composition_profile: docs/hud/command-bench-hud.yaml
   zones:
     top_ribbon:
       visible: true

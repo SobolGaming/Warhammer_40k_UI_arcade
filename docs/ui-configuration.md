@@ -76,6 +76,9 @@ requests, proposal kinds, validation behavior, or visibility rules.
 Assignment review settings:
 
 - `layout_preset`: `compass_ring` or `command_bench`.
+- `composition_profile`: optional path to a separate HUD composition YAML file. This file describes
+  presentation-only widget trees for HUD zones and is kept separate from hotkeys, overlays, and
+  other personal preferences.
 - `zones`: known presentation-only HUD zone settings. Each zone supports:
   - `visible`: whether to show the zone socket;
   - `size_px`: preferred size in pixels;
@@ -96,6 +99,7 @@ Example:
 ```yaml
 hud:
   layout_preset: compass_ring
+  composition_profile: docs/hud/default-hud.yaml
   zones:
     top_ribbon:
       visible: true
@@ -120,6 +124,28 @@ hud:
   text_scale: 1.0
   high_contrast: false
 ```
+
+## HUD Composition YAML
+
+HUD composition files live separately from preference profiles. Production examples live in
+[docs/hud](hud/); preview examples with placeholder data live in [docs/hud/examples](hud/examples/).
+
+The composition dialect is schema-versioned and presentation-only. It supports known widget types,
+known icon IDs, safe `data_ref` names, parent-relative layout hints, and component attributes. It
+does not allow executable expressions, includes/templates, legal-action definitions, proposal
+kinds, finite option IDs, request IDs, validation rules, or hidden-information visibility rules.
+
+Preview files may include `sample_data` so widgets can be reviewed without a game session:
+
+```bash
+uv run warhammer40k-hud-preview docs/hud/examples/unit-datasheet-preview.yaml
+uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml \
+  --component movement_budget_ring \
+  --headless \
+  --artifact-dir /tmp/hud-preview
+```
+
+Headless preview writes a PNG and JSON metadata file for review automation.
 
 ## Command IDs
 

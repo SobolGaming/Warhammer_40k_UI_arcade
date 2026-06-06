@@ -161,6 +161,7 @@ class HudPreferences:
     """HUD display defaults."""
 
     layout_preset: HudLayoutPreset
+    composition_profile: str | None
     zones: tuple[HudZonePreference, ...]
     show_phase: bool
     show_active_player: bool
@@ -182,6 +183,7 @@ class HudPreferences:
 
         return {
             "layout_preset": self.layout_preset,
+            "composition_profile": self.composition_profile,
             "zones": {zone.zone_id: zone.to_payload() for zone in self.zones},
             "show_phase": self.show_phase,
             "show_active_player": self.show_active_player,
@@ -502,6 +504,7 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
         frozenset(
             (
                 "layout_preset",
+                "composition_profile",
                 "zones",
                 "show_phase",
                 "show_active_player",
@@ -548,6 +551,7 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
         )
     return HudPreferences(
         layout_preset=_hud_layout_preset(section, "layout_preset", diagnostics, "hud"),
+        composition_profile=_optional_string(section, "composition_profile", diagnostics, "hud"),
         zones=_parse_hud_zones(section.get("zones"), diagnostics),
         show_phase=_required_bool(section, "show_phase", diagnostics, "hud"),
         show_active_player=_required_bool(section, "show_active_player", diagnostics, "hud"),

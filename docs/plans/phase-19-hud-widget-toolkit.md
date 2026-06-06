@@ -697,72 +697,69 @@ Tasks:
 
 ## Implementation Tasks
 
-- [ ] Create typed HUD theme tokens and default theme values.
-- [ ] Create reusable component view models for the inventory above.
-- [ ] Create layout composition view models for container, stack, grid, anchor, and overlay layer.
-- [ ] Create a schema-versioned HUD composition YAML loader, validator, and typed diagnostics.
-- [ ] Allow preferences to reference a separate HUD composition YAML profile without merging that
+- [x] Create typed HUD theme tokens and default theme values.
+- [x] Create reusable component view models for the inventory above.
+- [x] Create layout composition view models for container, stack, grid, anchor, and overlay layer.
+- [x] Create a schema-versioned HUD composition YAML loader, validator, and typed diagnostics.
+- [x] Allow preferences to reference a separate HUD composition YAML profile without merging that
   profile into hotkey/overlay preferences.
-- [ ] Add runtime data-binding registries so composition YAML uses safe `data_ref` keys instead of
+- [x] Add runtime data-binding registries so composition YAML uses safe `data_ref` keys instead of
   executable expressions.
-- [ ] Add preview-only `sample_data` support for widget-review YAML files.
-- [ ] Create primitive render adapters for the components needed by the current HUD.
-- [ ] Keep live Arcade widget paths and headless primitive evidence paths visually aligned.
-- [ ] Add icon-slot placeholder support and future SVG texture-cache interface.
-- [ ] Add `warhammer40k-hud-preview` under `[project.scripts]` for raw Arcade rendering of arbitrary
+- [x] Add preview-only `sample_data` support for widget-review YAML files.
+- [x] Create primitive render adapters for the components needed by the current HUD.
+- [x] Keep live Arcade widget paths and headless primitive evidence paths visually aligned.
+- [x] Add icon-slot placeholder support and future SVG texture-cache interface.
+- [x] Add `warhammer40k-hud-preview` under `[project.scripts]` for raw Arcade rendering of arbitrary
   HUD/widget YAML composition files.
-- [ ] Add headless preview artifact output with PNG and JSON metadata.
-- [ ] Add clipping/overflow proof for nested containers.
-- [ ] Add component state style tests for normal, selected, disabled, warning, and invalid states.
-- [ ] Add composition YAML validation tests for unknown widget types, invalid attributes, missing
+- [x] Add headless preview artifact output with PNG and JSON metadata.
+- [x] Add clipping/overflow proof for nested containers.
+- [x] Add component state style tests for normal, selected, disabled, warning, and invalid states.
+- [x] Add composition YAML validation tests for unknown widget types, invalid attributes, missing
   data refs, unsafe includes, and preview sample-data diagnostics.
-- [ ] Add documentation examples showing how a right-inspector datasheet and bottom workbench can be
+- [x] Add documentation examples showing how a right-inspector datasheet and bottom workbench can be
   assembled from toolkit components.
 
 ## Acceptance Criteria
 
-- [ ] A parent container can host adjacent child panels without each child using absolute screen
+- [x] A parent container can host adjacent child panels without each child using absolute screen
   coordinates.
-- [ ] A non-renderable container can guide child placement without drawing a visible panel.
-- [ ] A renderable panel can draw fill, border, title, and clipped content in live and headless
+- [x] A non-renderable container can guide child placement without drawing a visible panel.
+- [x] A renderable panel can draw fill, border, title, and clipped content in live and headless
   render paths.
-- [ ] An `IconTextBar` can place an icon on the left or right and truncate or clip long labels
+- [x] An `IconTextBar` can place an icon on the left or right and truncate or clip long labels
   predictably.
-- [ ] A `DonutGauge` can render with configurable inner diameter, outer diameter, alpha, progress,
+- [x] A `DonutGauge` can render with configurable inner diameter, outer diameter, alpha, progress,
   and segment settings.
-- [ ] Unit rail, datasheet header, datasheet panel, stat strip, entity chip, status chip, action
+- [x] Unit rail, datasheet header, datasheet panel, stat strip, entity chip, status chip, action
   button, mission card, and assignment row view models have explicit tunable attributes and
   deterministic tests.
-- [ ] A production HUD composition YAML file can describe nested toolkit widgets without sample data.
-- [ ] A preview HUD composition YAML file can use the same dialect plus `sample_data` to render
+- [x] A production HUD composition YAML file can describe nested toolkit widgets without sample data.
+- [x] A preview HUD composition YAML file can use the same dialect plus `sample_data` to render
   placeholder widget states.
-- [ ] Preferences can reference a HUD composition YAML file, and invalid references produce typed
+- [x] Preferences can reference a HUD composition YAML file, and invalid references produce typed
   diagnostics.
-- [ ] `warhammer40k-hud-preview` can render an arbitrary composition YAML file without launching a
+- [x] `warhammer40k-hud-preview` can render an arbitrary composition YAML file without launching a
   game session or requiring a core engine client.
-- [ ] `warhammer40k-hud-preview --headless` writes PNG and JSON artifacts suitable for automated
+- [x] `warhammer40k-hud-preview --headless` writes PNG and JSON artifacts suitable for automated
   review.
-- [ ] Toolkit preferences are presentation-only and cannot define legal actions or validation.
-- [ ] Headless render evidence shows toolkit panel fills, labels, icons/placeholders, and clipping
+- [x] Toolkit preferences are presentation-only and cannot define legal actions or validation.
+- [x] Headless render evidence shows toolkit panel fills, labels, icons/placeholders, and clipping
   behavior close enough to the player-facing view to diagnose layout issues.
 
 ## Manual Validation Checklist
 
-- [ ] Launch the default HUD layout and confirm toolkit placeholder panels match the configured
-  theme opacity and borders.
-- [ ] Switch between `compass_ring` and `command_bench` layouts and confirm child components remain
-  parent-relative.
-- [ ] Enable debug bounds and confirm invisible containers show diagnostic outlines only in debug
-  mode.
-- [ ] Increase text scale and confirm bars/cards preserve stable dimensions or clip predictably.
-- [ ] Toggle high-contrast mode and confirm icon slots, warnings, and invalid states remain
-  color-independent.
-- [ ] Run `uv run warhammer40k-hud-preview <example-yaml>` and confirm a single widget or composed
-  panel can be reviewed without launching a game.
-- [ ] Run the preview command with `--headless --artifact-dir /tmp/hud-preview` and confirm it writes
-  a PNG plus JSON metadata.
-- [ ] Remove a required `sample_data` field from preview YAML and confirm the preview command reports
-  typed diagnostics rather than rendering misleading defaults.
+- [ ] Run `uv run warhammer40k-hud-preview docs/hud/examples/unit-datasheet-preview.yaml` and confirm
+  the datasheet preview opens without launching a game session.
+- [ ] Run `uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --component
+  movement_budget_ring` and confirm only the movement budget component is rendered.
+- [ ] Run `uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --headless
+  --artifact-dir /tmp/hud-preview` and confirm it writes a PNG plus JSON metadata.
+- [ ] Remove `movement_budget` from `sample_data` in a copy of `docs/hud/examples/workbench-preview.yaml`
+  and confirm the preview command reports `missing_sample_data`.
+- [ ] Change a widget `type` to an unknown value in a copy of an example YAML and confirm the preview
+  command reports `unknown_widget_type`.
+- [ ] Confirm `docs/preferences/default.yaml` references `docs/hud/default-hud.yaml` and
+  `docs/preferences/command-bench.yaml` references `docs/hud/command-bench-hud.yaml`.
 
 ## Closeout Milestone
 
@@ -770,3 +767,38 @@ Tasks:
 
 The UI has reusable, testable HUD components that can be composed into richer player-facing panels
 without creating one-off render code for each future feature.
+
+## Implementation Notes
+
+- Added `warhammer40k_arcade_ui.hud.toolkit` with theme tokens, widget view models, icon/data
+  registries, a placeholder icon cache seam, and supported tunable attributes.
+- Added `warhammer40k_arcade_ui.hud.composition` with schema-versioned YAML parsing, typed
+  diagnostics, safe `data_ref` validation, preview-only `sample_data`, unsafe include rejection, and
+  a preference-reference loader.
+- Added `warhammer40k_arcade_ui.hud.toolkit_render` so widget trees render through deterministic
+  screen-space primitives for tests and preview artifacts.
+- Added `warhammer40k-hud-preview` for interactive and headless HUD/widget review.
+- Added production HUD composition examples under `docs/hud/` and preview examples under
+  `docs/hud/examples/`.
+- Added `hud.composition_profile` to shareable preferences. This is a presentation-only file
+  reference and does not merge legal actions, rule validation, or decision IDs into preferences.
+- Arcade GUI widget clipping/scrolling still needs to be proven before Phase 20 depends on it. This
+  phase provides deterministic primitive-level parent-relative placement and text truncation.
+- Fixed the interactive preview draw loop to use `Window.clear()` per frame instead of
+  `arcade.start_render()`. `start_render()` is only valid for one-shot static scripts and crashes on
+  repeated `on_draw` dispatch.
+- Increased datasheet stat cell spacing and added a `stat_cell_height` setting so labels and values
+  clip/truncate independently instead of overprinting each other in tight inspector previews.
+- Added `stat_cell_min_width` and `stat_cell_gap` settings. The renderer now fits the full stat row
+  inside the datasheet content width before honoring preferred minimums, so rightmost stats do not
+  spill over the inspector boundary.
+
+## Automated Verification
+
+- `UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest tests/test_hud_widget_toolkit.py tests/test_preferences.py`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run pyright`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest tests/`
+- `UV_CACHE_DIR=/tmp/uv-cache PRE_COMMIT_HOME=/tmp/pre-commit-cache uv run pre-commit run --all-files`
