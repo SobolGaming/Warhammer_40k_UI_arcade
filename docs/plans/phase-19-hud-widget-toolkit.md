@@ -101,6 +101,120 @@ Clipping and scroll behavior must be implemented and tested explicitly. Do not a
 automatically clipped by its parent unless the specific Arcade widget/layout path proves it in
 headless and live rendering.
 
+### YAML composition model
+
+The toolkit should support HUD composition through validated YAML files so designers and power users
+can iterate on panel structure without changing Python code for every layout experiment.
+
+This should be a separate composition file from `preferences/default.yaml`. Preferences may reference
+a composition file, for example:
+
+```yaml
+hud:
+  layout_preset: compass_ring
+  composition_profile: docs/hud/default-hud.yaml
+```
+
+The composition file owns widget structure and presentation bindings. The preferences file owns
+profile selection, global density/theme choices, hotkeys, overlay defaults, and other existing UI
+settings. Keeping those files separate makes it easier to pass around a complete HUD experiment
+without mixing it with a user's hotkey and overlay preferences.
+
+Suggested production shape:
+
+```yaml
+schema_version: 1
+profile_id: default_compass_hud
+layout_preset: compass_ring
+theme: default
+regions:
+  right_inspector:
+    widget:
+      type: HudContainer
+      id: selected_inspector_root
+      layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 10}
+      children:
+        - type: DatasheetPanel
+          id: selected_unit_datasheet
+          data_ref: selected_unit
+          density: compact
+        - type: AssignmentGroupRow
+          id: current_assignment_row
+          data_ref: current_assignment
+  bottom_workbench:
+    widget:
+      type: HudContainer
+      id: movement_workbench_root
+      layout: {kind: grid, columns: 2, gap_px: 8, padding_px: 10}
+      children:
+        - type: IconTextBar
+          id: current_action_title
+          icon_id: action.movement
+          data_ref: current_action
+        - type: DonutGauge
+          id: movement_budget_ring
+          data_ref: movement_budget
+```
+
+Requirements:
+
+- The YAML dialect must be schema-versioned.
+- The YAML dialect must support component trees with `type`, `id`, parent-relative layout hints,
+  component attributes, icon IDs, theme roles, and data references.
+- The YAML dialect must validate all widget `type` values against the known toolkit registry.
+- The YAML dialect must validate attributes against each widget's declared tunable attributes.
+- The YAML dialect must validate icon IDs where an icon registry is available.
+- The YAML dialect must validate `data_ref` names against a preview/runtime binding registry rather
+  than evaluating arbitrary expressions.
+- The YAML dialect must support reusable component definitions or includes after a safe include
+  strategy is designed. Includes must not permit arbitrary code execution or path traversal.
+- The YAML dialect must not define legal actions, rule validation, proposal kinds, finite option
+  IDs, request IDs, or hidden-information visibility rules.
+- Unknown widget types, unknown attributes, invalid enum values, unsafe include paths, and missing
+  runtime data bindings must produce typed diagnostics.
+- Runtime HUD YAML must omit placeholder data. It binds to real UI view models at runtime.
+- Preview HUD YAML may include a dedicated `sample_data` section for local widget-review rendering.
+
+### Widget preview entrypoint
+
+Add a raw widget/HUD preview entrypoint under `pyproject.toml` `[project.scripts]` so new
+widgets, panels, and composition ideas can be reviewed without starting a game session.
+
+Suggested script:
+
+```toml
+[project.scripts]
+warhammer40k-hud-preview = "warhammer40k_arcade_ui.hud.preview:main"
+```
+
+The preview command should load an arbitrary YAML file written in the same composition dialect used
+by production `hud.yaml` files. Preview YAML may include placeholder data; production HUD YAML should
+not.
+
+Suggested command shape:
+
+```bash
+uv run warhammer40k-hud-preview docs/hud/examples/unit-datasheet-preview.yaml
+uv run warhammer40k-hud-preview docs/hud/examples/unit-datasheet-preview.yaml --component selected_unit_datasheet
+uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --headless --artifact-dir /tmp/hud-preview
+```
+
+Requirements:
+
+- The preview entrypoint must render only the requested widget tree or composition profile, not the
+  full game battlefield unless explicitly asked.
+- The preview entrypoint must use the same YAML dialect and validation path as runtime HUD
+  composition.
+- The preview entrypoint must support placeholder/sample data inside the preview YAML.
+- The preview entrypoint must fail with typed diagnostics for unknown widget types, invalid
+  attributes, invalid sample data, unsafe includes, and missing icon/data references.
+- The preview entrypoint should support viewport size, target component ID, theme/density override,
+  and headless artifact output.
+- Headless preview artifact output should write a PNG and JSON metadata bundle so reviewers and
+  agents can compare widget ideas.
+- The preview entrypoint must not import mutable engine internals or require a live core session.
+- The preview entrypoint must not permit executable expressions in YAML.
+
 ## Widget Inventory And Tunable Attributes
 
 ### 1. `HudContainer`
@@ -586,11 +700,22 @@ Tasks:
 - [ ] Create typed HUD theme tokens and default theme values.
 - [ ] Create reusable component view models for the inventory above.
 - [ ] Create layout composition view models for container, stack, grid, anchor, and overlay layer.
+- [ ] Create a schema-versioned HUD composition YAML loader, validator, and typed diagnostics.
+- [ ] Allow preferences to reference a separate HUD composition YAML profile without merging that
+  profile into hotkey/overlay preferences.
+- [ ] Add runtime data-binding registries so composition YAML uses safe `data_ref` keys instead of
+  executable expressions.
+- [ ] Add preview-only `sample_data` support for widget-review YAML files.
 - [ ] Create primitive render adapters for the components needed by the current HUD.
 - [ ] Keep live Arcade widget paths and headless primitive evidence paths visually aligned.
 - [ ] Add icon-slot placeholder support and future SVG texture-cache interface.
+- [ ] Add `warhammer40k-hud-preview` under `[project.scripts]` for raw Arcade rendering of arbitrary
+  HUD/widget YAML composition files.
+- [ ] Add headless preview artifact output with PNG and JSON metadata.
 - [ ] Add clipping/overflow proof for nested containers.
 - [ ] Add component state style tests for normal, selected, disabled, warning, and invalid states.
+- [ ] Add composition YAML validation tests for unknown widget types, invalid attributes, missing
+  data refs, unsafe includes, and preview sample-data diagnostics.
 - [ ] Add documentation examples showing how a right-inspector datasheet and bottom workbench can be
   assembled from toolkit components.
 
@@ -608,6 +733,15 @@ Tasks:
 - [ ] Unit rail, datasheet header, datasheet panel, stat strip, entity chip, status chip, action
   button, mission card, and assignment row view models have explicit tunable attributes and
   deterministic tests.
+- [ ] A production HUD composition YAML file can describe nested toolkit widgets without sample data.
+- [ ] A preview HUD composition YAML file can use the same dialect plus `sample_data` to render
+  placeholder widget states.
+- [ ] Preferences can reference a HUD composition YAML file, and invalid references produce typed
+  diagnostics.
+- [ ] `warhammer40k-hud-preview` can render an arbitrary composition YAML file without launching a
+  game session or requiring a core engine client.
+- [ ] `warhammer40k-hud-preview --headless` writes PNG and JSON artifacts suitable for automated
+  review.
 - [ ] Toolkit preferences are presentation-only and cannot define legal actions or validation.
 - [ ] Headless render evidence shows toolkit panel fills, labels, icons/placeholders, and clipping
   behavior close enough to the player-facing view to diagnose layout issues.
@@ -623,6 +757,12 @@ Tasks:
 - [ ] Increase text scale and confirm bars/cards preserve stable dimensions or clip predictably.
 - [ ] Toggle high-contrast mode and confirm icon slots, warnings, and invalid states remain
   color-independent.
+- [ ] Run `uv run warhammer40k-hud-preview <example-yaml>` and confirm a single widget or composed
+  panel can be reviewed without launching a game.
+- [ ] Run the preview command with `--headless --artifact-dir /tmp/hud-preview` and confirm it writes
+  a PNG plus JSON metadata.
+- [ ] Remove a required `sample_data` field from preview YAML and confirm the preview command reports
+  typed diagnostics rather than rendering misleading defaults.
 
 ## Closeout Milestone
 
