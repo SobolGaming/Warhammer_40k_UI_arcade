@@ -13,6 +13,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiFiniteOption,
     UiInvalidDiagnostic,
 )
+from warhammer40k_arcade_ui.hud.layouts import build_hud_layout
 from warhammer40k_arcade_ui.hud.view_models import (
     build_assignment_hud_panel,
     build_context_menu,
@@ -27,6 +28,7 @@ from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
     PolygonPrimitive,
     PolylinePrimitive,
+    RenderPrimitive,
     TextPrimitive,
     build_hud_primitives,
     build_world_primitives,
@@ -143,9 +145,41 @@ def test_hud_primitives_are_screen_space_and_include_mouse_coordinates() -> None
     )
 
     assert all(primitive.coordinate_space == "screen" for primitive in primitives)
-    assert primitives[0].position == (16.0, 776.0)
-    assert any(primitive.text == "Pending: Select movement action" for primitive in primitives)
-    assert any(primitive.text == "Mouse: 12.35, 22.00 in" for primitive in primitives)
+    text_primitives = _text_primitives(primitives)
+    assert text_primitives[0].position == (16.0, 776.0)
+    assert "Pending: Select movement action" in _text_lines(primitives)
+    assert "Mouse: 12.35, 22.00 in" in _text_lines(primitives)
+
+
+def test_hud_layout_primitives_include_configurable_zone_skeleton() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    layout = build_hud_layout(
+        preferences=preferences,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+    )
+
+    primitives = build_hud_primitives(
+        view=view,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+        mouse_world_position=None,
+        hud_layout=layout,
+    )
+
+    polygon_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is PolygonPrimitive
+    ]
+    texts = _text_lines(primitives)
+    assert "hud_center_viewport" in polygon_layers
+    assert "hud_zone_top_ribbon" in polygon_layers
+    assert "hud_zone_left_rail" in polygon_layers
+    assert "hud_zone_right_inspector" in polygon_layers
+    assert "hud_zone_bottom_workbench" in polygon_layers
+    assert "HUD layout: Compass Ring" in texts
+    assert "Action workbench [open]" in texts
+    assert all(primitive.coordinate_space == "screen" for primitive in primitives)
 
 
 def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> None:
@@ -203,7 +237,7 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
         ),
     )
 
-    texts = [primitive.text for primitive in primitives]
+    texts = _text_lines(primitives)
     assert "Unit: Intercessors" in texts
     assert "Action: Normal Move" in texts
     assert "Actions: intercessor_squad" in texts
@@ -240,7 +274,7 @@ def test_hud_primitives_include_movement_draft_panel() -> None:
         ),
     )
 
-    texts = [primitive.text for primitive in primitives]
+    texts = _text_lines(primitives)
     assert "Movement draft" in texts
     assert "Payload preview: ready" in texts
     assert "Mode: normal" in texts
@@ -281,7 +315,7 @@ def test_hud_primitives_include_assignment_review_panel() -> None:
         ),
     )
 
-    texts = [primitive.text for primitive in primitives]
+    texts = _text_lines(primitives)
     assert "Assignment review" in texts
     assert "Operation: movement" in texts
     assert "Ready: ready" in texts
@@ -296,6 +330,59 @@ def test_hud_primitives_include_assignment_review_panel() -> None:
         for primitive in primitives
         if primitive.layer == "assignment_hud_panel"
     )
+
+
+def test_assignment_review_panel_is_clipped_inside_layout_region() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    layout = build_hud_layout(
+        preferences=preferences,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+    )
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=_movement_proposal_decision(),
+    )
+    assert draft is not None
+    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
+
+    primitives = build_hud_primitives(
+        view=view,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+        mouse_world_position=None,
+        assignment_hud_panel=build_assignment_hud_panel(
+            movement_draft=draft,
+            pending_decision=_movement_proposal_decision(),
+            highlighted_option_index=0,
+            diagnostics=(),
+            preferences=preferences,
+            preference_source_label="default.yaml",
+            debug_visible=True,
+            event_log_lines=tuple(f"event-{index}" for index in range(20)),
+        ),
+        hud_layout=layout,
+    )
+
+    assignment_texts = [
+        primitive.text
+        for primitive in _text_primitives(primitives)
+        if primitive.layer == "assignment_hud_panel"
+    ]
+    bottom_workbench = layout.region("bottom_workbench")
+    assert bottom_workbench is not None
+    assert len(assignment_texts) <= bottom_workbench.rect.line_capacity(
+        line_height_px=15.5,
+        top_padding_px=38.0,
+    )
+    assert any(text.startswith("... ") for text in assignment_texts)
 
 
 def test_movement_draft_panel_renders_invalid_diagnostic_lines() -> None:
@@ -320,7 +407,7 @@ def test_movement_draft_panel_renders_invalid_diagnostic_lines() -> None:
         ),
     )
 
-    texts = [primitive.text for primitive in primitives]
+    texts = _text_lines(primitives)
     assert (
         "Invalid: proposal_payload_missing_field [witness]: "
         "Proposal payload missing required field."
@@ -506,3 +593,11 @@ def _movement_proposal_decision() -> UiDecision:
             ],
         }
     )
+
+
+def _text_primitives(primitives: tuple[RenderPrimitive, ...]) -> tuple[TextPrimitive, ...]:
+    return tuple(primitive for primitive in primitives if type(primitive) is TextPrimitive)
+
+
+def _text_lines(primitives: tuple[RenderPrimitive, ...]) -> list[str]:
+    return [primitive.text for primitive in _text_primitives(primitives)]

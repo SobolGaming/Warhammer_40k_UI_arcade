@@ -136,6 +136,10 @@ assignments with authoritative movement proposal submission plus opt-in live-cor
   profile builders, alias rules, local add/subtract/toggle state transitions, request drift
   reconciliation, and visual-anchor diagnostics for movement and finite unit-selection profiles.
 - `warhammer40k_arcade_ui.input.commands` — preference-backed local hotkey matching.
+- `warhammer40k_arcade_ui.hud.layouts` — configurable HUD zone/region geometry, Compass Ring and
+  Command Bench presets, center-viewport preservation, and panel overflow line-capacity helpers.
+- `warhammer40k_arcade_ui.hud.widgets` — lazy Arcade GUI placeholder widgets for drawing the active
+  HUD zone shell in the live window without making non-window tests import `arcade.gui`.
 - `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, finite-decision
   panel, movement draft/diagnostic panel, generic assignment review HUD, and debug inspector view
   models derived from projection data and current pending requests.
@@ -143,11 +147,7 @@ assignments with authoritative movement proposal submission plus opt-in live-cor
 Planned modules from later phases:
 
 - `input` — later command flows beyond finite decisions and movement drafting.
-- `hud.layouts` — named HUD zone/region/panel presets, configurable geometry, and empty Arcade
-  widget container definitions for Compass Ring and Command Bench layouts.
-- `hud.widgets` — later Arcade-native status chips, panel shells, icon slots, scroll/overflow
-  helpers, and component classes that populate the layout zones.
-- `hud` — action visual summary controls and later phase-specific ergonomics.
+- `hud` — action visual summary controls, real content widgets, and later phase-specific ergonomics.
 - `render` — action visual summary primitives for movement paths, source-to-target links, icons,
   and review/dim summary states.
 - `state` — assignment workspaces and other local-only workflow state beyond movement drafts and

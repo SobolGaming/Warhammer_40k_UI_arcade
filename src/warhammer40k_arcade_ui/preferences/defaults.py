@@ -10,6 +10,7 @@ from warhammer40k_arcade_ui.preferences.schema import (
     OverlayPreferences,
     SelectionBehaviorPreferences,
     UiPreferences,
+    default_hud_zone_preferences,
 )
 
 
@@ -47,6 +48,8 @@ def default_preferences() -> UiPreferences:
             show_debug_inspector=False,
         ),
         hud=HudPreferences(
+            layout_preset="compass_ring",
+            zones=default_hud_zone_preferences(),
             show_phase=True,
             show_active_player=True,
             show_event_log=True,
@@ -91,6 +94,8 @@ def dense_debug_preferences() -> UiPreferences:
             show_debug_inspector=True,
         ),
         hud=HudPreferences(
+            layout_preset="compass_ring",
+            zones=default_hud_zone_preferences(),
             show_phase=True,
             show_active_player=True,
             show_event_log=True,
@@ -148,6 +153,39 @@ def keyboard_heavy_preferences() -> UiPreferences:
             planned_settings={
                 "input.keyboard_first_mode": True,
             },
+            extensions={},
+        ),
+    )
+
+
+def command_bench_preferences() -> UiPreferences:
+    """Return a profile that uses the command-bench HUD layout skeleton."""
+
+    base = default_preferences()
+    return UiPreferences(
+        schema_version=base.schema_version,
+        profile_name="command-bench",
+        overlays=base.overlays,
+        hotkeys=base.hotkeys,
+        selection=base.selection,
+        hud=HudPreferences(
+            layout_preset="command_bench",
+            zones=base.hud.zones,
+            show_phase=base.hud.show_phase,
+            show_active_player=base.hud.show_active_player,
+            show_event_log=base.hud.show_event_log,
+            show_config_diagnostics=base.hud.show_config_diagnostics,
+            show_selected_model_panel=base.hud.show_selected_model_panel,
+            show_selected_unit_panel=base.hud.show_selected_unit_panel,
+            show_assignment_hud=base.hud.show_assignment_hud,
+            assignment_hud_mode=base.hud.assignment_hud_mode,
+            show_assignment_warning_markers=base.hud.show_assignment_warning_markers,
+            show_chain_breadcrumbs=base.hud.show_chain_breadcrumbs,
+            text_scale=base.hud.text_scale,
+            high_contrast=base.hud.high_contrast,
+        ),
+        experimental=ExperimentalPreferenceFlags(
+            planned_settings={},
             extensions={},
         ),
     )

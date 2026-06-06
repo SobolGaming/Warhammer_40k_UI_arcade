@@ -19,10 +19,22 @@ SCHEMA_VERSION = "1"
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, JsonValue]
 type AssignmentHudMode = Literal["compact", "detailed"]
+type HudLayoutPreset = Literal["compass_ring", "command_bench"]
 
 _VALID_MODIFIERS = frozenset(("ctrl", "alt", "shift", "meta"))
 _VALID_MOUSE_BUTTONS = frozenset(("left", "right", "middle"))
 _VALID_ASSIGNMENT_HUD_MODES: frozenset[AssignmentHudMode] = frozenset(("compact", "detailed"))
+_VALID_HUD_LAYOUT_PRESETS: frozenset[HudLayoutPreset] = frozenset(("compass_ring", "command_bench"))
+_HUD_ZONE_SIZE_LIMITS = {
+    "top_ribbon": (40, 140),
+    "left_rail": (120, 360),
+    "right_inspector": (140, 420),
+    "bottom_workbench": (90, 260),
+    "left_player_bench": (140, 380),
+    "right_opponent_bench": (140, 380),
+    "bottom_command_bench": (120, 320),
+}
+_VALID_HUD_ZONE_IDS = frozenset(_HUD_ZONE_SIZE_LIMITS)
 _VALID_NAMED_KEYS = frozenset(
     (
         "escape",
@@ -122,9 +134,30 @@ class SelectionBehaviorPreferences:
 
 
 @dataclass(frozen=True, slots=True)
+class HudZonePreference:
+    """Presentation-only configuration for one named HUD zone."""
+
+    zone_id: str
+    visible: bool
+    size_px: int
+    collapsed: bool
+
+    def to_payload(self) -> JsonObject:
+        """Convert to deterministic JSON-safe payload."""
+
+        return {
+            "visible": self.visible,
+            "size_px": self.size_px,
+            "collapsed": self.collapsed,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class HudPreferences:
     """HUD display defaults."""
 
+    layout_preset: HudLayoutPreset
+    zones: tuple[HudZonePreference, ...]
     show_phase: bool
     show_active_player: bool
     show_event_log: bool
@@ -142,6 +175,8 @@ class HudPreferences:
         """Convert to deterministic JSON-safe payload."""
 
         return {
+            "layout_preset": self.layout_preset,
+            "zones": {zone.zone_id: zone.to_payload() for zone in self.zones},
             "show_phase": self.show_phase,
             "show_active_player": self.show_active_player,
             "show_event_log": self.show_event_log,
@@ -458,6 +493,8 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
         section,
         frozenset(
             (
+                "layout_preset",
+                "zones",
                 "show_phase",
                 "show_active_player",
                 "show_event_log",
@@ -487,6 +524,8 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
             )
         )
     return HudPreferences(
+        layout_preset=_hud_layout_preset(section, "layout_preset", diagnostics, "hud"),
+        zones=_parse_hud_zones(section.get("zones"), diagnostics),
         show_phase=_required_bool(section, "show_phase", diagnostics, "hud"),
         show_active_player=_required_bool(section, "show_active_player", diagnostics, "hud"),
         show_event_log=_required_bool(section, "show_event_log", diagnostics, "hud"),
@@ -535,6 +574,112 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
         text_scale=text_scale,
         high_contrast=_required_bool(section, "high_contrast", diagnostics, "hud"),
     )
+
+
+def default_hud_zone_preferences() -> tuple[HudZonePreference, ...]:
+    """Return deterministic default zone preferences for all known HUD zones."""
+
+    return (
+        HudZonePreference("top_ribbon", True, 68, False),
+        HudZonePreference("left_rail", True, 224, False),
+        HudZonePreference("right_inspector", True, 276, False),
+        HudZonePreference("bottom_workbench", True, 156, False),
+        HudZonePreference("left_player_bench", True, 240, False),
+        HudZonePreference("right_opponent_bench", True, 240, False),
+        HudZonePreference("bottom_command_bench", True, 220, False),
+    )
+
+
+def _hud_layout_preset(
+    payload: dict[str, object],
+    key: str,
+    diagnostics: list[PreferenceDiagnostic],
+    prefix: str,
+) -> HudLayoutPreset:
+    field = f"{prefix}.{key}"
+    value = payload.get(key)
+    if type(value) is str and value in _VALID_HUD_LAYOUT_PRESETS:
+        return value
+    diagnostics.append(
+        _diagnostic(
+            severity="error",
+            code="invalid_hud_layout_preset",
+            field=field,
+            message="hud.layout_preset must be compass_ring or command_bench.",
+            value=str(value),
+        )
+    )
+    return "compass_ring"
+
+
+def _parse_hud_zones(
+    payload: object,
+    diagnostics: list[PreferenceDiagnostic],
+) -> tuple[HudZonePreference, ...]:
+    defaults = {zone.zone_id: zone for zone in default_hud_zone_preferences()}
+    if type(payload) is not dict:
+        diagnostics.append(
+            _diagnostic(
+                severity="error",
+                code="invalid_section",
+                field="hud.zones",
+                message="hud.zones must be an object.",
+            )
+        )
+        return tuple(defaults.values())
+    parsed = dict(defaults)
+    for raw_zone_id, raw_zone_payload in cast(dict[object, object], payload).items():
+        if type(raw_zone_id) is not str or not raw_zone_id:
+            diagnostics.append(
+                _diagnostic(
+                    severity="error",
+                    code="invalid_key",
+                    field="hud.zones",
+                    message="hud.zones keys must be non-empty strings.",
+                    value=repr(raw_zone_id),
+                )
+            )
+            continue
+        if raw_zone_id not in _VALID_HUD_ZONE_IDS:
+            diagnostics.append(
+                _diagnostic(
+                    severity="error",
+                    code="unknown_hud_zone_id",
+                    field=f"hud.zones.{raw_zone_id}",
+                    message=f"Unknown HUD zone id: {raw_zone_id}.",
+                    value=raw_zone_id,
+                )
+            )
+            continue
+        zone_field = f"hud.zones.{raw_zone_id}"
+        section = _object_section(raw_zone_payload, zone_field, diagnostics)
+        _diagnose_unknown_keys(
+            section,
+            frozenset(("visible", "size_px", "collapsed")),
+            zone_field,
+            diagnostics,
+        )
+        size_px = _required_int(section, "size_px", diagnostics, zone_field)
+        min_size, max_size = _HUD_ZONE_SIZE_LIMITS[raw_zone_id]
+        if size_px < min_size or size_px > max_size:
+            diagnostics.append(
+                _diagnostic(
+                    severity="error",
+                    code="invalid_hud_zone_size",
+                    field=f"{zone_field}.size_px",
+                    message=(
+                        f"{zone_field}.size_px must be between {min_size} and {max_size} pixels."
+                    ),
+                    value=str(size_px),
+                )
+            )
+        parsed[raw_zone_id] = HudZonePreference(
+            zone_id=raw_zone_id,
+            visible=_required_bool(section, "visible", diagnostics, zone_field),
+            size_px=size_px,
+            collapsed=_required_bool(section, "collapsed", diagnostics, zone_field),
+        )
+    return tuple(parsed[zone.zone_id] for zone in default_hud_zone_preferences())
 
 
 def _parse_experimental(
@@ -737,6 +882,27 @@ def _required_float(
         )
     )
     return 0.0
+
+
+def _required_int(
+    payload: dict[str, object],
+    key: str,
+    diagnostics: list[PreferenceDiagnostic],
+    prefix: str,
+) -> int:
+    field = f"{prefix}.{key}"
+    value = payload.get(key)
+    if type(value) is int:
+        return value
+    diagnostics.append(
+        _diagnostic(
+            severity="error",
+            code="invalid_integer",
+            field=field,
+            message=f"{field} must be an integer.",
+        )
+    )
+    return 0
 
 
 def _assignment_hud_mode(

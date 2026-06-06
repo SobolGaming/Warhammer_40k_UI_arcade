@@ -10,8 +10,8 @@ plans separate from engine/core documentation.
 - `protocol-notes.md` — future UI-facing notes about the engine adapter/session protocol.
 - `movement-ui-flow.md` — future detailed movement interaction flow.
 - `ui-configuration.md` — Phase 4 notes for the shareable UI preferences framework.
-- `preferences/` — documented portable example profiles for the default, dense-debug, and
-  keyboard-heavy configurations.
+- `preferences/` — documented portable example profiles for the default, dense-debug,
+  keyboard-heavy, and command-bench configurations.
 - Crash diagnostic bundle usage is documented in the root `README.md` under
   "Crash diagnostic bundles".
 

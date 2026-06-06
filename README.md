@@ -19,6 +19,7 @@ uv lock
 uv sync
 uv run warhammer40k-arcade-ui
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
+uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --event-trace summary --event-trace-file /tmp/ui-trace.jsonl
 uv run warhammer40k-arcade-ui --crash-report-dir /tmp/ui-crashes
@@ -180,7 +181,9 @@ warhammer40k-arcade-ui/
         forensic_trace.py
       hud/
         __init__.py
+        layouts.py
         view_models.py
+        widgets.py
       input/
         __init__.py
         commands.py
