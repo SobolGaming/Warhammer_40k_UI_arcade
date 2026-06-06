@@ -168,6 +168,7 @@ def test_assignment_hud_preferences_round_trip() -> None:
 
     assert result.preferences is not None
     assert result.preferences.hud.layout_preset == "compass_ring"
+    assert result.preferences.hud.composition_profile == "docs/hud/default-hud.yaml"
     assert result.preferences.hud.zones[0].zone_id == "top_ribbon"
     assert result.preferences.hud.show_assignment_hud is True
     assert result.preferences.hud.assignment_hud_mode == "compact"

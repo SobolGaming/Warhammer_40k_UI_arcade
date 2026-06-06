@@ -76,6 +76,7 @@ selection:
   show_debug_inspector: true
 hud:
   layout_preset: compass_ring
+  composition_profile: docs/hud/default-hud.yaml
   zones:
     top_ribbon:
       visible: true

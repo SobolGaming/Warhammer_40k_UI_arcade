@@ -23,6 +23,7 @@ uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --event-trace summary --event-trace-file /tmp/ui-trace.jsonl
 uv run warhammer40k-arcade-ui --crash-report-dir /tmp/ui-crashes
+uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml
 uv run pytest
 ```
 
@@ -52,6 +53,19 @@ headless framebuffer path requires EGL/OpenGL runtime libraries. The GitHub Acti
 Render evidence helpers save PNG and JSON artifact bundles only when a semantic visual check fails,
 unless a test explicitly requests a success artifact. Set `WARHAMMER40K_ARCADE_UI_RENDER_ARTIFACT_DIR`
 to override the default local artifact directory `.test-artifacts/render`.
+
+## HUD widget preview
+
+HUD composition YAML files can be previewed without starting a game session:
+
+```bash
+uv run warhammer40k-hud-preview docs/hud/examples/unit-datasheet-preview.yaml
+uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --component movement_budget_ring
+uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --headless --artifact-dir /tmp/hud-preview
+```
+
+Runtime HUD composition files live under `docs/hud/`. Preview examples under `docs/hud/examples/`
+use the same YAML dialect plus placeholder `sample_data`.
 
 ## Forensic event traces
 

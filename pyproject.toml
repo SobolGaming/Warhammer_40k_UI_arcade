@@ -19,6 +19,7 @@ dependencies = [
 [project.scripts]
 warhammer40k-arcade-ui = "warhammer40k_arcade_ui.main:main"
 warhammer40k-export-preferences = "warhammer40k_arcade_ui.preferences.export_profile:main"
+warhammer40k-hud-preview = "warhammer40k_arcade_ui.hud.preview:main"
 
 [build-system]
 requires = ["hatchling>=1.27"]

@@ -51,6 +51,7 @@ def default_preferences() -> UiPreferences:
         ),
         hud=HudPreferences(
             layout_preset="compass_ring",
+            composition_profile="docs/hud/default-hud.yaml",
             zones=default_hud_zone_preferences(),
             show_phase=True,
             show_active_player=True,
@@ -99,6 +100,7 @@ def dense_debug_preferences() -> UiPreferences:
         ),
         hud=HudPreferences(
             layout_preset="compass_ring",
+            composition_profile="docs/hud/default-hud.yaml",
             zones=default_hud_zone_preferences(),
             show_phase=True,
             show_active_player=True,
@@ -178,6 +180,7 @@ def command_bench_preferences() -> UiPreferences:
         selection=base.selection,
         hud=HudPreferences(
             layout_preset="command_bench",
+            composition_profile="docs/hud/command-bench-hud.yaml",
             zones=base.hud.zones,
             show_phase=base.hud.show_phase,
             show_active_player=base.hud.show_active_player,

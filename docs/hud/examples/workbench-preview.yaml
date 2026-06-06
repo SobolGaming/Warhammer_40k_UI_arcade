@@ -1,0 +1,38 @@
+schema_version: 1
+profile_id: workbench_preview
+layout_preset: compass_ring
+theme: default
+sample_data:
+  current_action:
+    label: Normal Move
+    summary: Drafting model paths
+  movement_budget:
+    current: 4
+    maximum: 6
+    progress_fraction: 0.67
+  current_assignment:
+    label: Alpha Squad Movement
+    summary: 3 assigned, 0 no-op
+regions:
+  bottom_workbench:
+    widget:
+      type: HudContainer
+      id: workbench_preview_root
+      render_mode: panel
+      layout: {kind: grid, columns: 3, gap_px: 10, padding_px: 10}
+      children:
+      - type: IconTextBar
+        id: current_action_title
+        icon_id: action.movement
+        data_ref: current_action
+        primary_label: Current Action
+      - type: AssignmentGroupRow
+        id: movement_assignment_row
+        data_ref: current_assignment
+        group_label: Movement Assignments
+      - type: DonutGauge
+        id: movement_budget_ring
+        data_ref: movement_budget
+        inner_diameter: 44
+        outer_diameter: 84
+        label_text: Move
