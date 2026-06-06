@@ -162,6 +162,28 @@ def test_entity_selection_commands_are_active_and_default_bindable() -> None:
     assert "unknown_command_id" not in _codes(result.diagnostics)
 
 
+def test_assignment_hud_preferences_round_trip() -> None:
+    result = parse_preferences_payload(default_preferences().to_payload())
+
+    assert result.preferences is not None
+    assert result.preferences.hud.show_assignment_hud is True
+    assert result.preferences.hud.assignment_hud_mode == "compact"
+    assert result.preferences.hud.show_assignment_warning_markers is True
+    assert result.preferences.hud.show_chain_breadcrumbs is True
+
+
+def test_invalid_assignment_hud_mode_is_diagnostic() -> None:
+    payload = default_preferences().to_payload()
+    hud = payload["hud"]
+    assert type(hud) is dict
+    hud["assignment_hud_mode"] = "wide"
+
+    result = parse_preferences_payload(payload)
+
+    assert result.preferences is not None
+    assert "invalid_assignment_hud_mode" in _codes(result.diagnostics)
+
+
 def test_unknown_top_level_key_is_diagnostic_but_extensions_are_preserved() -> None:
     payload = default_preferences().to_payload()
     payload["unknown"] = True

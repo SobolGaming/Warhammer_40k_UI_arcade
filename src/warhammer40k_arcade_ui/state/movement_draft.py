@@ -27,6 +27,7 @@ MOVEMENT_PROPOSAL_DECISION_TYPE = "submit_movement_proposal"
 MOVEMENT_MODE_CONTEXT_KEY = "movement_mode"
 FALL_BACK_MODE_CONTEXT_KEY = "fall_back_mode"
 MOVEMENT_BUDGET_CONTEXT_KEY = "movement_budget_inches"
+SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS = frozenset(("normal_move", "advance", "fall_back"))
 
 type MovementDraftMode = Literal["model_assignments"]
 type MovementAssignmentState = Literal["active", "assigned", "unassigned"]
@@ -784,6 +785,8 @@ def movement_proposal_for_selected_unit(
         return None
     if proposal.decision_type != MOVEMENT_PROPOSAL_DECISION_TYPE:
         return None
+    if proposal.proposal_kind not in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS:
+        return None
     if proposal.unit_instance_id != selection.selected_unit_id:
         return None
     return proposal
@@ -799,8 +802,12 @@ def unsupported_parameterized_tool_label(pending_decision: UiDecision | None) ->
         return pending_decision.decision_type
     if pending_decision.movement_proposal is not None:
         movement = pending_decision.movement_proposal
-        if movement.decision_type == MOVEMENT_PROPOSAL_DECISION_TYPE:
+        if (
+            movement.decision_type == MOVEMENT_PROPOSAL_DECISION_TYPE
+            and movement.proposal_kind in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS
+        ):
             return None
+        return movement.proposal_kind
     return proposal.proposal_kind or proposal.decision_type
 
 

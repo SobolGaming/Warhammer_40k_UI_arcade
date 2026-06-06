@@ -66,6 +66,38 @@ top-level fields produce diagnostics. Tool- or user-specific extension payloads 
 
 Example profiles live in [docs/preferences](preferences/).
 
+## HUD Settings
+
+The `hud` section controls local display defaults only. It cannot define legal actions, engine
+requests, proposal kinds, validation behavior, or visibility rules.
+
+Assignment review settings:
+
+- `show_assignment_hud`: show or hide the request-scoped Assignment Review panel.
+- `assignment_hud_mode`: `compact` or `detailed`.
+- `show_assignment_warning_markers`: show color-independent warning markers for advisory hints and
+  diagnostics.
+- `show_chain_breadcrumbs`: show recent existing event-log lines as chain breadcrumbs in the
+  Assignment Review panel.
+
+Example:
+
+```yaml
+hud:
+  show_phase: true
+  show_active_player: true
+  show_event_log: true
+  show_config_diagnostics: true
+  show_selected_model_panel: true
+  show_selected_unit_panel: true
+  show_assignment_hud: true
+  assignment_hud_mode: detailed
+  show_assignment_warning_markers: true
+  show_chain_breadcrumbs: true
+  text_scale: 1.0
+  high_contrast: false
+```
+
 ## Command IDs
 
 Active command IDs:

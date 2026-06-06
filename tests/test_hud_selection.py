@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from warhammer40k_arcade_ui.core_client.protocol import (
     UiDecision,
     UiFiniteOption,
     UiInvalidDiagnostic,
 )
 from warhammer40k_arcade_ui.hud.view_models import (
+    build_assignment_hud_panel,
     build_context_menu,
     build_debug_inspector,
     build_finite_decision_panel,
@@ -243,6 +246,136 @@ def test_movement_draft_panel_surfaces_authoritative_diagnostics() -> None:
     )
 
 
+def test_assignment_hud_shows_ready_movement_groups_and_refs() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=_movement_proposal_decision(),
+    )
+    assert draft is not None
+    ready_draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
+
+    panel = build_assignment_hud_panel(
+        movement_draft=ready_draft,
+        pending_decision=_movement_proposal_decision(),
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=preferences,
+        preference_source_label="default.yaml",
+        debug_visible=True,
+    )
+
+    assert panel is not None
+    assert panel.request_id == "decision-request-000005"
+    assert panel.decision_type == "submit_movement_proposal"
+    assert panel.operation_kind == "movement"
+    assert panel.proposal_kind == "normal_move"
+    assert panel.active_layer == "model"
+    assert panel.active_selection_ref_keys == ("model:intercessor_1",)
+    assert panel.assigned_ref_keys == ("model:intercessor_1",)
+    assert panel.unassigned_ref_keys == ("model:intercessor_2", "model:intercessor_3")
+    assert panel.readiness_state == "ready"
+    assert [group.group_id for group in panel.groups] == [
+        "assignment-group-000001",
+        "unassigned-or-no-op",
+    ]
+    assert panel.groups[0].source_ref_keys == ("model:intercessor_1",)
+    assert panel.groups[1].label == "No-op ready: 2 model(s)"
+    assert panel.preference_source_label == "default.yaml"
+
+
+def test_assignment_hud_can_be_hidden_by_preferences() -> None:
+    preferences = default_preferences()
+    preferences = replace(
+        preferences,
+        hud=replace(preferences.hud, show_assignment_hud=False),
+    )
+
+    panel = build_assignment_hud_panel(
+        movement_draft=None,
+        pending_decision=_movement_proposal_decision(),
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=preferences,
+        preference_source_label="default.yaml",
+        debug_visible=True,
+    )
+
+    assert panel is None
+
+
+def test_assignment_hud_reports_unsupported_charge_move_without_movement_draft() -> None:
+    view = default_battlefield_view()
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=_charge_move_proposal_decision(),
+    )
+
+    panel = build_assignment_hud_panel(
+        movement_draft=draft,
+        pending_decision=_charge_move_proposal_decision(),
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=default_preferences(),
+        preference_source_label="default.yaml",
+        debug_visible=False,
+    )
+
+    assert draft is None
+    assert panel is not None
+    assert panel.operation_kind == "unsupported"
+    assert panel.proposal_kind == "charge_move"
+    assert panel.readiness_state == "unsupported"
+    assert panel.groups[0].label == "Unsupported proposal tool: charge_move"
+
+
+def test_assignment_hud_summarizes_fight_order_finite_options() -> None:
+    decision = UiDecision(
+        request_id="decision-request-fight-001",
+        decision_type="select_fight_activation",
+        actor_id="player_1",
+        payload={"ordering_band": "fights_first"},
+        options=(
+            UiFiniteOption(
+                option_id="fight:normal:intercessor_squad",
+                label="Intercessors fight",
+                payload={"unit_instance_id": "intercessor_squad"},
+            ),
+            UiFiniteOption(
+                option_id="eligible_to_fight_pass",
+                label="Pass",
+                payload={},
+            ),
+        ),
+        is_parameterized=False,
+    )
+
+    panel = build_assignment_hud_panel(
+        movement_draft=None,
+        pending_decision=decision,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=default_preferences(),
+        preference_source_label="default.yaml",
+        debug_visible=False,
+    )
+
+    assert panel is not None
+    assert panel.operation_kind == "finite"
+    assert panel.readiness_state == "finite"
+    assert panel.active_selection_ref_keys == ("unit:intercessor_squad",)
+    assert [group.group_id for group in panel.groups] == [
+        "finite:fight:normal:intercessor_squad",
+        "finite:eligible_to_fight_pass",
+    ]
+    assert panel.groups[0].source_ref_keys == ("unit:intercessor_squad",)
+    assert panel.groups[0].summary_lines == ("Fight type: normal; unit: intercessor_squad",)
+    assert panel.groups[1].summary_lines == ("Engine-issued pass option.",)
+
+
 def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> None:
     selection = _selected_intercessors().toggle_debug_inspector()
     decision = _finite_decision_for("intercessor_squad")
@@ -358,6 +491,43 @@ def _shooting_proposal_decision() -> UiDecision:
                     "decision_type": "submit_shooting_declaration",
                     "actor_id": "player_1",
                     "proposal_kind": "shooting_declaration",
+                }
+            },
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )
+
+
+def _charge_move_proposal_decision() -> UiDecision:
+    return UiDecision.from_payload(
+        {
+            "request_id": "decision-request-charge-001",
+            "decision_type": "submit_movement_proposal",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-charge-001",
+                    "decision_type": "submit_movement_proposal",
+                    "actor_id": "player_1",
+                    "game_id": "phase16-game",
+                    "battle_round": 1,
+                    "phase": "charge",
+                    "unit_instance_id": "intercessor_squad",
+                    "proposal_kind": "charge_move",
+                    "source_decision_request_id": "decision-request-charge-unit",
+                    "source_decision_result_id": "ui-result-charge",
+                    "movement_phase_action": "charge_move",
+                    "placement_kinds": [],
+                    "context": {
+                        "movement_mode": "charge",
+                        "charge_target_unit_instance_ids": ["guardian_squad"],
+                    },
                 }
             },
             "options": [

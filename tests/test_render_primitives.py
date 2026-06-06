@@ -14,6 +14,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiInvalidDiagnostic,
 )
 from warhammer40k_arcade_ui.hud.view_models import (
+    build_assignment_hud_panel,
     build_context_menu,
     build_debug_inspector,
     build_finite_decision_panel,
@@ -245,6 +246,56 @@ def test_hud_primitives_include_movement_draft_panel() -> None:
     assert "Mode: normal" in texts
     assert "Active models: intercessor_1" in texts
     assert "Assignments: 1/3 moved, 2 no-op" in texts
+
+
+def test_hud_primitives_include_assignment_review_panel() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=_movement_proposal_decision(),
+    )
+    assert draft is not None
+    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
+
+    primitives = build_hud_primitives(
+        view=view,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+        mouse_world_position=None,
+        assignment_hud_panel=build_assignment_hud_panel(
+            movement_draft=draft,
+            pending_decision=_movement_proposal_decision(),
+            highlighted_option_index=0,
+            diagnostics=(),
+            preferences=preferences,
+            preference_source_label="default.yaml",
+            debug_visible=True,
+            event_log_lines=("movement_proposal_submitted", "movement_proposal_accepted"),
+        ),
+    )
+
+    texts = [primitive.text for primitive in primitives]
+    assert "Assignment review" in texts
+    assert "Operation: movement" in texts
+    assert "Ready: ready" in texts
+    assert "Proposal: normal_move" in texts
+    assert "> assignment-group-000001: 1 model(s)" in texts
+    assert "- No-op ready: 2 model(s)" in texts
+    assert "Chain: movement_proposal_submitted" in texts
+    assert "Chain: movement_proposal_accepted" in texts
+    assert "UI prefs: default.yaml" in texts
+    assert all(
+        primitive.coordinate_space == "screen"
+        for primitive in primitives
+        if primitive.layer == "assignment_hud_panel"
+    )
 
 
 def test_movement_draft_panel_renders_invalid_diagnostic_lines() -> None:

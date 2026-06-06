@@ -32,6 +32,7 @@ from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
+    build_assignment_hud_panel,
     build_context_menu,
     build_debug_inspector,
     build_finite_decision_panel,
@@ -293,6 +294,16 @@ class ArcadeWarhammerWindow(arcade.Window):
             status_message=self._finite_state.status_message,
             diagnostics=self._finite_state.diagnostics,
         )
+        assignment_hud_panel = build_assignment_hud_panel(
+            movement_draft=self._movement_draft,
+            pending_decision=self._pending_decision,
+            highlighted_option_index=self._finite_state.highlighted_option_index,
+            diagnostics=self._finite_state.diagnostics,
+            preferences=self._preferences,
+            preference_source_label=self._preference_source_label,
+            debug_visible=self._selection_state.debug_inspector_visible,
+            event_log_lines=self._finite_state.event_log_lines,
+        )
         debug_inspector = build_debug_inspector(
             selection=self._selection_state,
             pending_decision=self._pending_decision,
@@ -314,6 +325,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             context_menu=context_menu,
             finite_decision_panel=finite_decision_panel,
             movement_draft_panel=movement_draft_panel,
+            assignment_hud_panel=assignment_hud_panel,
             debug_inspector=debug_inspector,
         )
         _draw_world_primitives(world_primitives, self._camera)

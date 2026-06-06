@@ -74,6 +74,10 @@ hud:
   show_config_diagnostics: true
   show_selected_model_panel: true
   show_selected_unit_panel: true
+  show_assignment_hud: true
+  assignment_hud_mode: detailed
+  show_assignment_warning_markers: true
+  show_chain_breadcrumbs: true
   text_scale: 0.9
   high_contrast: true
 experimental:
