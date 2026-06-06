@@ -231,13 +231,15 @@ def _datasheet_panel(
     stats = _stats_from_data(data_value)
     line_y = rect.top - theme.inner_padding_px - (theme.line_height_px * 2.3)
     if stats:
+        stat_cell_height = max(36.0, _attribute_float(node, "stat_cell_height", default=42.0))
         cell_width = max(42.0, (rect.width - (theme.inner_padding_px * 2.0)) / len(stats))
         for index, (label, value) in enumerate(stats):
+            cell_top = line_y - 4.0
             cell_rect = ScreenRect(
                 rect.x + theme.inner_padding_px + (index * cell_width),
-                line_y - 32.0,
+                cell_top - stat_cell_height,
                 cell_width - 4.0,
-                28.0,
+                stat_cell_height,
             )
             primitives.extend(_stat_cell(label=label, value=value, rect=cell_rect, theme=theme))
     return tuple(primitives)
@@ -362,9 +364,9 @@ def _stat_cell(
         TextPrimitive(
             layer="hud_widget_text",
             text=_truncate(label, max_chars=6),
-            position=(rect.x + (rect.width / 2.0), rect.top - 4.0),
+            position=(rect.x + (rect.width / 2.0), rect.top - 6.0),
             color=theme.muted_text,
-            font_size=theme.compact_font_size_px,
+            font_size=max(9.0, theme.compact_font_size_px - 1.0),
             coordinate_space="screen",
             anchor_x="center",
             anchor_y="top",
@@ -372,11 +374,12 @@ def _stat_cell(
         TextPrimitive(
             layer="hud_widget_text",
             text=_truncate(value, max_chars=6),
-            position=(rect.x + (rect.width / 2.0), rect.y + 4.0),
+            position=(rect.x + (rect.width / 2.0), rect.y + 12.0),
             color=theme.text,
-            font_size=theme.base_font_size_px,
+            font_size=max(11.0, theme.base_font_size_px - 1.0),
             coordinate_space="screen",
             anchor_x="center",
+            anchor_y="center",
         ),
     )
 

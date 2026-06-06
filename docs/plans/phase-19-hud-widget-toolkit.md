@@ -787,6 +787,8 @@ without creating one-off render code for each future feature.
 - Fixed the interactive preview draw loop to use `Window.clear()` per frame instead of
   `arcade.start_render()`. `start_render()` is only valid for one-shot static scripts and crashes on
   repeated `on_draw` dispatch.
+- Increased datasheet stat cell spacing and added a `stat_cell_height` setting so labels and values
+  clip/truncate independently instead of overprinting each other in tight inspector previews.
 
 ## Automated Verification
 

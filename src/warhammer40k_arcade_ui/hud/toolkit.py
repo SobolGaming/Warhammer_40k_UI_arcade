@@ -503,6 +503,7 @@ _WIDGET_ATTRIBUTES: dict[HudWidgetType, frozenset[str]] = {
             "debug_source_fields_visible",
             "footer_action_row_visible",
             "keyword_zone_visible",
+            "stat_cell_height",
             "stat_zone_visible",
             "title",
             "weapon_zone_visible",

@@ -197,6 +197,27 @@ def test_composition_renderer_builds_component_primitives() -> None:
     )
 
 
+def test_datasheet_preview_stat_labels_do_not_overlap_values() -> None:
+    path = Path(__file__).parents[1] / "docs" / "hud" / "examples" / "unit-datasheet-preview.yaml"
+    result = load_hud_composition(path, preview=True)
+    assert result.profile is not None, result.diagnostics
+
+    primitives = render_composition_profile(
+        result.profile,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+    )
+    label = _exact_text_primitive(primitives, "M")
+    value = _exact_text_primitive(primitives, "6")
+
+    assert label.anchor_y == "top"
+    assert value.anchor_y == "center"
+    label_bottom = label.position[1] - label.font_size
+    value_top = value.position[1] + (value.font_size / 2.0)
+
+    assert label_bottom - value_top >= 2.0
+
+
 def test_non_renderable_container_positions_children_without_own_panel() -> None:
     payload = {
         "schema_version": 1,
@@ -395,3 +416,16 @@ class FakePreviewRuntime:
 
 def _codes(result: HudCompositionValidationResult) -> set[str]:
     return {diagnostic.code for diagnostic in result.diagnostics}
+
+
+def _exact_text_primitive(
+    primitives: tuple[object, ...],
+    text: str,
+) -> TextPrimitive:
+    matches = [
+        primitive
+        for primitive in primitives
+        if type(primitive) is TextPrimitive and primitive.text == text
+    ]
+    assert len(matches) == 1
+    return matches[0]

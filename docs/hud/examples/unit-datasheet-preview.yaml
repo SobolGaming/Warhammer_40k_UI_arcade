@@ -30,6 +30,7 @@ regions:
         data_ref: selected_unit
         density: detailed
         title: Selected Unit
+        stat_cell_height: 42
       - type: AssignmentGroupRow
         id: assignment_summary_row
         data_ref: current_assignment
