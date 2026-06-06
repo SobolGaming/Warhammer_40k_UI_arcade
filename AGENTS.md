@@ -15,8 +15,8 @@ authoritative results or diagnostics returned by the core engine.
 - Adapter contract: `Warhammer_40k_AI/docs/ADAPTER_DECISION_CONTRACT.md`
 - Core PR review template: `Warhammer_40k_AI/.github/pull_request_template.md`
 - UI planning documents: `docs/plans/`
-- Workspace PR credentials: `../github_token` for GitHub CLI authentication when the user asks
-  Codex to perform pull request actions.
+- Workspace PR credentials: `../github_token` for GitHub CLI authentication when Codex performs
+  required pull request actions for repository-updating work.
 
 If this file conflicts with the core adapter contract, stop and ask before coding.
 
@@ -35,8 +35,10 @@ but functionally identical elements.
 
 ## Pull-request mediated development
 
-Feature work should be PR-shaped by default, even when the user is asking for local implementation
-work in this workspace.
+All repository-updating work must be pull-request mediated by default. If Codex changes any tracked
+or new repository file, Codex must create or reuse a task branch, commit the change, push the branch,
+and open or update a GitHub pull request for review before handoff, unless the user explicitly says
+not to open a PR for that task or GitHub access is unavailable.
 
 Before starting a feature implementation:
 
@@ -50,14 +52,16 @@ Before starting a feature implementation:
 During implementation:
 
 - preserve the current worktree and never revert unrelated user changes;
-- keep commits/branches PR-ready when the user asks for git operations;
-- use `gh` as the GitHub pull request tool when the user asks Codex to create, inspect, update,
-  push for, or otherwise manage pull requests;
+- keep commits/branches PR-ready throughout the task;
+- use `gh` as the GitHub pull request tool to create, inspect, update, push for, or otherwise
+  manage pull requests;
 - authenticate `gh` with the access token stored in the workspace-level `../github_token` file when
   PR actions require GitHub access. Do not print, log, commit, or paste the token; pass it through
   `GH_TOKEN` or `gh auth login --with-token` as appropriate for the requested operation;
-- until the user explicitly asks Codex to push or open a pull request, keep Codex-made changes local
-  and PR-ready rather than attempting to push branches or open pull requests;
+- after any repository file changes, push the task branch and open or update the PR automatically as
+  part of the same task closeout;
+- if the user explicitly requests local-only work, do not push or open a PR, and state that the
+  task intentionally violates the default PR-mediated workflow at the user's request;
 - update the relevant phase plan, README, architecture docs, or ADR notes in the same work item when
   behavior, sequencing, boundaries, or acceptance criteria change;
 - add focused tests for the behavior slice instead of relying only on manual launch checks;
