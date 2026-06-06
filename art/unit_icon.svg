@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Unit icon</title>
+  <desc>Warhammer-inspired unit icon with three figures</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="44" cy="51" r="8"/>
+    <circle cx="64" cy="45" r="10"/>
+    <circle cx="84" cy="51" r="8"/>
+    <path d="M32 78 C34 66, 54 66, 56 78"/>
+    <path d="M46 82 C49 66, 79 66, 82 82"/>
+    <path d="M72 78 C74 66, 94 66, 96 78"/>
+  </g>
+</svg>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Round icon</title>
+  <desc>Warhammer-inspired round icon with cyclical arrows</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M38 61 A26 26 0 0 1 65 35"/>
+    <path d="M65 35 l-6 3 m6-3 l-2 7"/>
+    <path d="M90 67 A26 26 0 0 1 63 93"/>
+    <path d="M63 93 l6-3 m-6 3 l2-7"/>
+    <circle cx="64" cy="64" r="12"/>
+    <text x="64" y="70" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="currentColor" stroke="none">R</text>
+  </g>
+</svg>

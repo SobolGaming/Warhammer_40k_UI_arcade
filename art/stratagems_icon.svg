@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Stratagems icon</title>
+  <desc>Warhammer-inspired stratagems icon with cards and lightning</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M38 46 h32 v36 H38 z" opacity="0.45"/>
+    <path d="M46 40 h32 v36 H46 z" opacity="0.7"/>
+    <path d="M54 34 h32 v36 H54 z"/>
+    <path d="M72 50 l-8 18 h8 l-8 18 24 -24 h-10 l8 -12 z" fill="currentColor" stroke="none"/>
+  </g>
+</svg>

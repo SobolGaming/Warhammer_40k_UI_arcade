@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Timer icon</title>
+  <desc>Warhammer-inspired timer icon with hourglass</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M46 36 H82"/>
+    <path d="M46 92 H82"/>
+    <path d="M50 38 C50 52, 60 54, 64 64 C68 74, 78 76, 78 90"/>
+    <path d="M78 38 C78 52, 68 54, 64 64 C60 74, 50 76, 50 90"/>
+    <path d="M56 48 H72" opacity="0.7"/>
+    <path d="M58 80 H70" opacity="0.7"/>
+  </g>
+</svg>

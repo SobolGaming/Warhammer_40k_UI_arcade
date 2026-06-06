@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Warhammer-style HUD SVG Icons Preview</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 32px; background: #101216; color: #f2e6c4; font-family: Arial, Helvetica, sans-serif; }
+  h1 { margin: 0 0 8px; font-size: 24px; }
+  p { margin: 0 0 24px; color: #b8b0a0; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 18px; max-width: 800px; }
+  .card { background: #191d24; border: 1px solid #3f4654; border-radius: 14px; padding: 18px; text-align: center; }
+  .card svg { width: 112px; height: 112px; }
+  .label { font-weight: 700; margin-top: 10px; }
+  .p1 { color: #d1a642; }
+  .p2 { color: #58a6ff; }
+  .p3 { color: #da5f55; }
+</style>
+</head>
+<body>
+<h1>Warhammer-style HUD SVG Icons</h1>
+<p>All icons use <code>currentColor</code>, so player color can be changed with CSS.</p>
+<div class="grid">
+<div class="card"><svg class="p1" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Score icon</title>
+  <desc>Warhammer-inspired score icon with star and laurel</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M44 80 C34 72, 31 57, 37 44"/>
+    <path d="M84 80 C94 72, 97 57, 91 44"/>
+    <path d="M40 69 l-8 -3"/>
+    <path d="M38 58 l-9 0"/>
+    <path d="M40 48 l-8 3"/>
+    <path d="M88 69 l8 -3"/>
+    <path d="M90 58 l9 0"/>
+    <path d="M88 48 l8 3"/>
+    <path d="M64 35 l6 13 14 2 -10 10 2 14 -12 -7 -12 7 2 -14 -10 -10 14 -2 z" fill="currentColor" stroke="none"/>
+    <circle cx="64" cy="58" r="3" fill="white" stroke="none"/>
+  </g>
+</svg>
+<div class="label">Score</div></div>
+<div class="card"><svg class="p2" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Command points icon</title>
+  <desc>Warhammer-inspired command points icon</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M64 34 L79 40 L86 55 L79 70 L64 76 L49 70 L42 55 L49 40 Z"/>
+    <text x="64" y="60" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" fill="currentColor" stroke="none">CP</text>
+    <path d="M46 84 H82" opacity="0.7"/>
+  </g>
+</svg>
+<div class="label">CP</div></div>
+<div class="card"><svg class="p3" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Round icon</title>
+  <desc>Warhammer-inspired round icon with cyclical arrows</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M38 61 A26 26 0 0 1 65 35"/>
+    <path d="M65 35 l-6 3 m6-3 l-2 7"/>
+    <path d="M90 67 A26 26 0 0 1 63 93"/>
+    <path d="M63 93 l6-3 m-6 3 l2-7"/>
+    <circle cx="64" cy="64" r="12"/>
+    <text x="64" y="70" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="currentColor" stroke="none">R</text>
+  </g>
+</svg>
+<div class="label">Round</div></div>
+<div class="card"><svg class="p1" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Phase icon</title>
+  <desc>Warhammer-inspired phase icon with segmented dial</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="64" cy="64" r="28"/>
+    <path d="M64 36 V92"/>
+    <path d="M36 64 H92"/>
+    <path d="M64 64 L84 44 A28 28 0 0 1 92 64 Z" fill="currentColor" stroke="none" opacity="0.35"/>
+    <path d="M96 42 A40 40 0 0 1 98 74"/>
+    <path d="M98 74 l-7-4 m7 4 l-6 5"/>
+  </g>
+</svg>
+<div class="label">Phase</div></div>
+<div class="card"><svg class="p2" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Timer icon</title>
+  <desc>Warhammer-inspired timer icon with hourglass</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M46 36 H82"/>
+    <path d="M46 92 H82"/>
+    <path d="M50 38 C50 52, 60 54, 64 64 C68 74, 78 76, 78 90"/>
+    <path d="M78 38 C78 52, 68 54, 64 64 C60 74, 50 76, 50 90"/>
+    <path d="M56 48 H72" opacity="0.7"/>
+    <path d="M58 80 H70" opacity="0.7"/>
+  </g>
+</svg>
+<div class="label">Timer</div></div>
+<div class="card"><svg class="p3" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Missions icon</title>
+  <desc>Warhammer-inspired missions icon with map and target</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M38 40 h38 l6 6 v34 H44 l-6 -6 z"/>
+    <path d="M38 40 v34" opacity="0.6"/>
+    <path d="M44 46 h38" opacity="0.6"/>
+    <path d="M49 73 l6 -6"/>
+    <path d="M49 67 l6 6"/>
+    <path d="M44 72 C54 58, 62 56, 71 49" stroke-dasharray="5 5"/>
+    <circle cx="77" cy="71" r="11"/>
+    <path d="M77 56 V86"/>
+    <path d="M62 71 H92"/>
+  </g>
+</svg>
+<div class="label">Missions</div></div>
+<div class="card"><svg class="p1" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Stratagems icon</title>
+  <desc>Warhammer-inspired stratagems icon with cards and lightning</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M38 46 h32 v36 H38 z" opacity="0.45"/>
+    <path d="M46 40 h32 v36 H46 z" opacity="0.7"/>
+    <path d="M54 34 h32 v36 H54 z"/>
+    <path d="M72 50 l-8 18 h8 l-8 18 24 -24 h-10 l8 -12 z" fill="currentColor" stroke="none"/>
+  </g>
+</svg>
+<div class="label">Stratagems</div></div>
+<div class="card"><svg class="p2" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Unit icon</title>
+  <desc>Warhammer-inspired unit icon with three figures</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="44" cy="51" r="8"/>
+    <circle cx="64" cy="45" r="10"/>
+    <circle cx="84" cy="51" r="8"/>
+    <path d="M32 78 C34 66, 54 66, 56 78"/>
+    <path d="M46 82 C49 66, 79 66, 82 82"/>
+    <path d="M72 78 C74 66, 94 66, 96 78"/>
+  </g>
+</svg>
+<div class="label">Unit</div></div>
+<div class="card"><svg class="p3" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Model icon</title>
+  <desc>Warhammer-inspired model icon with one figure</desc>
+  <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 6 L96 14 L114 32 V94 L96 112 L64 122 L32 112 L14 94 V32 L32 14 Z"/>
+    <path opacity="0.55" d="M64 18 L86 24 L102 40 V86 L86 102 L64 110 L42 102 L26 86 V40 L42 24 Z"/>
+  </g>
+
+  <g stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="64" cy="48" r="12"/>
+    <path d="M42 84 C44 66, 84 66, 86 84"/>
+    <path d="M52 68 H76" opacity="0.55"/>
+  </g>
+</svg>
+<div class="label">Model</div></div>
+</div>
+</body>
+</html>
