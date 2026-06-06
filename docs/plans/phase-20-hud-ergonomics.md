@@ -1,13 +1,14 @@
-# Phase 19 - HUD ergonomics pass
+# Phase 20 - HUD ergonomics pass
 
 ## Goal
 
 Improve decision-making speed and reduce cognitive load.
 
 This phase should consume the Phase 4 preferences framework, the Phase 16 generic assignment HUD,
-the Phase 17 HUD zone layout framework, and the Phase 18 action visual summaries for overlay
-defaults, HUD defaults, assignment review, summary overlays, and hotkeys instead of hard-coding user
-workflow assumptions into render, input, or HUD modules.
+the Phase 17 HUD zone layout framework, the Phase 18 action visual summaries, and the Phase 19 HUD
+widget toolkit for overlay defaults, HUD defaults, assignment review, summary overlays, reusable
+components, and hotkeys instead of hard-coding user workflow assumptions into render, input, or HUD
+modules.
 
 ## Tasks
 
@@ -42,6 +43,11 @@ workflow assumptions into render, input, or HUD modules.
   - apply configured selected-model and selected-unit panels;
   - apply configured default overlay sets;
   - surface config diagnostics in a non-authoritative diagnostics view.
+- [ ] Replace one-off HUD text placement with Phase 19 toolkit components where practical:
+  - selected-unit headers and stat strips;
+  - status chips for phase/action readiness;
+  - icon text bars for action rows;
+  - assignment rows inside the bottom workbench.
 
 ## Acceptance criteria
 
@@ -50,11 +56,12 @@ workflow assumptions into render, input, or HUD modules.
 - [ ] HUD labels distinguish authoritative facts from preview estimates.
 - [ ] Radial menu is not required for functionality; there is also a panel/button path.
 - [ ] Configured overlay defaults and hotkeys route through stable command/overlay registries.
+- [ ] HUD polish uses reusable toolkit components rather than new one-off render primitives.
 - [ ] Tests cover HUD view-model generation for selected unit and pending request.
 
 ## Closeout milestone
 
-**Milestone 14: "Usable Movement Client"**
+**Milestone 15: "Usable Movement Client"**
 
 The UI is no longer only a technical prototype; it is comfortable enough for repeated manual
 movement-phase testing.

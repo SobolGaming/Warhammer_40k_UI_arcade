@@ -43,7 +43,8 @@ This phase is deliberately only about structure:
 - do not move action visual summary overlays into this phase.
 
 Phase 18 can then draw action visual summaries on the battlefield without fighting panel placement.
-Phase 19 can populate and polish HUD ergonomics using these stable regions.
+Phase 19 can build reusable HUD widgets inside these stable regions. Phase 20 can then populate and
+polish HUD ergonomics using those regions and toolkit components.
 
 ## Terminology
 
