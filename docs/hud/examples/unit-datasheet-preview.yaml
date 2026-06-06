@@ -31,6 +31,8 @@ regions:
         density: detailed
         title: Selected Unit
         stat_cell_height: 42
+        stat_cell_min_width: 34
+        stat_cell_gap: 4
       - type: AssignmentGroupRow
         id: assignment_summary_row
         data_ref: current_assignment

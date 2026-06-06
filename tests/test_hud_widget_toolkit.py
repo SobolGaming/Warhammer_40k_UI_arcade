@@ -218,6 +218,23 @@ def test_datasheet_preview_stat_labels_do_not_overlap_values() -> None:
     assert label_bottom - value_top >= 2.0
 
 
+def test_datasheet_preview_stat_cells_stay_inside_panel_bounds() -> None:
+    path = Path(__file__).parents[1] / "docs" / "hud" / "examples" / "unit-datasheet-preview.yaml"
+    result = load_hud_composition(path, preview=True)
+    assert result.profile is not None, result.diagnostics
+
+    primitives = render_composition_profile(
+        result.profile,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+    )
+    panel = _panel_for_text(primitives, "Selected Unit")
+    oc_label = _exact_text_primitive(primitives, "OC")
+
+    estimated_text_right = oc_label.position[0] + (oc_label.font_size * len(oc_label.text) * 0.3)
+    assert estimated_text_right <= _polygon_right(panel)
+
+
 def test_non_renderable_container_positions_children_without_own_panel() -> None:
     payload = {
         "schema_version": 1,
@@ -429,3 +446,35 @@ def _exact_text_primitive(
     ]
     assert len(matches) == 1
     return matches[0]
+
+
+def _panel_for_text(
+    primitives: tuple[object, ...],
+    text: str,
+) -> PolygonPrimitive:
+    text_primitive = _exact_text_primitive(primitives, text)
+    panels = [primitive for primitive in primitives if type(primitive) is PolygonPrimitive]
+    containing_panels = [
+        panel
+        for panel in panels
+        if _polygon_left(panel) <= text_primitive.position[0] <= _polygon_right(panel)
+        and _polygon_bottom(panel) <= text_primitive.position[1] <= _polygon_top(panel)
+    ]
+    assert containing_panels
+    return max(containing_panels, key=lambda panel: _polygon_left(panel))
+
+
+def _polygon_left(primitive: PolygonPrimitive) -> float:
+    return min(point[0] for point in primitive.points)
+
+
+def _polygon_right(primitive: PolygonPrimitive) -> float:
+    return max(point[0] for point in primitive.points)
+
+
+def _polygon_top(primitive: PolygonPrimitive) -> float:
+    return max(point[1] for point in primitive.points)
+
+
+def _polygon_bottom(primitive: PolygonPrimitive) -> float:
+    return min(point[1] for point in primitive.points)

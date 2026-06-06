@@ -789,6 +789,9 @@ without creating one-off render code for each future feature.
   repeated `on_draw` dispatch.
 - Increased datasheet stat cell spacing and added a `stat_cell_height` setting so labels and values
   clip/truncate independently instead of overprinting each other in tight inspector previews.
+- Added `stat_cell_min_width` and `stat_cell_gap` settings. The renderer now fits the full stat row
+  inside the datasheet content width before honoring preferred minimums, so rightmost stats do not
+  spill over the inspector boundary.
 
 ## Automated Verification
 

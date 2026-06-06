@@ -232,13 +232,24 @@ def _datasheet_panel(
     line_y = rect.top - theme.inner_padding_px - (theme.line_height_px * 2.3)
     if stats:
         stat_cell_height = max(36.0, _attribute_float(node, "stat_cell_height", default=42.0))
-        cell_width = max(42.0, (rect.width - (theme.inner_padding_px * 2.0)) / len(stats))
+        stat_cell_gap = max(0.0, _attribute_float(node, "stat_cell_gap", default=4.0))
+        stat_cell_min_width = max(
+            24.0,
+            _attribute_float(node, "stat_cell_min_width", default=34.0),
+        )
+        content_width = max(0.0, rect.width - (theme.inner_padding_px * 2.0))
+        available_cell_width = max(0.0, content_width - (stat_cell_gap * (len(stats) - 1))) / len(
+            stats
+        )
+        cell_width = max(available_cell_width, stat_cell_min_width)
+        if (cell_width * len(stats)) + (stat_cell_gap * (len(stats) - 1)) > content_width:
+            cell_width = available_cell_width
         for index, (label, value) in enumerate(stats):
             cell_top = line_y - 4.0
             cell_rect = ScreenRect(
-                rect.x + theme.inner_padding_px + (index * cell_width),
+                rect.x + theme.inner_padding_px + (index * (cell_width + stat_cell_gap)),
                 cell_top - stat_cell_height,
-                cell_width - 4.0,
+                max(0.0, cell_width),
                 stat_cell_height,
             )
             primitives.extend(_stat_cell(label=label, value=value, rect=cell_rect, theme=theme))
