@@ -111,6 +111,11 @@ new adapter-visible request families without requiring their full UI tools to ex
 - Added `CHANGELOG.md` and ADRs for the UI/core boundary and CI quality gates.
 - Updated `README.md`, `docs/README.md`, and `architecture.md` so the repository map and local
   quality gates match the implemented package.
+- Removed the local editable core source from package resolution. Development and CI `uv` sync now
+  resolve `warhammer40k-core-v2` from the core Git repository, while README package-install examples
+  document installing the core package from Git first until it is published through a normal package
+  index. The sibling core checkout remains only for static type-analysis paths until the core package
+  publishes a `py.typed` marker.
 
 ## Automated Verification
 

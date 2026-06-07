@@ -759,7 +759,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typing-extensions", specifier = ">=4.14" },
-    { name = "warhammer40k-core-v2", editable = "../Warhammer_40k_AI" },
+    { name = "warhammer40k-core-v2", git = "https://github.com/SobolGaming/Warhammer_40k_AI" },
 ]
 
 [package.metadata.requires-dev]
@@ -777,36 +777,11 @@ dev = [
 [[package]]
 name = "warhammer40k-core-v2"
 version = "0.1.0"
-source = { editable = "../Warhammer_40k_AI" }
+source = { git = "https://github.com/SobolGaming/Warhammer_40k_AI#cf61e0de23670f58059cffa5905d4b2d4fa89a8c" }
 dependencies = [
     { name = "msgspec" },
     { name = "numpy" },
     { name = "orjson" },
     { name = "pydantic" },
     { name = "shapely" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "msgspec", specifier = ">=0.19" },
-    { name = "numpy", specifier = ">=2.2" },
-    { name = "orjson", specifier = ">=3.10" },
-    { name = "pydantic", specifier = ">=2.11" },
-    { name = "shapely", specifier = ">=2.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "coverage", extras = ["toml"], specifier = ">=7.9" },
-    { name = "deptry", specifier = ">=0.23" },
-    { name = "hypothesis", specifier = ">=6.135" },
-    { name = "import-linter", specifier = ">=2.3" },
-    { name = "mypy", specifier = ">=1.16" },
-    { name = "pre-commit", specifier = ">=4.2" },
-    { name = "pyright", specifier = ">=1.1" },
-    { name = "pytest", specifier = ">=8.4" },
-    { name = "pytest-benchmark", specifier = ">=5.1" },
-    { name = "pytest-cov", specifier = ">=6.2" },
-    { name = "pytest-xdist", specifier = ">=3.7" },
-    { name = "ruff", specifier = ">=0.12" },
 ]
