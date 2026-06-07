@@ -92,4 +92,3 @@ The immediate UI adaptation is defensive and representational:
 - No implementation of Stratagem target binding.
 - No attempt to infer Fight eligibility, legal targets, CP costs, or phase completion from local UI
   state.
-
