@@ -115,6 +115,7 @@ Build bottom-up:
 19. HUD widget toolkit
 20. HUD ergonomics
 21. packaging, CI, regression fixtures, and import-boundary audits
+22. HUD toolkit customizability and overflow tuning
 
 Do not add shooting, fight, charge, AI, training, or private rule logic before the movement
 decision path is trustworthy end to end.
