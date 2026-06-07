@@ -5,6 +5,10 @@ from warhammer40k_arcade_ui.hud.action_summary import (
     ActionVisualSummaryGroup,
     build_action_visual_summary,
 )
+from warhammer40k_arcade_ui.hud.ergonomics import (
+    HudErgonomicsView,
+    build_hud_ergonomics_view,
+)
 from warhammer40k_arcade_ui.hud.layouts import (
     HudLayoutView,
     HudRegionView,
@@ -74,6 +78,7 @@ __all__ = [
     "FiniteDecisionPanelView",
     "HudComponentNode",
     "HudContainerView",
+    "HudErgonomicsView",
     "HudLayoutSpec",
     "HudLayoutView",
     "HudPanelView",
@@ -97,6 +102,7 @@ __all__ = [
     "build_context_menu",
     "build_debug_inspector",
     "build_finite_decision_panel",
+    "build_hud_ergonomics_view",
     "build_hud_layout",
     "build_movement_draft_panel",
     "build_unit_panel",

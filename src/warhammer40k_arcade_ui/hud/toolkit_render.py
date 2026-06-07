@@ -504,11 +504,23 @@ def _component_title(node: HudComponentNode, *, data_value: JsonValue | None) ->
 
 
 def _component_subtitle(node: HudComponentNode, *, data_value: JsonValue | None) -> str:
-    for key in ("subtitle", "secondary_label", "value", "value_text", "status_summary"):
+    for key in (
+        "subtitle",
+        "secondary_label",
+        "value",
+        "value_text",
+        "status_summary",
+        "body",
+        "hotkey_hint",
+    ):
         value = node.attributes.get(key)
         text = json_text(value)
         if text:
             return text
+    summary_lines = node.attributes.get("summary_lines")
+    if type(summary_lines) is list:
+        summaries = tuple(json_text(line) for line in summary_lines)
+        return " | ".join(summary for summary in summaries[:2] if summary)
     if type(data_value) is dict:
         for key in ("subtitle", "summary", "status", "value"):
             text = json_text(data_value.get(key))
