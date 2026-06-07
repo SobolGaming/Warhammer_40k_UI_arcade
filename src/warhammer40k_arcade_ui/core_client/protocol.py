@@ -187,7 +187,7 @@ class UiParameterizedProposalRequest:
 
     request_id: str
     decision_type: str
-    actor_id: str | None
+    actor_id: str
     proposal_kind: str | None
     payload: JsonObject
 
@@ -198,7 +198,7 @@ class UiParameterizedProposalRequest:
             "decision_type",
             _non_empty_string("decision_type", self.decision_type),
         )
-        object.__setattr__(self, "actor_id", _optional_string("actor_id", self.actor_id))
+        object.__setattr__(self, "actor_id", _non_empty_string("actor_id", self.actor_id))
         object.__setattr__(
             self,
             "proposal_kind",
@@ -212,7 +212,7 @@ class UiParameterizedProposalRequest:
         return cls(
             request_id=_required_string(proposal, "request_id"),
             decision_type=_required_string(proposal, "decision_type"),
-            actor_id=_optional_string_value(proposal, "actor_id"),
+            actor_id=_required_string(proposal, "actor_id"),
             proposal_kind=_optional_string_value(proposal, "proposal_kind"),
             payload=proposal,
         )
@@ -231,6 +231,13 @@ class UiParameterizedProposalRequest:
             "parameterized proposal request",
             decision_payload["proposal_request"],
         )
+        actor_id = _optional_string_value_or_fallback(
+            proposal_payload,
+            "actor_id",
+            fallback_actor_id,
+        )
+        if actor_id is None:
+            raise UiClientProtocolError("actor_id is required.")
         return cls(
             request_id=_string_or_fallback(
                 proposal_payload,
@@ -242,11 +249,7 @@ class UiParameterizedProposalRequest:
                 "decision_type",
                 fallback_decision_type,
             ),
-            actor_id=_optional_string_value_or_fallback(
-                proposal_payload,
-                "actor_id",
-                fallback_actor_id,
-            ),
+            actor_id=actor_id,
             proposal_kind=_optional_string_value(proposal_payload, "proposal_kind"),
             payload=proposal_payload,
         )
