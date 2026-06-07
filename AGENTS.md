@@ -114,6 +114,7 @@ Build bottom-up:
 18. action visual summary overlays
 19. HUD widget toolkit
 20. HUD ergonomics
+21A. core Phase 15D-15F adapter adaptation
 21. packaging, CI, regression fixtures, and import-boundary audits
 22. HUD toolkit customizability and overflow tuning
 
