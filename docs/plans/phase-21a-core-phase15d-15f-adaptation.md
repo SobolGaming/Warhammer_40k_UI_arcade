@@ -103,6 +103,12 @@ The immediate UI adaptation is defensive and representational:
 - Fixed the live-core UI handoff so clicked units update finite-option focus, and proposal-required
   movement drafts anchor to the engine proposal unit even if local selection drifted before the
   proposal arrived.
+- Fixed finite-option focus so a newly arrived engine request starts at its own first option instead
+  of inheriting the previous request's option index. Unit clicks now retarget finite focus only when
+  the option-to-unit match is unambiguous, preventing movement action focus from silently changing
+  when every action option belongs to the same unit.
+- The selected-unit inspector now marks the currently highlighted finite action in its action list
+  so `advance`, `normal_move`, and `remain_stationary` focus can be reviewed before pressing Enter.
 - The future generic `submit_payload` facade remains tracked as future work. It should be introduced
   when a dedicated non-Movement draft tool exists, not as part of this defensive regression slice.
 
@@ -110,6 +116,7 @@ The immediate UI adaptation is defensive and representational:
 
 - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_core_phase15_adapter_regression.py tests/test_core_client_protocol.py tests/test_movement_submission.py tests/test_hud_selection.py tests/test_finite_decision_state.py`
 - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_gui_event_driver.py::test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_draft tests/test_movement_draft.py::test_start_for_pending_uses_proposal_unit_when_selection_drifted`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_finite_decision_state.py tests/test_gui_event_driver.py::test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_draft tests/test_hud_selection.py::test_unit_panel_options_are_derived_from_pending_decision_data tests/test_hud_ergonomics.py::test_ergonomic_selected_unit_actions_mark_highlighted_option tests/test_render_primitives.py::test_hud_primitives_include_selection_panel_menu_and_debug_inspector`
 
 ## Manual Validation Checklist
 
@@ -122,6 +129,10 @@ The immediate UI adaptation is defensive and representational:
   diagnostic when no engine decision is pending.
 - Launch `uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml`
   and verify live Movement phase finite and movement proposal interactions still behave as before.
+- In live-core smoke, select the second friendly Intercessor unit during `select_movement_unit`,
+  press Enter, confirm the inspector marks `Advance` first, press Tab once, confirm the inspector
+  marks `Normal Move`, click the same unit again, and press Enter. Confirm the resulting
+  `submit_movement_proposal` request remains for that same selected unit and `normal_move`.
 - If the live core reaches a Fight Pile In, Consolidate, melee declaration, placement, or Phase 15E
   Stratagem target-binding request before dedicated tools exist, verify the HUD says
   `Unsupported proposal tool: <proposal_kind>` and does not enter the movement draft workflow.

@@ -93,9 +93,14 @@ class FiniteDecisionUiState:
         if unit_id is None:
             return self
         options = self.finite_options
+        payload_matches: list[int] = []
         for index, option in enumerate(options):
-            if _option_targets_unit(option, unit_id):
+            if option.option_id == unit_id:
                 return replace(self, highlighted_option_index=index)
+            if _option_payload_targets_unit(option, unit_id):
+                payload_matches.append(index)
+        if len(payload_matches) == 1:
+            return replace(self, highlighted_option_index=payload_matches[0])
         return self
 
     def with_local_invalid(
@@ -209,6 +214,11 @@ class FiniteDecisionUiState:
         return replace(
             self,
             pending_decision=pending_decision,
+            highlighted_option_index=_highlighted_option_index_for_transition(
+                current_decision=self.pending_decision,
+                next_decision=pending_decision,
+                current_index=self.highlighted_option_index,
+            ),
             status_kind=status.status_kind,
             status_message=_status_message(status),
             diagnostics=status.invalid_diagnostics,
@@ -217,7 +227,15 @@ class FiniteDecisionUiState:
     def apply_view(self, view: UiGameView) -> FiniteDecisionUiState:
         """Apply viewer-scoped pending-decision state from a refreshed projection."""
 
-        return replace(self, pending_decision=view.pending_decision)._normalized()
+        return replace(
+            self,
+            pending_decision=view.pending_decision,
+            highlighted_option_index=_highlighted_option_index_for_transition(
+                current_decision=self.pending_decision,
+                next_decision=view.pending_decision,
+                current_index=self.highlighted_option_index,
+            ),
+        )._normalized()
 
     def apply_event_delta(self, delta: UiEventDelta) -> FiniteDecisionUiState:
         """Append viewer-scoped event lines and persist the next cursor."""
@@ -275,9 +293,20 @@ def _option_by_id(
     return None
 
 
-def _option_targets_unit(option: UiFiniteOption, unit_id: str) -> bool:
-    if option.option_id == unit_id:
-        return True
+def _highlighted_option_index_for_transition(
+    *,
+    current_decision: UiDecision | None,
+    next_decision: UiDecision | None,
+    current_index: int,
+) -> int:
+    if next_decision is None or current_decision is None:
+        return 0
+    if current_decision.request_id != next_decision.request_id:
+        return 0
+    return current_index
+
+
+def _option_payload_targets_unit(option: UiFiniteOption, unit_id: str) -> bool:
     payload = option.payload
     if type(payload) is not dict:
         return False

@@ -29,7 +29,12 @@ def test_unit_panel_options_are_derived_from_pending_decision_data() -> None:
     selection = _selected_intercessors()
     decision = _finite_decision_for("intercessor_squad")
 
-    panel = build_unit_panel(view=view, selection=selection, pending_decision=decision)
+    panel = build_unit_panel(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+        highlighted_option_id="normal_move",
+    )
 
     assert panel is not None
     assert panel.unit_id == "intercessor_squad"
@@ -40,6 +45,8 @@ def test_unit_panel_options_are_derived_from_pending_decision_data() -> None:
         "normal_move",
         "advance",
     ]
+    assert panel.available_actions[0].highlighted is True
+    assert panel.available_actions[1].highlighted is False
     assert panel.available_actions[1].disabled_reason == "Unit is battle-shocked."
 
 

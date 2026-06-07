@@ -16,6 +16,7 @@ from warhammer40k_arcade_ui.hud.toolkit import (
 from warhammer40k_arcade_ui.hud.view_models import (
     AssignmentGroupState,
     AssignmentHudPanelView,
+    ContextMenuAction,
     FiniteDecisionPanelView,
     MovementDraftPanelView,
     UnitPanelView,
@@ -175,8 +176,13 @@ def _selected_unit_rows(unit_panel: UnitPanelView | None) -> tuple[IconTextBarVi
                 component_id="selected_unit_actions",
                 icon_id="action.movement",
                 primary_label="Actions",
-                secondary_label=", ".join(action.label for action in unit_panel.available_actions),
+                secondary_label=", ".join(
+                    _action_label(action) for action in unit_panel.available_actions
+                ),
                 value_text="SPACE",
+                state="selected"
+                if any(action.highlighted for action in unit_panel.available_actions)
+                else "normal",
             )
         )
     return tuple(rows)
@@ -256,6 +262,16 @@ def _movement_distance_summary(panel: MovementDraftPanelView) -> str:
     if panel.total_path_inches is not None:
         return f"{panel.total_path_inches:.1f} in"
     return ""
+
+
+def _action_label(action: ContextMenuAction) -> str:
+    label = action.label
+    disabled_reason = action.disabled_reason
+    if disabled_reason is not None:
+        label = f"{label} ({disabled_reason})"
+    if action.highlighted:
+        return f"> {label} <"
+    return label
 
 
 def _assignment_group_toolkit_state(state: AssignmentGroupState) -> HudState:

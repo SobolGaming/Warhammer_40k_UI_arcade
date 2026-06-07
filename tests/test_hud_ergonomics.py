@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from warhammer40k_arcade_ui.core_client.protocol import UiDecision
+from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
 from warhammer40k_arcade_ui.hud.ergonomics import build_hud_ergonomics_view
 from warhammer40k_arcade_ui.hud.layouts import build_hud_layout
 from warhammer40k_arcade_ui.hud.view_models import (
@@ -117,6 +117,62 @@ def test_ergonomic_hud_view_honors_phase_and_event_visibility_preferences() -> N
 
     assert [chip.label for chip in ergonomics.status_chips] == ["Active", "Pending"]
     assert ergonomics.event_lines == ()
+
+
+def test_ergonomic_selected_unit_actions_mark_highlighted_option() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    decision = UiDecision(
+        request_id="decision-request-000004",
+        decision_type="select_movement_action",
+        actor_id="player_1",
+        payload={"unit_instance_id": "intercessor_squad"},
+        options=(
+            UiFiniteOption(
+                option_id="advance",
+                label="Advance",
+                payload={"movement_phase_action": "advance"},
+            ),
+            UiFiniteOption(
+                option_id="normal_move",
+                label="Normal Move",
+                payload={"movement_phase_action": "normal_move"},
+            ),
+        ),
+        is_parameterized=False,
+    )
+    finite_panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=1,
+        status_message="Waiting: select_movement_action",
+        diagnostics=(),
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=build_unit_panel(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+            highlighted_option_id="normal_move",
+        ),
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+    )
+
+    action_row = next(
+        row for row in ergonomics.selected_unit_rows if row.component_id == "selected_unit_actions"
+    )
+    assert action_row.secondary_label == "Advance, > Normal Move <"
+    assert action_row.state == "selected"
 
 
 def test_ergonomic_hud_primitives_use_toolkit_components_in_screen_space() -> None:

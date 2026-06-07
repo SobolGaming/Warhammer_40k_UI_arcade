@@ -290,11 +290,15 @@ class ArcadeWarhammerWindow(arcade.Window):
                 },
             )
         self.clear()
+        highlighted_option = self._finite_state.highlighted_option
         unit_panel = (
             build_unit_panel(
                 view=self._battlefield_view,
                 selection=self._selection_state,
                 pending_decision=self._pending_decision,
+                highlighted_option_id=None
+                if highlighted_option is None
+                else highlighted_option.option_id,
             )
             if self._selection_state.selected_unit_panel_visible
             else None

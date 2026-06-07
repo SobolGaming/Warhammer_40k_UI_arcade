@@ -307,7 +307,12 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
         viewport_width_px=1280,
         viewport_height_px=800,
         mouse_world_position=(7.0, 18.0),
-        unit_panel=build_unit_panel(view=view, selection=selection, pending_decision=decision),
+        unit_panel=build_unit_panel(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+            highlighted_option_id="normal_move",
+        ),
         context_menu=build_context_menu(
             view=view,
             selection=selection,
@@ -334,7 +339,7 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
 
     texts = _text_lines(primitives)
     assert "Unit: Intercessors" in texts
-    assert "Action: Normal Move" in texts
+    assert "Action: > Normal Move <" in texts
     assert "Actions: intercessor_squad" in texts
     assert "Decision" in texts
     assert "> Normal Move [normal_move]" in texts

@@ -44,7 +44,8 @@ class ContextMenuAction:
 
     option_id: str
     label: str
-    disabled_reason: str | None
+    disabled_reason: str | None = None
+    highlighted: bool = False
 
     @property
     def enabled(self) -> bool:
@@ -196,6 +197,7 @@ def build_unit_panel(
     view: BattlefieldView,
     selection: SelectionState,
     pending_decision: UiDecision | None,
+    highlighted_option_id: str | None = None,
 ) -> UnitPanelView | None:
     """Build selected-unit panel content, if a selected unit is present."""
 
@@ -203,7 +205,11 @@ def build_unit_panel(
     if unit is None:
         return None
     model = selected_model(view, selection)
-    actions = finite_actions_for_unit(pending_decision=pending_decision, unit_id=unit.unit_id)
+    actions = finite_actions_for_unit(
+        pending_decision=pending_decision,
+        unit_id=unit.unit_id,
+        highlighted_option_id=highlighted_option_id,
+    )
     return UnitPanelView(
         unit_id=unit.unit_id,
         unit_label=unit.label,
@@ -791,6 +797,7 @@ def finite_actions_for_unit(
     *,
     pending_decision: UiDecision | None,
     unit_id: str,
+    highlighted_option_id: str | None = None,
 ) -> tuple[ContextMenuAction, ...]:
     """Return finite actions for a selected unit from engine-provided options only."""
 
@@ -800,7 +807,13 @@ def finite_actions_for_unit(
         or not decision_targets_unit(pending_decision, unit_id)
     ):
         return ()
-    return tuple(_action_from_option(option) for option in pending_decision.options)
+    return tuple(
+        _action_from_option(
+            option,
+            highlighted=option.option_id == highlighted_option_id,
+        )
+        for option in pending_decision.options
+    )
 
 
 def decision_targets_unit(decision: UiDecision, unit_id: str) -> bool:
@@ -812,11 +825,16 @@ def decision_targets_unit(decision: UiDecision, unit_id: str) -> bool:
     return _payload_targets_unit(decision.payload, unit_id)
 
 
-def _action_from_option(option: UiFiniteOption) -> ContextMenuAction:
+def _action_from_option(
+    option: UiFiniteOption,
+    *,
+    highlighted: bool = False,
+) -> ContextMenuAction:
     return ContextMenuAction(
         option_id=option.option_id,
         label=option.label,
         disabled_reason=_disabled_reason(option.payload),
+        highlighted=highlighted,
     )
 
 

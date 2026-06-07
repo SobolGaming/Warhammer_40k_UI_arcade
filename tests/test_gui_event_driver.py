@@ -158,6 +158,17 @@ def test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_dra
             "remain_stationary",
         )
 
+        driver.press_key(arcade.key.ESCAPE)
+
+        assert driver.highlighted_finite_option_id == "advance"
+
+        driver.press_key(arcade.key.TAB)
+
+        assert driver.highlighted_finite_option_id == "normal_move"
+
+        driver.click_world(unit_position)
+
+        assert driver.selected_unit_id == unit_id
         assert driver.highlighted_finite_option_id == "normal_move"
 
         driver.press_key(arcade.key.ENTER)
