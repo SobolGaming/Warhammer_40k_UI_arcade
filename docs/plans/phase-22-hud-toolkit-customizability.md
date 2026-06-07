@@ -109,6 +109,7 @@ Expose widget-level and theme-level knobs:
 - state/color-role overrides;
 - high-contrast token overrides;
 - per-widget padding and gap controls.
+- ability to use icons instead of raw text for chips contents
 
 ### Compound Widget Layout
 
