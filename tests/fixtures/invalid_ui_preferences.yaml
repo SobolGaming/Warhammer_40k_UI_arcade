@@ -1,0 +1,21 @@
+schema_version: '1'
+profile_name: phase21-invalid
+hotkeys:
+  - command_id: missing_command
+    key: bad key
+    modifiers:
+      - hyper
+overlays:
+  default_on_model_selection:
+    - missing_overlay
+  default_on_unit_selection: []
+  default_on_movement_draft: []
+  enabled_by_default: []
+selection:
+  default_mouse_button: left
+  cycle_overlapping_bases: true
+  show_debug_inspector: false
+hud:
+  layout_preset: wide_open
+  text_scale: 1.0
+  high_contrast: false

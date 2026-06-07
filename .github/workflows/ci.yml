@@ -56,8 +56,14 @@ jobs:
       - name: Pyright
         run: uv run pyright
 
+      - name: Import boundary check
+        run: uv run python scripts/check_import_boundaries.py
+
       - name: Pre-commit hooks
         run: uv run pre-commit run --all-files
+
+      - name: Build package
+        run: uv build
 
   tests:
     name: tests
@@ -94,5 +100,8 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked --all-groups
 
-      - name: Run tests
-        run: uv run pytest
+      - name: Run tests with coverage
+        run: uv run coverage run -m pytest
+
+      - name: Coverage threshold
+        run: uv run coverage report
