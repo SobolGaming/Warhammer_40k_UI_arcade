@@ -109,8 +109,13 @@ The immediate UI adaptation is defensive and representational:
 
 ## Manual Validation Checklist
 
-- Launch `uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml` and verify Normal
-  Move drafting still opens and submits as before against the fake/debug movement fixture.
+- Launch
+  `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`
+  and verify Normal Move drafting still opens and submits as before against the fake/debug movement
+  fixture.
+- Launch `uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`, select a unit,
+  and press Enter once. Confirm the plain read-only fake fixture does not show a `no_core_client`
+  diagnostic when no engine decision is pending.
 - Launch `uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml`
   and verify live Movement phase finite and movement proposal interactions still behave as before.
 - If the live core reaches a Fight Pile In, Consolidate, melee declaration, placement, or Phase 15E

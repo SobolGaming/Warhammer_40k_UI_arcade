@@ -739,6 +739,13 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_name="ui.finite_submission_attempt",
             summary={"selected_option_id": selected_option_id},
         )
+        if self._finite_state.pending_decision is None:
+            self._trace_event(
+                category="ui",
+                event_name="ui.finite_submission_ignored",
+                summary={"reason": "no_pending_decision"},
+            )
+            return
         if self._core_client is None:
             self._set_finite_state(
                 self._finite_state.with_local_invalid(

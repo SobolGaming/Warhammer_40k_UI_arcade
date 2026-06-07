@@ -8,6 +8,10 @@ import arcade
 import pytest
 
 from tests.support.gui_driver import GuiTestDriver
+from warhammer40k_arcade_ui.config import AppConfig
+from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
+from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 
 
 @pytest.fixture
@@ -62,6 +66,28 @@ def test_keyboard_confirm_submits_highlighted_finite_option(
     assert driver.pending_proposal_kind == "normal_move"
     assert driver.movement_selected_model_ids == ("intercessor_1",)
     assert not driver.movement_draft_ready
+
+
+def test_fake_fixture_confirm_without_pending_decision_is_noop() -> None:
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+    )
+    driver = GuiTestDriver(window=window)
+    try:
+        driver.click_world((7.0, 18.0))
+
+        assert driver.selected_unit_id == "intercessor_squad"
+        assert driver.pending_decision_type is None
+
+        driver.press_key(arcade.key.ENTER)
+
+        assert driver.pending_decision_type is None
+        assert driver.finite_status_kind == "idle"
+        assert driver.window.finite_state.diagnostics == ()
+    finally:
+        driver.close()
 
 
 def test_movement_workflow_marks_ready_survives_hover_and_submits(
