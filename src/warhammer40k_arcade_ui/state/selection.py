@@ -119,6 +119,26 @@ class SelectionState:
             selected_model_panel_visible=self.selected_model_panel_visible,
         )
 
+    def select_model_id(
+        self,
+        *,
+        unit_id: str,
+        model_id: str | None,
+        preferences: UiPreferences,
+    ) -> SelectionState:
+        """Select a known model/unit by ID without requiring a pointer hit."""
+
+        return SelectionState(
+            selected_unit_id=unit_id,
+            selected_model_id=model_id,
+            active_overlay_ids=_selection_overlay_ids(preferences),
+            debug_inspector_visible=self.debug_inspector_visible,
+            selected_unit_panel_visible=self.selected_unit_panel_visible,
+            selected_model_panel_visible=self.selected_model_panel_visible,
+            context_menu_open=False,
+            context_menu_anchor_world=None,
+        )
+
     def toggle_debug_inspector(self) -> SelectionState:
         """Toggle the local debug inspector."""
 

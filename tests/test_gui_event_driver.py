@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import cast
 
 import arcade
 import pytest
 
 from tests.support.gui_driver import GuiTestDriver
 from warhammer40k_arcade_ui.config import AppConfig
+from warhammer40k_arcade_ui.core_client.protocol import JsonObject
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
@@ -121,7 +123,7 @@ def test_movement_workflow_marks_ready_survives_hover_and_submits(
     assert driver.finite_status_message == "Debug movement accepted."
 
 
-def test_driver_can_launch_live_core_smoke_and_submit_real_finite_choice() -> None:
+def test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_draft() -> None:
     driver = GuiTestDriver.launch(core_mode="live_core_smoke")
     try:
         assert driver.core_mode == "live_core_smoke"
@@ -134,14 +136,44 @@ def test_driver_can_launch_live_core_smoke_and_submit_real_finite_choice() -> No
             "army-beta:intercessor-unit-4",
         )
 
-        unit_position = driver.first_model_position_for_unit("army-alpha:intercessor-unit-1")
+        unit_id = "army-alpha:intercessor-unit-3"
+        unit_position = driver.first_model_position_for_unit(unit_id)
         driver.click_world(unit_position)
 
-        assert driver.selected_unit_id == "army-alpha:intercessor-unit-1"
+        assert driver.selected_unit_id == unit_id
+        assert driver.highlighted_finite_option_id == unit_id
 
         driver.press_key(arcade.key.ENTER)
 
         assert driver.pending_decision_type == "select_movement_action"
+        assert _pending_payload(driver)["unit_instance_id"] == unit_id
         assert driver.finite_status_kind == "waiting_for_decision"
+
+        driver.press_key(arcade.key.SPACE)
+
+        assert driver.context_menu_visible
+        assert tuple(action.option_id for action in driver.context_menu_actions) == (
+            "advance",
+            "normal_move",
+            "remain_stationary",
+        )
+
+        assert driver.highlighted_finite_option_id == "normal_move"
+
+        driver.press_key(arcade.key.ENTER)
+
+        assert driver.pending_decision_type == "submit_movement_proposal"
+        assert driver.pending_proposal_kind == "normal_move"
+        assert driver.selected_unit_id == unit_id
+        assert driver.movement_selected_model_ids == (
+            "army-alpha:intercessor-unit-3:core-intercessor-like:001",
+        )
+        assert not driver.movement_draft_ready
     finally:
         driver.close()
+
+
+def _pending_payload(driver: GuiTestDriver) -> JsonObject:
+    decision = driver.window.pending_decision
+    assert decision is not None
+    return cast(JsonObject, decision.payload)

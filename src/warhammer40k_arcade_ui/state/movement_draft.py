@@ -21,7 +21,7 @@ from warhammer40k_arcade_ui.state.entity_selection import (
     build_entity_selection_profile,
     entity_ref_for_model,
 )
-from warhammer40k_arcade_ui.state.selection import SelectionState, selected_unit
+from warhammer40k_arcade_ui.state.selection import SelectionState
 
 MOVEMENT_PROPOSAL_DECISION_TYPE = "submit_movement_proposal"
 MOVEMENT_MODE_CONTEXT_KEY = "movement_mode"
@@ -285,16 +285,14 @@ class MovementDraft:
         selection: SelectionState,
         pending_decision: UiDecision | None,
     ) -> MovementDraft | None:
-        """Create a movement draft for the selected unit and current movement proposal."""
+        """Create a movement draft for the current movement proposal."""
 
-        proposal = movement_proposal_for_selected_unit(
-            view=view,
-            selection=selection,
-            pending_decision=pending_decision,
-        )
-        if proposal is None or pending_decision is None:
+        if pending_decision is None:
             return None
-        unit = selected_unit(view, selection)
+        proposal = _draftable_movement_proposal(pending_decision)
+        if proposal is None:
+            return None
+        unit = _unit_by_id(view, proposal.unit_instance_id)
         if unit is None:
             return None
         if proposal.movement_phase_action is None:
@@ -790,6 +788,26 @@ def movement_proposal_for_selected_unit(
     if proposal.unit_instance_id != selection.selected_unit_id:
         return None
     return proposal
+
+
+def _draftable_movement_proposal(
+    pending_decision: UiDecision,
+) -> UiMovementProposalRequest | None:
+    proposal = pending_decision.movement_proposal
+    if proposal is None:
+        return None
+    if proposal.decision_type != MOVEMENT_PROPOSAL_DECISION_TYPE:
+        return None
+    if proposal.proposal_kind not in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS:
+        return None
+    return proposal
+
+
+def _unit_by_id(view: BattlefieldView, unit_id: str) -> UnitView | None:
+    for unit in view.units:
+        if unit.unit_id == unit_id:
+            return unit
+    return None
 
 
 def unsupported_parameterized_tool_label(pending_decision: UiDecision | None) -> str | None:

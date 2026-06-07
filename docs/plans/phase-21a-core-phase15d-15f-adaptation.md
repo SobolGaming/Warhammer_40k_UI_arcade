@@ -100,12 +100,16 @@ The immediate UI adaptation is defensive and representational:
   parsing.
 - Hardened `prepare_movement_submission` so the Movement phase draft submitter rejects unsupported
   movement proposal kinds before client submission.
+- Fixed the live-core UI handoff so clicked units update finite-option focus, and proposal-required
+  movement drafts anchor to the engine proposal unit even if local selection drifted before the
+  proposal arrived.
 - The future generic `submit_payload` facade remains tracked as future work. It should be introduced
   when a dedicated non-Movement draft tool exists, not as part of this defensive regression slice.
 
 ## Automated Verification
 
 - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_core_phase15_adapter_regression.py tests/test_core_client_protocol.py tests/test_movement_submission.py tests/test_hud_selection.py tests/test_finite_decision_state.py`
+- `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_gui_event_driver.py::test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_draft tests/test_movement_draft.py::test_start_for_pending_uses_proposal_unit_when_selection_drifted`
 
 ## Manual Validation Checklist
 

@@ -497,6 +497,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             world_point=self._mouse_world_position,
             preferences=self._preferences,
         )
+        self._finite_state = self._finite_state.highlight_option_for_unit(
+            self._selection_state.selected_unit_id
+        )
+        self._pending_decision = self._finite_state.pending_decision
         self._sync_movement_draft()
 
     def on_mouse_drag(
@@ -917,6 +921,16 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         if next_draft is not None:
             self._movement_draft = next_draft
+            selected_model_id = (
+                next_draft.selected_model_ids[0]
+                if next_draft.selected_model_ids
+                else next_draft.model_paths[0].model_id
+            )
+            self._selection_state = self._selection_state.select_model_id(
+                unit_id=next_draft.selected_unit_id,
+                model_id=selected_model_id,
+                preferences=self._preferences,
+            )
             self._selection_state = self._selection_state.with_movement_draft_overlays(
                 self._preferences
             )

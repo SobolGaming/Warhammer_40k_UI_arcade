@@ -87,6 +87,17 @@ class FiniteDecisionUiState:
             highlighted_option_index=(self.highlighted_option_index + 1) % len(options),
         )
 
+    def highlight_option_for_unit(self, unit_id: str | None) -> FiniteDecisionUiState:
+        """Move focus to the finite option naming a selected unit, if one exists."""
+
+        if unit_id is None:
+            return self
+        options = self.finite_options
+        for index, option in enumerate(options):
+            if _option_targets_unit(option, unit_id):
+                return replace(self, highlighted_option_index=index)
+        return self
+
     def with_local_invalid(
         self,
         *,
@@ -262,6 +273,15 @@ def _option_by_id(
         if option.option_id == selected_option_id:
             return option
     return None
+
+
+def _option_targets_unit(option: UiFiniteOption, unit_id: str) -> bool:
+    if option.option_id == unit_id:
+        return True
+    payload = option.payload
+    if type(payload) is not dict:
+        return False
+    return payload.get("unit_instance_id") == unit_id or payload.get("unit_id") == unit_id
 
 
 def _status_message(status: UiClientStatus) -> str:
