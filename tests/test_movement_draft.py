@@ -240,6 +240,34 @@ def test_request_drift_starts_new_draft_without_previous_assignments() -> None:
     assert replacement.assigned_model_count == 0
 
 
+def test_start_for_pending_uses_proposal_unit_when_selection_drifted() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(53.0, 18.0),
+        preferences=preferences,
+    )
+    decision = _movement_proposal_decision()
+
+    selected_proposal = movement_proposal_for_selected_unit(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+    )
+
+    assert selection.selected_unit_id == "guardian_squad"
+    assert selected_proposal is None
+    assert draft is not None
+    assert draft.selected_unit_id == "intercessor_squad"
+    assert draft.selected_model_ids == ("intercessor_1",)
+
+
 def test_assignment_views_expose_summary_friendly_model_states() -> None:
     view = default_battlefield_view()
     model_2 = _model_ref("intercessor_2")

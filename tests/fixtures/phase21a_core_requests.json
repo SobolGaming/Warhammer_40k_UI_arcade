@@ -1,0 +1,266 @@
+{
+  "pending_proposals": {
+    "pile_in": {
+      "request_id": "decision-request-pile-in-001",
+      "decision_type": "submit_movement_proposal",
+      "actor_id": "player_1",
+      "game_id": "phase15d-fight-game",
+      "battle_round": 1,
+      "phase": "fight",
+      "unit_instance_id": "intercessor_squad",
+      "proposal_kind": "pile_in",
+      "source_decision_request_id": "decision-request-fight-activation-001",
+      "source_decision_result_id": "ui-result-fight-activation-001",
+      "movement_phase_action": "pile_in",
+      "placement_kinds": [],
+      "context": {
+        "movement_mode": "pile_in",
+        "maximum_distance_inches": 3.0,
+        "legal_pile_in_target_unit_instance_ids": ["guardian_squad"],
+        "ruleset_descriptor_hash": "ruleset-15d-fight-smoke",
+        "fight_step": "pile_in"
+      }
+    },
+    "consolidate": {
+      "request_id": "decision-request-consolidate-001",
+      "decision_type": "submit_movement_proposal",
+      "actor_id": "player_1",
+      "game_id": "phase15d-fight-game",
+      "battle_round": 1,
+      "phase": "fight",
+      "unit_instance_id": "intercessor_squad",
+      "proposal_kind": "consolidate",
+      "source_decision_request_id": "decision-request-fight-activation-001",
+      "source_decision_result_id": "ui-result-fight-activation-001",
+      "movement_phase_action": "consolidate",
+      "placement_kinds": [],
+      "context": {
+        "movement_mode": "consolidate",
+        "maximum_distance_inches": 3.0,
+        "legal_consolidate_target_unit_instance_ids": ["guardian_squad"],
+        "legal_consolidation_modes": ["engaging", "objective", "ongoing"],
+        "objective_context": {"objective_ids": ["objective_alpha"]},
+        "ruleset_descriptor_hash": "ruleset-15d-fight-smoke",
+        "fight_step": "consolidate"
+      }
+    },
+    "melee_declaration": {
+      "request_id": "decision-request-melee-001",
+      "decision_type": "submit_melee_declaration",
+      "actor_id": "player_1",
+      "proposal_kind": "melee_declaration",
+      "phase": "fight",
+      "active_player_id": "player_1",
+      "player_id": "player_1",
+      "unit_instance_id": "intercessor_squad",
+      "source_fight_activation_request_id": "decision-request-fight-activation-001",
+      "source_fight_activation_result_id": "ui-result-fight-activation-001",
+      "ruleset_descriptor_hash": "ruleset-15d-fight-smoke",
+      "target_unit_instance_ids": ["guardian_squad"],
+      "available_weapons": [
+        {
+          "model_instance_id": "intercessor_1",
+          "wargear_id": "intercessor_1:chainsword",
+          "weapon_profile_id": "chainsword",
+          "weapon_profile": {
+            "name": "Chainsword",
+            "range": "melee",
+            "attacks": 3,
+            "weapon_skill": 3,
+            "strength": 4,
+            "armour_penetration": -1,
+            "damage": 1
+          },
+          "is_extra_attacks": false,
+          "maximum_declared_targets": 3,
+          "fixed_attacks": 3,
+          "engaged_target_unit_instance_ids": ["guardian_squad"]
+        }
+      ]
+    },
+    "stratagem_counteroffensive": {
+      "request_id": "decision-request-counteroffensive-001",
+      "decision_type": "submit_stratagem_target_proposal",
+      "actor_id": "player_1",
+      "proposal_kind": "stratagem_target_binding",
+      "stratagem_id": "core:counteroffensive",
+      "handler_id": "core:counteroffensive",
+      "phase": "fight",
+      "declinable": true,
+      "timing_window_id": "counteroffensive-after-enemy-fought-001",
+      "target_binding": {
+        "target_kind": "unit",
+        "target_unit_instance_id": "intercessor_squad"
+      },
+      "effect_selection": {
+        "interrupt_source_effect_id": "counteroffensive-source-001"
+      },
+      "context": {
+        "game_id": "phase15e-stratagem-game",
+        "player_id": "player_1",
+        "active_player_id": "player_2",
+        "battle_round": 1,
+        "phase": "fight",
+        "trigger_kind": "after_enemy_unit_fought"
+      }
+    },
+    "heroic_intervention_charge_move": {
+      "request_id": "decision-request-heroic-charge-001",
+      "decision_type": "submit_movement_proposal",
+      "actor_id": "player_1",
+      "game_id": "phase15e-stratagem-game",
+      "battle_round": 1,
+      "phase": "charge",
+      "unit_instance_id": "intercessor_squad",
+      "proposal_kind": "charge_move",
+      "source_decision_request_id": "decision-request-heroic-target-001",
+      "source_decision_result_id": "ui-result-heroic-target-001",
+      "movement_phase_action": "charge_move",
+      "placement_kinds": [],
+      "context": {
+        "movement_mode": "charge",
+        "stratagem_handler_id": "core:heroic-intervention",
+        "heroic_intervention_mode": "leap_to_defend",
+        "charge_roll_total": 6,
+        "maximum_distance_inches": 6.0,
+        "reachable_target_unit_instance_ids": ["guardian_squad"]
+      }
+    },
+    "placement_reinforcement": {
+      "request_id": "decision-request-placement-001",
+      "decision_type": "submit_placement_proposal",
+      "actor_id": "player_1",
+      "game_id": "phase10p-reserves-game",
+      "battle_round": 2,
+      "phase": "movement",
+      "unit_instance_id": "intercessor_squad",
+      "proposal_kind": "reinforcement_placement",
+      "source_decision_request_id": "decision-request-reinforcement-unit-001",
+      "source_decision_result_id": "ui-result-reinforcement-unit-001",
+      "movement_phase_action": null,
+      "placement_kinds": ["reinforcement"],
+      "context": {
+        "placement_kind": "reinforcement",
+        "reserve_state": "strategic_reserves"
+      }
+    }
+  },
+  "finite_decisions": {
+    "complete_reinforcements": {
+      "request_id": "decision-request-reinforcements-001",
+      "decision_type": "select_reinforcement_unit",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "movement",
+        "active_player_id": "player_1"
+      },
+      "options": [
+        {
+          "option_id": "complete_reinforcements",
+          "label": "Complete Reinforcements",
+          "payload": {
+            "submission_kind": "complete_reinforcements",
+            "skipped_unit_ids": ["intercessor_squad"]
+          }
+        }
+      ]
+    },
+    "complete_disembarks": {
+      "request_id": "decision-request-disembarks-001",
+      "decision_type": "select_disembark_unit",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "movement",
+        "active_player_id": "player_1"
+      },
+      "options": [
+        {
+          "option_id": "complete_disembarks",
+          "label": "Complete Disembarks",
+          "payload": {
+            "submission_kind": "complete_disembarks"
+          }
+        }
+      ]
+    },
+    "complete_shooting_phase": {
+      "request_id": "decision-request-shooting-complete-001",
+      "decision_type": "select_shooting_unit",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "shooting",
+        "active_player_id": "player_1"
+      },
+      "options": [
+        {
+          "option_id": "complete_shooting_phase",
+          "label": "Complete Shooting Phase",
+          "payload": {
+            "submission_kind": "complete_shooting_phase",
+            "skipped_unit_ids": ["intercessor_squad"]
+          }
+        }
+      ]
+    },
+    "complete_charge_phase": {
+      "request_id": "decision-request-charge-complete-001",
+      "decision_type": "select_charging_unit",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "charge",
+        "active_player_id": "player_1"
+      },
+      "options": [
+        {
+          "option_id": "complete_charge_phase",
+          "label": "Complete Charge Phase",
+          "payload": {
+            "submission_kind": "complete_charge_phase",
+            "skipped_unit_ids": ["intercessor_squad"]
+          }
+        }
+      ]
+    },
+    "eligible_to_fight_pass": {
+      "request_id": "decision-request-fight-pass-001",
+      "decision_type": "select_fight_activation",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "fight",
+        "ordering_band": "remaining_combats"
+      },
+      "options": [
+        {
+          "option_id": "eligible_to_fight_pass",
+          "label": "Pass",
+          "payload": {
+            "submission_kind": "eligible_to_fight_pass",
+            "eligible_unit_ids": ["intercessor_squad"],
+            "pass_distance_inches": 5.0
+          }
+        }
+      ]
+    },
+    "decline_fight_interrupt": {
+      "request_id": "decision-request-fight-interrupt-001",
+      "decision_type": "resolve_fight_interrupt",
+      "actor_id": "player_1",
+      "payload": {
+        "phase_body_status": "fight_interrupt_required",
+        "reaction_window": {
+          "timing_window_id": "counteroffensive-after-enemy-fought-001"
+        }
+      },
+      "options": [
+        {
+          "option_id": "decline_fight_interrupt",
+          "label": "Decline Fight Interrupt",
+          "payload": {
+            "submission_kind": "decline_fight_interrupt",
+            "source_effect_id": "counteroffensive-source-001"
+          }
+        }
+      ]
+    }
+  }
+}

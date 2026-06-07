@@ -103,6 +103,7 @@ def test_ordinary_authoritative_invalid_diagnostic_does_not_create_report(tmp_pa
     window = ArcadeWarhammerWindow(
         config=AppConfig(window_width=640, window_height=480),
         preferences=default_preferences(),
+        pending_decision=phase6_debug_pending_decision(),
         crash_report_dir=tmp_path / "crashes",
     )
     try:
@@ -111,6 +112,7 @@ def test_ordinary_authoritative_invalid_diagnostic_does_not_create_report(tmp_pa
         assert window.last_crash_report_path is None
         assert not list((tmp_path / "crashes").glob("crash-*"))
         assert window.finite_state.status_kind == "invalid"
+        assert window.finite_state.diagnostics[0].violation_code == "no_core_client"
     finally:
         window.close()
 

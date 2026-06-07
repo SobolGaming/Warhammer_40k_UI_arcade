@@ -163,6 +163,42 @@ def test_cycle_option_advances_highlight_without_changing_request() -> None:
     assert cycled.highlighted_option.option_id == "advance"
 
 
+def test_apply_status_resets_highlight_when_request_changes() -> None:
+    state = FiniteDecisionUiState(
+        pending_decision=_movement_unit_decision(),
+        highlighted_option_index=1,
+    )
+
+    next_state = state.apply_status(
+        UiClientStatus(
+            stage="battle",
+            status_kind="waiting_for_decision",
+            decision=_movement_action_decision_for("army-alpha:intercessor-unit-3"),
+            payload=None,
+        )
+    )
+
+    assert next_state.highlighted_option is not None
+    assert next_state.highlighted_option.option_id == "advance"
+
+    cycled = next_state.cycle_option()
+
+    assert cycled.highlighted_option is not None
+    assert cycled.highlighted_option.option_id == "normal_move"
+
+
+def test_unit_click_does_not_retarget_ambiguous_action_options() -> None:
+    state = FiniteDecisionUiState(
+        pending_decision=_movement_action_decision_for("army-alpha:intercessor-unit-3"),
+        highlighted_option_index=1,
+    )
+
+    next_state = state.highlight_option_for_unit("army-alpha:intercessor-unit-3")
+
+    assert next_state.highlighted_option is not None
+    assert next_state.highlighted_option.option_id == "normal_move"
+
+
 def _finite_decision() -> UiDecision:
     return UiDecision(
         request_id="decision-request-000004",
@@ -179,6 +215,58 @@ def _finite_decision() -> UiDecision:
                 option_id="advance",
                 label="Advance",
                 payload={"movement_phase_action": "advance"},
+            ),
+        ),
+        is_parameterized=False,
+    )
+
+
+def _movement_unit_decision() -> UiDecision:
+    return UiDecision(
+        request_id="decision-request-000003",
+        decision_type="select_movement_unit",
+        actor_id="player-a",
+        payload={"phase": "movement"},
+        options=(
+            UiFiniteOption(
+                option_id="army-alpha:intercessor-unit-1",
+                label="Intercessors Unit 1",
+                payload={"unit_instance_id": "army-alpha:intercessor-unit-1"},
+            ),
+            UiFiniteOption(
+                option_id="army-alpha:intercessor-unit-3",
+                label="Intercessors Unit 3",
+                payload={"unit_instance_id": "army-alpha:intercessor-unit-3"},
+            ),
+        ),
+        is_parameterized=False,
+    )
+
+
+def _movement_action_decision_for(unit_id: str) -> UiDecision:
+    return UiDecision(
+        request_id="decision-request-000004",
+        decision_type="select_movement_action",
+        actor_id="player-a",
+        payload={"unit_instance_id": unit_id},
+        options=(
+            UiFiniteOption(
+                option_id="advance",
+                label="Advance",
+                payload={"movement_phase_action": "advance", "unit_instance_id": unit_id},
+            ),
+            UiFiniteOption(
+                option_id="normal_move",
+                label="Normal Move",
+                payload={"movement_phase_action": "normal_move", "unit_instance_id": unit_id},
+            ),
+            UiFiniteOption(
+                option_id="remain_stationary",
+                label="Remain Stationary",
+                payload={
+                    "movement_phase_action": "remain_stationary",
+                    "unit_instance_id": unit_id,
+                },
             ),
         ),
         is_parameterized=False,

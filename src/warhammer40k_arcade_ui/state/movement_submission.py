@@ -14,6 +14,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
 from warhammer40k_arcade_ui.state.movement_draft import (
     MOVEMENT_PROPOSAL_DECISION_TYPE,
+    SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS,
     MovementDraft,
 )
 
@@ -85,6 +86,17 @@ def prepare_movement_submission(
                 violation_code="unsupported_parameterized_request",
                 message="submit_movement_payload can answer only movement proposal requests.",
                 field="decision_type",
+            ),
+            None,
+            next_result_index,
+        )
+    if proposal.proposal_kind not in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS:
+        return (
+            _local_invalid(
+                pending_decision=pending_decision,
+                violation_code="unsupported_movement_proposal_kind",
+                message="Movement draft submission does not support this proposal kind.",
+                field="proposal_kind",
             ),
             None,
             next_result_index,

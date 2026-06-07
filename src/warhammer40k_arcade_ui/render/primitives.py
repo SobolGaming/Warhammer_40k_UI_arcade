@@ -630,7 +630,9 @@ def _unit_panel_primitives(
         lines.append(f"Model: {panel.selected_model_id}")
     if panel.pending_request_id is not None:
         lines.append(f"Request: {panel.pending_request_id}")
-        lines.extend(f"Action: {action.label}" for action in panel.available_actions)
+        lines.extend(
+            f"Action: {_context_action_text(action)}" for action in panel.available_actions
+        )
     else:
         lines.append("Actions: none for selected unit")
     clipped_lines = _clip_lines(tuple(lines), max_lines=max_lines)
@@ -1106,9 +1108,14 @@ def _clip_lines(lines: tuple[str, ...], *, max_lines: int | None) -> tuple[str, 
 
 
 def _context_action_text(action: ContextMenuAction) -> str:
-    if action.disabled_reason is None:
-        return action.label
-    return f"{action.label}: {action.disabled_reason}"
+    label = (
+        action.label
+        if action.disabled_reason is None
+        else f"{action.label}: {action.disabled_reason}"
+    )
+    if action.highlighted:
+        return f"> {label} <"
+    return label
 
 
 def _finite_option_line(option: FiniteDecisionOptionView) -> str:
