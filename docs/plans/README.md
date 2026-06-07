@@ -51,6 +51,9 @@ for a numbered phase.
   preliminary future plan for model/weapon-to-target assignment.
 - [Stratagem target-binding assignment tool](preliminary-stratagem-target-binding-tool.md) -
   preliminary future plan for multi-slot Stratagem target selection.
+- [Asset management and customization](preliminary-asset-management-and-customization.md) -
+  preliminary phased roadmap for packaged runtime defaults, platform config/data/cache/state paths,
+  file-relative shareable profiles, simple icon overrides, and later broader art customization.
 
 ## First sprint recommendation
 
