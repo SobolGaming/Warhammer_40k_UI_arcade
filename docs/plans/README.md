@@ -29,6 +29,7 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 19 | [HUD widget toolkit](phase-19-hud-widget-toolkit.md) | HUD Component Toolkit |
 | 20 | [HUD ergonomics pass](phase-20-hud-ergonomics.md) | Usable Movement Client |
 | 21 | [Packaging, CI, and regression hardening](phase-21-packaging-ci-regression.md) | Development-Ready UI Repo |
+| 22 | [HUD toolkit customizability](phase-22-hud-toolkit-customizability.md) | Tunable HUD Toolkit |
 
 ## Umbrella And Preliminary Plans
 
