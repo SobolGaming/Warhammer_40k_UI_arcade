@@ -1,0 +1,82 @@
+schema_version: 1
+profile_id: command_bench_hud
+layout_preset: command_bench
+theme: default
+regions:
+  top_ribbon:
+    widget:
+      type: HudContainer
+      id: command_bench_top_ribbon
+      render_mode: none
+      layout: {kind: grid, columns: 4, gap_px: 8, padding_px: 8}
+      children:
+      - type: StatusChip
+        id: command_bench_phase_chip
+        data_ref: phase_state
+        label: Phase
+      - type: StatusChip
+        id: command_bench_active_player_chip
+        data_ref: active_player
+        label: Active
+      - type: StatusChip
+        id: command_points_chip
+        data_ref: command_points
+        label: CP
+      - type: ActionButton
+        id: summary_toggle_button
+        command_id: toggle_action_summary
+        icon_id: action.summary
+        label: Summary
+  left_player_bench:
+    widget:
+      type: HudContainer
+      id: player_bench_root
+      render_mode: none
+      layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 8}
+      children:
+      - type: IconTextBar
+        id: player_bench_title
+        icon_id: entity.unit
+        primary_label: Player Bench
+      - type: UnitRailCard
+        id: player_bench_roster
+        data_ref: player_roster
+        unit_label: Player roster
+  right_opponent_bench:
+    widget:
+      type: HudContainer
+      id: opponent_bench_root
+      render_mode: none
+      layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 8}
+      children:
+      - type: IconTextBar
+        id: opponent_bench_title
+        icon_id: entity.unit
+        primary_label: Opponent Bench
+      - type: UnitRailCard
+        id: opponent_bench_roster
+        data_ref: opponent_roster
+        unit_label: Opponent roster
+        color_role: opponent
+  bottom_command_bench:
+    widget:
+      type: HudContainer
+      id: command_bench_workbench_root
+      render_mode: none
+      layout: {kind: grid, columns: 3, gap_px: 8, padding_px: 8}
+      children:
+      - type: AssignmentGroupRow
+        id: command_bench_assignment_row
+        data_ref: current_assignment
+        group_label: Current Assignment
+      - type: IconTextBar
+        id: command_bench_action_title
+        data_ref: current_action
+        icon_id: action.movement
+        primary_label: Current Action
+      - type: DonutGauge
+        id: command_bench_resource_ring
+        data_ref: movement_budget
+        inner_diameter: 44
+        outer_diameter: 82
+        label_text: Ready

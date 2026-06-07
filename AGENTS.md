@@ -116,7 +116,8 @@ Build bottom-up:
 20. HUD ergonomics
 21A. core Phase 15D-15F adapter adaptation
 21. packaging, CI, regression fixtures, and import-boundary audits
-22. HUD toolkit customizability and overflow tuning
+22. packaged runtime defaults and source model
+23. HUD toolkit customizability and overflow tuning
 
 Do not add shooting, fight, charge, AI, training, or private rule logic before the movement
 decision path is trustworthy end to end.

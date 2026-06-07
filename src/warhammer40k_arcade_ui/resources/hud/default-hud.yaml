@@ -1,0 +1,78 @@
+schema_version: 1
+profile_id: default_compass_hud
+layout_preset: compass_ring
+theme: default
+regions:
+  top_ribbon:
+    widget:
+      type: HudContainer
+      id: top_ribbon_root
+      render_mode: none
+      layout: {kind: grid, columns: 3, gap_px: 8, padding_px: 8}
+      children:
+      - type: StatusChip
+        id: phase_status_chip
+        data_ref: phase_state
+        label: Phase
+        icon_id: phase.movement
+      - type: StatusChip
+        id: active_player_chip
+        data_ref: active_player
+        label: Active
+        icon_id: status.active
+      - type: MissionCard
+        id: mission_summary_card
+        data_ref: mission_summary
+        title: Missions
+        card_type: summary
+  left_rail:
+    widget:
+      type: HudContainer
+      id: left_rail_root
+      render_mode: none
+      layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 8}
+      children:
+      - type: IconTextBar
+        id: player_roster_header
+        icon_id: entity.unit
+        primary_label: Player Units
+      - type: UnitRailCard
+        id: player_roster_placeholder
+        data_ref: player_roster
+        unit_label: Player roster
+        activation_state: ready
+  right_inspector:
+    widget:
+      type: HudContainer
+      id: selected_inspector_root
+      render_mode: none
+      layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 8}
+      children:
+      - type: DatasheetPanel
+        id: selected_unit_datasheet
+        data_ref: selected_unit
+        density: compact
+        title: Selected Unit
+      - type: AssignmentGroupRow
+        id: current_assignment_row
+        data_ref: current_assignment
+        group_label: Current Assignment
+        operation_kind: movement
+  bottom_workbench:
+    widget:
+      type: HudContainer
+      id: movement_workbench_root
+      render_mode: none
+      layout: {kind: grid, columns: 2, gap_px: 8, padding_px: 8}
+      children:
+      - type: IconTextBar
+        id: current_action_title
+        icon_id: action.movement
+        data_ref: current_action
+        primary_label: Current Action
+      - type: DonutGauge
+        id: movement_budget_ring
+        data_ref: movement_budget
+        inner_diameter: 48
+        outer_diameter: 86
+        label_text: Move

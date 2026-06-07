@@ -1,10 +1,10 @@
-# Phase 22 - HUD toolkit customizability
+# Phase 23 - HUD toolkit customizability
 
 ## Status
 
 Preliminary. This phase records follow-on HUD toolkit customization needs discovered during Phase
-20 manual testing. It should be revisited after Phase 21 packaging, CI, regression fixtures, and
-import-boundary hardening.
+20 manual testing. It should be revisited after Phase 21 packaging, CI, regression fixtures,
+import-boundary hardening, and Phase 22 packaged runtime defaults.
 
 ## Goal
 

@@ -10,9 +10,11 @@ import pytest
 
 from warhammer40k_arcade_ui.hud import preview as hud_preview
 from warhammer40k_arcade_ui.hud.composition import (
+    HudCompositionProfile,
     HudCompositionValidationResult,
     load_hud_composition,
     load_hud_composition_for_preferences,
+    load_hud_composition_reference,
     parse_hud_composition_payload,
 )
 from warhammer40k_arcade_ui.hud.preview import main as hud_preview_main
@@ -28,11 +30,13 @@ from warhammer40k_arcade_ui.hud.toolkit import (
 )
 from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.preferences.io import load_preferences, write_preferences
 from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
     PolygonPrimitive,
     TextPrimitive,
 )
+from warhammer40k_arcade_ui.resources.source import ConfigSource
 
 
 def test_widget_registry_exposes_expected_phase19_inventory() -> None:
@@ -98,7 +102,10 @@ def test_preferences_composition_reference_loads_and_missing_path_is_diagnostic(
     result = load_hud_composition_for_preferences(preferences)
 
     assert result.profile is not None, result.diagnostics
-    assert result.profile.source_path == Path("docs/hud/default-hud.yaml")
+    assert result.profile.source_path is None
+    assert result.profile.source is not None
+    assert result.profile.source.kind == "builtin"
+    assert result.profile.source.name == "hud/default-hud.yaml"
 
     missing_preferences = replace(
         preferences,
@@ -108,6 +115,85 @@ def test_preferences_composition_reference_loads_and_missing_path_is_diagnostic(
 
     assert missing_result.profile is None
     assert "composition_file_error" in _codes(missing_result)
+
+
+def test_builtin_and_explicit_hud_composition_references_load() -> None:
+    builtin = load_hud_composition_reference("default-hud")
+    explicit = load_hud_composition(Path("docs/hud/default-hud.yaml"))
+
+    assert builtin.profile is not None, builtin.diagnostics
+    assert explicit.profile is not None, explicit.diagnostics
+    assert builtin.profile.profile_id == explicit.profile.profile_id
+    assert builtin.profile.source is not None
+    assert builtin.profile.source.display_name == "builtin:hud/default-hud.yaml"
+    assert explicit.profile.source is not None
+    assert explicit.profile.source.kind == "explicit_path"
+
+
+def test_hud_composition_reference_resolves_relative_to_filesystem_preference_source(
+    tmp_path: Path,
+) -> None:
+    profile_path = tmp_path / "ui-preferences.yaml"
+    hud_path = tmp_path / "hud" / "custom-hud.yaml"
+    hud_path.parent.mkdir()
+    hud_path.write_text(
+        Path("docs/hud/default-hud.yaml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    preferences = default_preferences()
+    preferences = replace(
+        preferences,
+        hud=replace(preferences.hud, composition_profile="hud/custom-hud.yaml"),
+    )
+    write_preferences(preferences=preferences, path=profile_path)
+    preferences_result = load_preferences(profile_path)
+    assert preferences_result.preferences is not None
+    assert preferences_result.source is not None
+
+    result = load_hud_composition_for_preferences(
+        preferences_result.preferences,
+        source=preferences_result.source,
+    )
+
+    assert result.profile is not None, result.diagnostics
+    assert result.profile.source is not None
+    assert result.profile.source.kind == "explicit_path"
+    assert result.profile.source.path == hud_path
+
+
+def test_hud_composition_reference_resolves_relative_to_package_resource_source() -> None:
+    preferences = default_preferences()
+    preferences = replace(
+        preferences,
+        hud=replace(preferences.hud, composition_profile="../hud/default-hud.yaml"),
+    )
+
+    result = load_hud_composition_for_preferences(
+        preferences,
+        source=ConfigSource(kind="builtin", name="preferences/custom.yaml"),
+    )
+
+    assert result.profile is not None, result.diagnostics
+    assert result.profile.source is not None
+    assert result.profile.source.kind == "builtin"
+    assert result.profile.source.name == "hud/default-hud.yaml"
+
+
+def test_unsafe_package_relative_hud_reference_returns_diagnostic() -> None:
+    preferences = default_preferences()
+    preferences = replace(
+        preferences,
+        hud=replace(preferences.hud, composition_profile="../../outside.yaml"),
+    )
+
+    result = load_hud_composition_for_preferences(
+        preferences,
+        source=ConfigSource(kind="builtin", name="preferences/default.yaml"),
+    )
+
+    assert result.profile is None
+    assert result.diagnostics
+    assert result.diagnostics[0].code == "composition_source_error"
 
 
 def test_composition_rejects_unknown_widget_type_and_attribute() -> None:
@@ -312,6 +398,37 @@ def test_hud_preview_headless_writes_png_and_metadata(tmp_path: Path) -> None:
 
     assert (tmp_path / "workbench_preview-movement_budget_ring.png").exists()
     assert (tmp_path / "workbench_preview-movement_budget_ring.json").exists()
+
+
+def test_hud_preview_accepts_packaged_builtin_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_profile_ids: list[str] = []
+
+    def fake_render_headless_artifacts(
+        *,
+        profile: HudCompositionProfile,
+        primitives: object,
+        width: int,
+        height: int,
+        component_id: str | None,
+        artifact_dir: Path,
+    ) -> hud_preview.PreviewArtifactPaths:
+        del primitives, width, height, component_id
+        captured_profile_ids.append(profile.profile_id)
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        image_path = artifact_dir / "preview.png"
+        metadata_path = artifact_dir / "preview.json"
+        image_path.write_bytes(b"png")
+        metadata_path.write_text("{}", encoding="utf-8")
+        return hud_preview.PreviewArtifactPaths(image_path=image_path, metadata_path=metadata_path)
+
+    monkeypatch.setattr(hud_preview, "render_headless_artifacts", fake_render_headless_artifacts)
+
+    hud_preview_main(["default-hud", "--headless", "--artifact-dir", str(tmp_path)])
+
+    assert captured_profile_ids == ["default_compass_hud"]
 
 
 def test_interactive_preview_clears_each_frame_without_start_render(

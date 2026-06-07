@@ -30,7 +30,8 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 20 | [HUD ergonomics pass](phase-20-hud-ergonomics.md) | Usable Movement Client |
 | 21A | [Core Phase 15D-15F adapter adaptation](phase-21a-core-phase15d-15f-adaptation.md) | Current Core Contract Guardrails |
 | 21 | [Packaging, CI, and regression hardening](phase-21-packaging-ci-regression.md) | Development-Ready UI Repo |
-| 22 | [HUD toolkit customizability](phase-22-hud-toolkit-customizability.md) | Tunable HUD Toolkit |
+| 22 | [Packaged runtime defaults and source model](phase-22-packaged-runtime-defaults.md) | Packaged Runtime Defaults |
+| 23 | [HUD toolkit customizability](phase-23-hud-toolkit-customizability.md) | Tunable HUD Toolkit |
 
 ## Umbrella And Preliminary Plans
 
@@ -51,9 +52,6 @@ for a numbered phase.
   preliminary future plan for model/weapon-to-target assignment.
 - [Stratagem target-binding assignment tool](preliminary-stratagem-target-binding-tool.md) -
   preliminary future plan for multi-slot Stratagem target selection.
-- [Asset management and customization](preliminary-asset-management-and-customization.md) -
-  preliminary phased roadmap for packaged runtime defaults, platform config/data/cache/state paths,
-  file-relative shareable profiles, simple icon overrides, and later broader art customization.
 
 ## First sprint recommendation
 
