@@ -31,6 +31,64 @@ While movement drafting, press `v` to show/hide the advisory action summary over
 to switch into the brighter review summary. These overlays visualize local workspace intent only;
 the core engine still owns validation and state mutation.
 
+## Installation modes
+
+The UI is still a companion package for the core engine. Until the core package is published through
+a normal package index, package-style installs should install the core engine from Git first in the
+same environment.
+
+### Development checkout
+
+Use this when changing code in this repository. The package dependency resolves from the core Git
+repository, not a local editable path. The sibling core checkout is still used by mypy and pyright
+until the core package publishes a `py.typed` marker.
+
+```bash
+git clone https://github.com/SobolGaming/Warhammer_40k_AI.git
+git clone https://github.com/SobolGaming/Warhammer_40k_UI_arcade.git
+cd Warhammer_40k_UI_arcade
+uv python install 3.14.5
+uv sync --locked --all-groups
+uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml
+```
+
+### Git install
+
+Use this as an in-between path for trying a branch without a local source checkout:
+
+```bash
+uv venv --python 3.14.5 .venv-warhammer-ui
+source .venv-warhammer-ui/bin/activate
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_UI_arcade@main
+warhammer40k-arcade-ui
+```
+
+To test an open UI branch, replace `@main` with the branch name, for example:
+
+```bash
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_UI_arcade@codex/phase21-packaging-ci-regression
+```
+
+### Built package artifact
+
+Use this to install a wheel or source distribution produced by `uv build`:
+
+```bash
+uv build
+uv venv --python 3.14.5 .venv-warhammer-ui-package
+source .venv-warhammer-ui-package/bin/activate
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI
+uv pip install dist/warhammer40k_arcade_ui-0.1.0-py3-none-any.whl
+warhammer40k-arcade-ui
+```
+
+The source distribution can be installed the same way:
+
+```bash
+uv pip install dist/warhammer40k_arcade_ui-0.1.0.tar.gz
+```
+
 ## Local quality gates
 
 Run these before opening a pull request:
@@ -40,8 +98,12 @@ uv run ruff check .
 uv run ruff format --check .
 uv run pyright
 uv run mypy src tests
+uv run python scripts/check_import_boundaries.py
 uv run pytest
+uv run coverage run -m pytest
+uv run coverage report
 uv run pre-commit run --all-files
+uv build
 ```
 
 ## Headless render tests

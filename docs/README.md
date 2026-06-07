@@ -6,7 +6,7 @@ plans separate from engine/core documentation.
 ## Structure
 
 - `plans/` — phase-by-phase implementation plans split from `OverallPlan.md`.
-- `adr/` — future architecture decision records once implementation decisions need durable history.
+- `adr/` — architecture decision records for durable UI/core-boundary and quality-gate decisions.
 - `protocol-notes.md` — future UI-facing notes about the engine adapter/session protocol.
 - `movement-ui-flow.md` — future detailed movement interaction flow.
 - `ui-configuration.md` — Phase 4 notes for the shareable UI preferences framework.
@@ -16,6 +16,6 @@ plans separate from engine/core documentation.
 - Crash diagnostic bundle usage is documented in the root `README.md` under
   "Crash diagnostic bundles".
 
-The active documentation foundation is `plans/`, `README.md`, `architecture.md`,
-`ui-configuration.md`, and `preferences/`. Add detailed protocol notes, movement flow notes, and
-ADRs as later phases introduce those implementation decisions.
+The active documentation foundation is `plans/`, `adr/`, `README.md`, `architecture.md`,
+`ui-configuration.md`, and `preferences/`. Add detailed protocol notes and movement flow notes as
+later phases introduce those implementation decisions.

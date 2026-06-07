@@ -44,8 +44,12 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy src tests
 uv run pyright
-uv run pytest
+uv run python scripts/check_import_boundaries.py
+uv run pytest tests/
+uv run coverage run -m pytest tests/
+uv run coverage report
 uv run pre-commit run --all-files
+uv build
 ```
 
 Additional GUI/render validation, if applicable:

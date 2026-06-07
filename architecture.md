@@ -1,6 +1,6 @@
 # Arcade UI Architecture Build Order
 
-Last updated: 2026-06-06
+Last updated: 2026-06-07
 
 This document is the build-order roadmap for the Arcade UI client that drives the
 [`Warhammer_40k_AI`](https://github.com/SobolGaming/Warhammer_40k_AI) core engine.
@@ -29,7 +29,7 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-18 are complete. Later phases are planned and linked to independently reviewable documents
+Phases 0-21 are complete. Later phases are planned and linked to independently reviewable documents
 under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
@@ -53,9 +53,11 @@ under `docs/plans/`.
 | 16 | Complete | Generic assignment HUD | [phase-16](docs/plans/phase-16-generic-assignment-hud.md) |
 | 17 | Complete | HUD zone layout framework | [phase-17](docs/plans/phase-17-hud-zone-layout-framework.md) |
 | 18 | Complete | Action visual summary overlays | [phase-18](docs/plans/phase-18-action-visual-summary-overlays.md) |
-| 19 | Planned | HUD widget toolkit | [phase-19](docs/plans/phase-19-hud-widget-toolkit.md) |
-| 20 | Planned | HUD ergonomics pass | [phase-20](docs/plans/phase-20-hud-ergonomics.md) |
-| 21 | Planned | Packaging, CI, and regression hardening | [phase-21](docs/plans/phase-21-packaging-ci-regression.md) |
+| 19 | Complete | HUD widget toolkit | [phase-19](docs/plans/phase-19-hud-widget-toolkit.md) |
+| 20 | Complete | HUD ergonomics pass | [phase-20](docs/plans/phase-20-hud-ergonomics.md) |
+| 21A | Complete | Core Phase 15D-15F adapter adaptation | [phase-21a](docs/plans/phase-21a-core-phase15d-15f-adaptation.md) |
+| 21 | Complete | Packaging, CI, and regression hardening | [phase-21](docs/plans/phase-21-packaging-ci-regression.md) |
+| 22 | Planned | HUD toolkit customizability and overflow tuning | [phase-22](docs/plans/phase-22-hud-toolkit-customizability.md) |
 
 ## Cross-cutting architectural rules
 
@@ -77,12 +79,13 @@ under `docs/plans/`.
 
 ## Current module map
 
-Phases 0-18 provide the runnable shell, core client boundary, inspectable render foundation,
+Phases 0-21 provide the runnable shell, core client boundary, inspectable render foundation,
 shareable UI preference framework, local selection/HUD state, finite decision submission, local
 movement path drafting, request-scoped entity-selection foundation, per-model movement draft
 assignments with authoritative movement proposal submission, opt-in live-core smoke startup,
 scriptable GUI/render diagnostics, crash bundles, configurable HUD zones, the Generic Assignment
-HUD, and advisory action visual summaries:
+HUD, advisory action visual summaries, HUD widget composition/preview tooling, ergonomic HUD
+summaries, CI quality gates, golden regression fixtures, ADRs, and packaging smoke coverage:
 
 - `warhammer40k_arcade_ui.config` — immutable app/window configuration.
 - `warhammer40k_arcade_ui.logging_config` — baseline console logging.
@@ -147,9 +150,18 @@ HUD, and advisory action visual summaries:
 - `warhammer40k_arcade_ui.hud.action_summary` — advisory action visual summary models and adapters
   derived from existing assignment workspaces and diagnostics, currently supporting movement paths
   and explicit unsupported diagnostics for future request families.
+- `warhammer40k_arcade_ui.hud.composition` — YAML-backed HUD composition parser for reusable
+  preview/runtime widget layouts.
+- `warhammer40k_arcade_ui.hud.toolkit` — presentation-only HUD widget dataclasses and tunable
+  attributes.
+- `warhammer40k_arcade_ui.hud.toolkit_render` — render primitive conversion for HUD toolkit
+  widgets.
+- `warhammer40k_arcade_ui.hud.preview` — console-script preview runner for raw HUD composition YAML.
 - `warhammer40k_arcade_ui.hud.view_models` — selected-unit panel, context menu, finite-decision
   panel, movement draft/diagnostic panel, generic assignment review HUD, and debug inspector view
   models derived from projection data and current pending requests.
+- `scripts/check_import_boundaries.py` — repository quality script enforcing direct engine imports
+  only from `core_client`.
 
 Planned modules from later phases:
 
@@ -351,25 +363,23 @@ finite movement action selection
   Fall Back mode preservation, and unsupported parameterized requests.
 - Render/HUD tests for movement path primitives, ghost bases, movement budget overlays, and
   movement draft panel content.
-- Future request-scoped entity selection tests for model/unit aliasing, additive/subtractive
-  selection, layer cycling, assignment workspaces, and request drift reconciliation.
-- Future assignment HUD tests for active/assigned/unassigned entity rows and preview-vs-engine
-  diagnostic separation.
-- Future action visual summary tests for dim/review modes, summary view models, movement path
-  overlays, source-to-target links, icon markers, request drift cleanup, and preference defaults.
+- Request-scoped entity selection tests for model/unit aliasing, additive/subtractive selection,
+  layer cycling, assignment workspaces, and request drift reconciliation.
+- Assignment HUD tests for active/assigned/unassigned entity rows and preview-vs-engine diagnostic
+  separation.
+- Action visual summary tests for dim/review modes, summary view models, movement path overlays,
+  request drift cleanup, and preference defaults.
 - Manual validation checklists for user-facing graphical workflows because live GUI interaction is
   only partially automatable.
 - Movement submission tests for exact request/payload/result-ID preservation, stale request
   rejection before client submission, unsupported parameterized request diagnostics, accepted draft
   clearing and auto-follow, invalid diagnostic display, same-context retry retargeting, and render
   projection model-position refresh.
-- Future static checks to keep direct engine imports isolated to `core_client`.
+- Static import-boundary checks to keep direct engine imports isolated to `core_client`.
+- Coverage, packaging metadata, and golden regression fixture tests for CI hardening.
 
 ## Known deferred work
 
-- Live projection-to-render-state integration for the local game session.
-- Movement proposal submission, accepted-state refresh, authoritative movement diagnostics, and
-  retry-from-last-path behavior.
 - Network transport.
 - Replay inspector.
 - Placement proposal tools for reserves, disembark, Rapid Ingress, and other
@@ -380,7 +390,6 @@ finite movement action selection
 - Charge HUD, fight HUD, and damage-allocation UI.
 - Line-of-sight and cover visualization.
 - 3D renderer or full asset loading.
-- Import-boundary audit that enforces direct engine imports only from `core_client`.
 
 ## Decision log
 
@@ -445,3 +454,8 @@ finite movement action selection
 - 2026-06-05: Phase 11 completed with the `--live-core-smoke` launch mode, a real
   `LocalSessionClient` smoke startup at core commit `603fb16`, core projection to render-view
   conversion, CLI tests, real-core movement decision path tests, and an import-boundary regression.
+- 2026-06-07: Phase 19 and Phase 20 completed with a reusable HUD widget toolkit, YAML composition
+  profiles, HUD preview entrypoint, and ergonomic status/action/assignment HUD summaries.
+- 2026-06-07: Phase 21 completed with CI coverage thresholding, package build smoke coverage,
+  import-boundary audit script, pre-commit integration, expanded golden regression fixtures,
+  changelog, and ADRs for the UI/core boundary and CI quality gates.

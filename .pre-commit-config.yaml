@@ -15,3 +15,11 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: import-boundary-check
+        name: import boundary check
+        entry: python scripts/check_import_boundaries.py
+        language: system
+        pass_filenames: false

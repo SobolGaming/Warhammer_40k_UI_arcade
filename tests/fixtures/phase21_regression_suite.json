@@ -1,0 +1,316 @@
+{
+  "decision_requests": {
+    "finite_movement_options": {
+      "request_id": "decision-request-phase21-movement-action-001",
+      "decision_type": "select_movement_action",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "movement",
+        "unit_instance_id": "intercessor_squad"
+      },
+      "options": [
+        {
+          "option_id": "advance",
+          "label": "Advance",
+          "payload": {
+            "movement_phase_action": "advance",
+            "unit_instance_id": "intercessor_squad"
+          }
+        },
+        {
+          "option_id": "normal_move",
+          "label": "Normal Move",
+          "payload": {
+            "movement_phase_action": "normal_move",
+            "unit_instance_id": "intercessor_squad"
+          }
+        },
+        {
+          "option_id": "remain_stationary",
+          "label": "Remain Stationary",
+          "payload": {
+            "movement_phase_action": "remain_stationary",
+            "unit_instance_id": "intercessor_squad"
+          }
+        }
+      ]
+    },
+    "finite_fight_activation": {
+      "request_id": "decision-request-phase21-fight-activation-001",
+      "decision_type": "select_fight_activation",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "fight",
+        "ordering_band": "remaining_combats"
+      },
+      "options": [
+        {
+          "option_id": "intercessor_squad",
+          "label": "Intercessors",
+          "payload": {
+            "unit_instance_id": "intercessor_squad",
+            "ordering_band": "remaining_combats"
+          }
+        },
+        {
+          "option_id": "eligible_to_fight_pass",
+          "label": "Pass",
+          "payload": {
+            "submission_kind": "eligible_to_fight_pass"
+          }
+        }
+      ]
+    },
+    "finite_fight_interrupt": {
+      "request_id": "decision-request-phase21-fight-interrupt-001",
+      "decision_type": "resolve_fight_interrupt",
+      "actor_id": "player_1",
+      "payload": {
+        "phase_body_status": "fight_interrupt_required",
+        "timing_window_id": "counteroffensive-after-enemy-fought-001"
+      },
+      "options": [
+        {
+          "option_id": "decline_fight_interrupt",
+          "label": "Decline Fight Interrupt",
+          "payload": {
+            "submission_kind": "decline_fight_interrupt"
+          }
+        }
+      ]
+    },
+    "complete_reinforcements": {
+      "request_id": "decision-request-phase21-reinforcements-001",
+      "decision_type": "select_reinforcement_unit",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "movement"
+      },
+      "options": [
+        {
+          "option_id": "complete_reinforcements",
+          "label": "Complete Reinforcements",
+          "payload": {
+            "submission_kind": "complete_reinforcements"
+          }
+        }
+      ]
+    },
+    "complete_disembarks": {
+      "request_id": "decision-request-phase21-disembarks-001",
+      "decision_type": "select_disembark_unit",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "movement"
+      },
+      "options": [
+        {
+          "option_id": "complete_disembarks",
+          "label": "Complete Disembarks",
+          "payload": {
+            "submission_kind": "complete_disembarks"
+          }
+        }
+      ]
+    },
+    "complete_shooting_phase": {
+      "request_id": "decision-request-phase21-shooting-complete-001",
+      "decision_type": "select_shooting_unit",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "shooting"
+      },
+      "options": [
+        {
+          "option_id": "complete_shooting_phase",
+          "label": "Complete Shooting Phase",
+          "payload": {
+            "submission_kind": "complete_shooting_phase"
+          }
+        }
+      ]
+    },
+    "complete_charge_phase": {
+      "request_id": "decision-request-phase21-charge-complete-001",
+      "decision_type": "select_charging_unit",
+      "actor_id": "player_1",
+      "payload": {
+        "phase": "charge"
+      },
+      "options": [
+        {
+          "option_id": "complete_charge_phase",
+          "label": "Complete Charge Phase",
+          "payload": {
+            "submission_kind": "complete_charge_phase"
+          }
+        }
+      ]
+    }
+  },
+  "pending_proposals": {
+    "normal_move": {
+      "request_id": "decision-request-phase21-normal-move-001",
+      "decision_type": "submit_movement_proposal",
+      "actor_id": "player_1",
+      "game_id": "phase21-game",
+      "battle_round": 1,
+      "phase": "movement",
+      "unit_instance_id": "intercessor_squad",
+      "proposal_kind": "normal_move",
+      "source_decision_request_id": "decision-request-phase21-movement-action-001",
+      "source_decision_result_id": "ui-result-phase21-normal-move",
+      "movement_phase_action": "normal_move",
+      "placement_kinds": [],
+      "context": {
+        "movement_mode": "normal",
+        "movement_budget_inches": 6.0
+      }
+    },
+    "fall_back": {
+      "request_id": "decision-request-phase21-fall-back-001",
+      "decision_type": "submit_movement_proposal",
+      "actor_id": "player_1",
+      "game_id": "phase21-game",
+      "battle_round": 1,
+      "phase": "movement",
+      "unit_instance_id": "intercessor_squad",
+      "proposal_kind": "fall_back",
+      "source_decision_request_id": "decision-request-phase21-movement-action-001",
+      "source_decision_result_id": "ui-result-phase21-fall-back",
+      "movement_phase_action": "fall_back",
+      "placement_kinds": [],
+      "context": {
+        "movement_mode": "fall_back",
+        "fall_back_mode": "normal"
+      }
+    },
+    "charge_move": {
+      "request_id": "decision-request-phase21-charge-move-001",
+      "decision_type": "submit_movement_proposal",
+      "actor_id": "player_1",
+      "game_id": "phase21-game",
+      "battle_round": 1,
+      "phase": "charge",
+      "unit_instance_id": "intercessor_squad",
+      "proposal_kind": "charge_move",
+      "source_decision_request_id": "decision-request-phase21-charge-unit-001",
+      "source_decision_result_id": "ui-result-phase21-charge-unit",
+      "movement_phase_action": "charge_move",
+      "placement_kinds": [],
+      "context": {
+        "movement_mode": "charge",
+        "charge_roll_total": 7,
+        "reachable_target_unit_instance_ids": ["guardian_squad"],
+        "allow_no_move": true
+      }
+    },
+    "pile_in": {
+      "request_id": "decision-request-phase21-pile-in-001",
+      "decision_type": "submit_movement_proposal",
+      "actor_id": "player_1",
+      "game_id": "phase21-game",
+      "battle_round": 1,
+      "phase": "fight",
+      "unit_instance_id": "intercessor_squad",
+      "proposal_kind": "pile_in",
+      "source_decision_request_id": "decision-request-phase21-fight-activation-001",
+      "source_decision_result_id": "ui-result-phase21-fight-activation",
+      "movement_phase_action": "pile_in",
+      "placement_kinds": [],
+      "context": {
+        "movement_mode": "pile_in",
+        "maximum_distance_inches": 3.0
+      }
+    },
+    "consolidate": {
+      "request_id": "decision-request-phase21-consolidate-001",
+      "decision_type": "submit_movement_proposal",
+      "actor_id": "player_1",
+      "game_id": "phase21-game",
+      "battle_round": 1,
+      "phase": "fight",
+      "unit_instance_id": "intercessor_squad",
+      "proposal_kind": "consolidate",
+      "source_decision_request_id": "decision-request-phase21-fight-activation-001",
+      "source_decision_result_id": "ui-result-phase21-fight-activation",
+      "movement_phase_action": "consolidate",
+      "placement_kinds": [],
+      "context": {
+        "movement_mode": "consolidate",
+        "maximum_distance_inches": 3.0
+      }
+    },
+    "melee_declaration": {
+      "request_id": "decision-request-phase21-melee-001",
+      "decision_type": "submit_melee_declaration",
+      "actor_id": "player_1",
+      "proposal_kind": "melee_declaration",
+      "phase": "fight",
+      "unit_instance_id": "intercessor_squad",
+      "target_unit_instance_ids": ["guardian_squad"],
+      "available_weapons": [
+        {
+          "model_instance_id": "intercessor_1",
+          "wargear_id": "intercessor_1:chainsword",
+          "weapon_profile_id": "chainsword",
+          "maximum_declared_targets": 1,
+          "engaged_target_unit_instance_ids": ["guardian_squad"]
+        }
+      ]
+    },
+    "stratagem_target_binding": {
+      "request_id": "decision-request-phase21-stratagem-target-001",
+      "decision_type": "submit_stratagem_target_proposal",
+      "actor_id": "player_1",
+      "proposal_kind": "stratagem_target_binding",
+      "phase": "fight",
+      "stratagem_id": "core:counteroffensive",
+      "target_binding": {
+        "target_kind": "unit",
+        "target_unit_instance_id": "intercessor_squad"
+      },
+      "context": {
+        "timing_window_id": "counteroffensive-after-enemy-fought-001"
+      }
+    },
+    "shooting_declaration": {
+      "request_id": "decision-request-phase21-shooting-001",
+      "decision_type": "submit_shooting_declaration",
+      "actor_id": "player_1",
+      "proposal_kind": "shooting_declaration",
+      "phase": "shooting",
+      "unit_instance_id": "intercessor_squad",
+      "target_candidates": [
+        {
+          "target_unit_instance_id": "guardian_squad",
+          "visible": true
+        }
+      ]
+    }
+  },
+  "client_statuses": {
+    "accepted_movement_response": {
+      "stage": "battle",
+      "status_kind": "accepted",
+      "message": "Movement accepted.",
+      "decision_request": null,
+      "payload": {
+        "status": "accepted",
+        "request_id": "decision-request-phase21-normal-move-001",
+        "result_id": "ui-result-phase21-movement-submit"
+      }
+    },
+    "invalid_movement_response": {
+      "stage": "battle",
+      "status_kind": "invalid",
+      "message": "Movement path exceeds the model budget.",
+      "decision_request": null,
+      "payload": {
+        "invalid_reason": "movement_budget_exceeded",
+        "field": "witness.model_paths",
+        "request_id": "decision-request-phase21-normal-move-001"
+      }
+    }
+  }
+}
