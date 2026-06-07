@@ -16,6 +16,12 @@ good, but several toolkit-backed rows overflow their visible bounds. Examples in
 rows, position rows, selected-model rows, decision rows, and hotkey rows where the widget frame only
 comfortably fits the title line while secondary/value text extends past the intended box.
 
+A later `Warhammer_40k_AI` review at `643a99385e95` also broadened the kinds of engine-authored
+decision summaries the HUD will need to present. Fight movement, melee declarations, Stratagem
+target bindings, attack-resolution choices, and completion gates can all produce long labels,
+multi-field summaries, and nested model/weapon/target data. This increases the need for explicit
+overflow, density, and icon-substitution controls before those tools become player-facing.
+
 ## Desired Outcome
 
 Power users and developers should be able to tune HUD composition YAML to control how widgets size,
@@ -110,6 +116,9 @@ Expose widget-level and theme-level knobs:
 - high-contrast token overrides;
 - per-widget padding and gap controls.
 - ability to use icons instead of raw text for chips contents
+- decision-family icon mappings so long engine labels such as `submit_melee_declaration`,
+  `stratagem_target_binding`, `complete_charge_phase`, and `eligible_to_fight_pass` can be shown as
+  compact chips without losing inspectability.
 
 ### Compound Widget Layout
 
@@ -121,6 +130,23 @@ Support richer parent/child composition for reusable HUD elements:
 - datasheet panels with header, stat strip, weapon, ability, keyword, and footer slots;
 - assignment rows with source, target, state marker, and summary slots;
 - status chips with icon, label, value, and optional progress/alert slots.
+
+### Engine Decision Summary Stress Cases
+
+The customizability pass should include layout examples based on current engine decision families:
+
+- Fight movement rows with proposal kind, selected unit, mode/action, target-unit IDs, objective
+  context, and no-move state.
+- Melee declaration rows with one or more model/weapon/target allocation summaries.
+- Stratagem target-binding rows with Stratagem ID, declinable state, timing window, selected target,
+  and handler-owned `effect_selection` hints.
+- Completion-gate rows with skipped-unit summaries and exact finite option IDs.
+- Attack-resolution rows such as target-unit and weapon-group selection where deterministic option
+  IDs can be long but player-facing labels should remain compact.
+
+These examples should remain presentation-only. The YAML may choose icon, label, truncation, and
+detail-disclosure behavior, but it must not define new proposal kinds, option IDs, legality, target
+filters, or hidden-information visibility.
 
 ### YAML Dialect Expectations
 
@@ -167,6 +193,8 @@ after reviewing the existing Phase 19 composition parser.
 - Unit-test layout allocation for stack, grid, overlay, fit-content, fill, and fraction cases.
 - Regression-test long labels in `StatusChip`, `IconTextBar`, `AssignmentGroupRow`, and
   `DatasheetPanel` so they clip, ellipsize, wrap, or shrink according to configuration.
+- Regression-test long current-contract decision labels and proposal kinds so generic unsupported
+  panels do not overflow before dedicated tools are implemented.
 - Add headless render evidence tests for at least one overflow-heavy HUD profile.
 - Add preview YAML examples that intentionally stress long unit names, long decision labels, long
   diagnostic text, and small viewport sizes.

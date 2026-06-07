@@ -19,12 +19,20 @@ Make the UI reliable enough to use during engine development.
   - movement proposal request
   - Fall Back movement proposal request with `fall_back_mode`
   - Charge Move proposal request with `proposal_kind: "charge_move"` and target/no-move context
+  - Fight movement proposal requests with `proposal_kind: "pile_in"` and
+    `proposal_kind: "consolidate"` that remain outside the current Movement phase draft tool
+  - melee declaration request with `decision_type: "submit_melee_declaration"` and
+    `proposal_kind: "melee_declaration"`
+  - Stratagem target-binding request with `decision_type: "submit_stratagem_target_proposal"` and
+    `proposal_kind: "stratagem_target_binding"`
   - accepted movement response
   - invalid movement response
   - normalized `pending_proposal` metadata containing `request_id`, `decision_type`, `actor_id`,
     and `proposal_kind`
   - finite fight activation request
   - finite fight interrupt request
+  - finite phase completion requests/options including `complete_reinforcements`,
+    `complete_disembarks`, `complete_shooting_phase`, and `complete_charge_phase`
   - unsupported non-movement parameterized request, such as shooting declaration or Stratagem target
     proposal, to prove generic proposal display does not force movement parsing
   - default UI preferences profile
@@ -65,11 +73,17 @@ The UI repo is stable enough to use as a companion project while the core engine
 
 ## Core Update Regression Targets
 
-Reviewed `Warhammer_40k_AI` `main` at `2d4d730` on 2026-06-05. CI fixtures should cover the new
-adapter-visible request families without requiring their full UI tools to exist yet:
+Reviewed `Warhammer_40k_AI` `main` at `643a99385e95` on 2026-06-07. CI fixtures should cover the
+new adapter-visible request families without requiring their full UI tools to exist yet:
 
 - `pending_proposal` metadata must be complete for every parameterized family the UI parses.
-- `charge_move` must remain unsupported or charge-specific; it must not be submitted through Normal
-  Move/Fall Back code paths.
+- `charge_move`, `pile_in`, and `consolidate` must remain unsupported or dedicated-tool-specific;
+  they must not be submitted through Normal Move/Advance/Fall Back code paths.
+- `submit_melee_declaration` and `submit_stratagem_target_proposal` must render through generic
+  proposal/unsupported surfaces until dedicated assignment tools exist.
 - `select_fight_activation` and `resolve_fight_interrupt` finite requests must render and submit
   exact engine option IDs, including pass/decline options.
+- Phase completion finite options, including `complete_shooting_phase` and `complete_charge_phase`,
+  must submit exact engine option IDs and must not be replaced by UI-local next-phase shortcuts.
+- Completion gates should be treated as engine-owned sequencing: the UI can display the skipped-unit
+  summaries, but it must not infer when a phase is complete from local table state.
