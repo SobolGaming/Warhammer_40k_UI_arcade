@@ -52,6 +52,14 @@ for a numbered phase.
   preliminary future plan for model/weapon-to-target assignment.
 - [Stratagem target-binding assignment tool](preliminary-stratagem-target-binding-tool.md) -
   preliminary future plan for multi-slot Stratagem target selection.
+- [`warhammer40k-config` and platform init commands](preliminary-warhammer40k-config-platform-init.md) -
+  preliminary plan for path discovery and deliberate starter config export/init commands.
+- [Asset roots and shareable profile folders](preliminary-asset-roots.md) - preliminary plan for
+  durable user asset root resolution using the Phase 22 source model.
+- [Asset packs](preliminary-asset-packs.md) - preliminary plan for data-only user/built-in asset
+  bundles under platform data paths.
+- [Simple icon overrides](preliminary-icon-overrides.md) - preliminary plan for overriding known
+  presentation icons through YAML and asset roots.
 
 ## First sprint recommendation
 
