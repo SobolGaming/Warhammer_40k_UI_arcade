@@ -76,9 +76,15 @@ requests, proposal kinds, validation behavior, or visibility rules.
 Assignment review settings:
 
 - `layout_preset`: `compass_ring` or `command_bench`.
-- `composition_profile`: optional path to a separate HUD composition YAML file. This file describes
-  presentation-only widget trees for HUD zones and is kept separate from hotkeys, overlays, and
-  other personal preferences.
+- `composition_profile`: optional reference to a separate HUD composition YAML file. This file
+  describes presentation-only widget trees for HUD zones and is kept separate from hotkeys,
+  overlays, and other personal preferences. The reference may be:
+  - a known built-in profile ID, such as `default-hud`;
+  - a relative path resolved against the preferences file that names it, such as
+    `hud/my-custom.yaml`;
+  - a package-resource-relative path resolved against a packaged built-in preferences resource,
+    such as `../hud/default-hud.yaml`;
+  - an explicit absolute path.
 - `zones`: known presentation-only HUD zone settings. Each zone supports:
   - `visible`: whether to show the zone socket;
   - `size_px`: preferred size in pixels;
@@ -99,7 +105,7 @@ Example:
 ```yaml
 hud:
   layout_preset: compass_ring
-  composition_profile: docs/hud/default-hud.yaml
+  composition_profile: default-hud
   zones:
     top_ribbon:
       visible: true
@@ -134,6 +140,11 @@ The composition dialect is schema-versioned and presentation-only. It supports k
 known icon IDs, safe `data_ref` names, parent-relative layout hints, and component attributes. It
 does not allow executable expressions, includes/templates, legal-action definitions, proposal
 kinds, finite option IDs, request IDs, validation rules, or hidden-information visibility rules.
+
+When a preferences file references a relative composition path, the path is resolved relative to the
+source of the preferences file rather than the current working directory. This applies both to normal
+filesystem preferences and to packaged built-in resources loaded from a wheel or zip-style Python
+package.
 
 Preview files may include `sample_data` so widgets can be reviewed without a game session:
 

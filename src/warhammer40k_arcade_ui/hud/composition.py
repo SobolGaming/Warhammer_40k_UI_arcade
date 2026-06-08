@@ -19,6 +19,12 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     widget_type_from_string,
 )
 from warhammer40k_arcade_ui.preferences.schema import JsonObject, JsonValue, UiPreferences
+from warhammer40k_arcade_ui.resources.source import (
+    GenericSource,
+    ResourceSource,
+    read_builtin_text,
+    resolve_resource_reference,
+)
 
 type HudCompositionSeverity = Literal["error", "warning"]
 type HudCompositionLayoutPreset = Literal["compass_ring", "command_bench"]
@@ -34,6 +40,10 @@ _VALID_ORIENTATIONS = frozenset(("vertical", "horizontal"))
 _VALID_ALIGNMENTS = frozenset(("start", "center", "end", "stretch"))
 _VALID_LAYOUT_PRESETS = frozenset(("compass_ring", "command_bench"))
 _FORBIDDEN_INCLUDE_KEYS = frozenset(("include", "includes", "template", "templates"))
+_BUILTIN_COMPOSITION_PROFILES = {
+    "default-hud": "hud/default-hud.yaml",
+    "command-bench-hud": "hud/command-bench-hud.yaml",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +76,7 @@ class HudCompositionProfile:
     regions: tuple[HudCompositionRegion, ...]
     sample_data: JsonObject
     source_path: Path | None = None
+    source: ResourceSource | None = None
 
     def region(self, region_id: str) -> HudCompositionRegion | None:
         """Return a region by ID if present."""
@@ -97,6 +108,21 @@ def load_hud_composition(
 ) -> HudCompositionValidationResult:
     """Load and validate a HUD composition YAML file."""
 
+    return _load_hud_composition_file(
+        path,
+        source=ResourceSource(kind="explicit_path", name=str(path), path=path),
+        preview=preview,
+    )
+
+
+def _load_hud_composition_file(
+    path: Path,
+    *,
+    source: ResourceSource,
+    preview: bool,
+) -> HudCompositionValidationResult:
+    """Load and validate a HUD composition YAML file from a resolved filesystem source."""
+
     try:
         raw_text = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -127,12 +153,63 @@ def load_hud_composition(
                 ),
             ),
         )
-    return parse_hud_composition_payload(payload, source_path=path, preview=preview)
+    return parse_hud_composition_payload(
+        payload,
+        source_path=path,
+        source=source,
+        preview=preview,
+    )
+
+
+def load_hud_composition_reference(
+    reference: str,
+    *,
+    relative_to: GenericSource | None = None,
+    preview: bool = False,
+) -> HudCompositionValidationResult:
+    """Load a HUD composition by built-in name, source-relative path, or explicit path."""
+
+    try:
+        source = resolve_resource_reference(
+            reference,
+            relative_to=relative_to,
+            known_builtins=_BUILTIN_COMPOSITION_PROFILES,
+        )
+    except ValueError as exc:
+        return HudCompositionValidationResult(
+            profile=None,
+            diagnostics=(
+                _diagnostic(
+                    severity="error",
+                    code="composition_source_error",
+                    field="$",
+                    message=f"Could not resolve HUD composition source: {exc}.",
+                    value=reference,
+                ),
+            ),
+        )
+    if source.kind == "builtin":
+        return _load_builtin_hud_composition(source.name, preview=preview)
+    if source.path is None:
+        return HudCompositionValidationResult(
+            profile=None,
+            diagnostics=(
+                _diagnostic(
+                    severity="error",
+                    code="composition_source_error",
+                    field="$",
+                    message="Resolved HUD composition source did not include a filesystem path.",
+                    value=source.display_name,
+                ),
+            ),
+        )
+    return _load_hud_composition_file(source.path, source=source, preview=preview)
 
 
 def load_hud_composition_for_preferences(
     preferences: UiPreferences,
     *,
+    source: GenericSource | None = None,
     preview: bool = False,
 ) -> HudCompositionValidationResult:
     """Load the composition profile referenced by validated UI preferences."""
@@ -140,13 +217,14 @@ def load_hud_composition_for_preferences(
     profile_path = preferences.hud.composition_profile
     if profile_path is None:
         return HudCompositionValidationResult(profile=None, diagnostics=())
-    return load_hud_composition(Path(profile_path), preview=preview)
+    return load_hud_composition_reference(profile_path, relative_to=source, preview=preview)
 
 
 def parse_hud_composition_payload(
     payload: object,
     *,
     source_path: Path | None = None,
+    source: ResourceSource | None = None,
     preview: bool = False,
 ) -> HudCompositionValidationResult:
     """Parse a JSON/YAML payload into a validated HUD composition profile."""
@@ -193,9 +271,49 @@ def parse_hud_composition_payload(
             regions=regions,
             sample_data=sample_data,
             source_path=source_path,
+            source=source,
         ),
         diagnostics=tuple(diagnostics),
     )
+
+
+def _load_builtin_hud_composition(
+    relative_resource: str,
+    *,
+    preview: bool,
+) -> HudCompositionValidationResult:
+    source = ResourceSource(kind="builtin", name=relative_resource)
+    try:
+        raw_text = read_builtin_text(relative_resource)
+    except (OSError, ValueError) as exc:
+        return HudCompositionValidationResult(
+            profile=None,
+            diagnostics=(
+                _diagnostic(
+                    severity="error",
+                    code="composition_builtin_error",
+                    field="$",
+                    message=f"Could not read built-in HUD composition resource: {exc}.",
+                    value=relative_resource,
+                ),
+            ),
+        )
+    try:
+        payload = cast(object, yaml.safe_load(raw_text))
+    except yaml.YAMLError as exc:
+        return HudCompositionValidationResult(
+            profile=None,
+            diagnostics=(
+                _diagnostic(
+                    severity="error",
+                    code="composition_yaml_error",
+                    field="$",
+                    message=f"Could not parse built-in HUD composition YAML: {exc}.",
+                    value=relative_resource,
+                ),
+            ),
+        )
+    return parse_hud_composition_payload(payload, source=source, preview=preview)
 
 
 def find_component(

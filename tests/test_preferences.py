@@ -21,6 +21,13 @@ from warhammer40k_arcade_ui.preferences.defaults import (
     keyboard_heavy_preferences,
 )
 from warhammer40k_arcade_ui.preferences.io import write_preferences
+from warhammer40k_arcade_ui.resources.source import (
+    ConfigSource,
+    read_builtin_text,
+    resolve_builtin_relative_resource,
+    resolve_resource_reference,
+    validate_builtin_resource_path,
+)
 
 
 def test_default_profile_exports_deterministic_json_and_yaml() -> None:
@@ -87,7 +94,27 @@ def test_load_preferences_without_file_uses_builtin_default(
 
     assert result.preferences == default_preferences()
     assert result.used_builtin_default is True
+    assert result.source is not None
+    assert result.source.kind == "builtin"
+    assert result.source.name == "preferences/default.yaml"
     assert result.diagnostics == ()
+
+
+def test_platform_default_preferences_source_is_user_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "ui-preferences.yaml"
+    write_preferences(preferences=keyboard_heavy_preferences(), path=path)
+    monkeypatch.setattr(preferences_io, "default_preferences_path", lambda: path)
+
+    result = load_preferences()
+
+    assert result.preferences is not None
+    assert result.preferences.profile_name == "keyboard-heavy"
+    assert result.source is not None
+    assert result.source.kind == "user_default"
+    assert result.source.path == path
 
 
 def test_unknown_command_overlay_and_duplicate_hotkey_emit_diagnostics() -> None:
@@ -168,7 +195,7 @@ def test_assignment_hud_preferences_round_trip() -> None:
 
     assert result.preferences is not None
     assert result.preferences.hud.layout_preset == "compass_ring"
-    assert result.preferences.hud.composition_profile == "docs/hud/default-hud.yaml"
+    assert result.preferences.hud.composition_profile == "default-hud"
     assert result.preferences.hud.zones[0].zone_id == "top_ribbon"
     assert result.preferences.hud.show_assignment_hud is True
     assert result.preferences.hud.assignment_hud_mode == "compact"
@@ -248,6 +275,9 @@ def test_exported_profile_can_be_written_and_loaded(tmp_path: Path) -> None:
     assert result.preferences is not None
     assert result.preferences.profile_name == "keyboard-heavy"
     assert result.source_path == path
+    assert result.source is not None
+    assert result.source.kind == "explicit_path"
+    assert result.source.path == path
 
 
 def test_documented_example_profiles_load() -> None:
@@ -267,6 +297,74 @@ def test_documented_example_profiles_load() -> None:
         loaded_names.add(result.preferences.profile_name)
 
     assert loaded_names == {"default", "dense-debug", "keyboard-heavy", "command-bench"}
+
+
+def test_packaged_preference_resources_match_builtin_profiles() -> None:
+    expected_payloads = {
+        "default": default_preferences().to_payload(),
+        "dense-debug": dense_debug_preferences().to_payload(),
+        "keyboard-heavy": keyboard_heavy_preferences().to_payload(),
+        "command-bench": command_bench_preferences().to_payload(),
+    }
+
+    for resource_name in (
+        "preferences/default.yaml",
+        "preferences/dense-debug.yaml",
+        "preferences/keyboard-heavy.yaml",
+        "preferences/command-bench.yaml",
+    ):
+        result = load_preferences_from_text(
+            text=read_builtin_text(resource_name),
+            preference_format="yaml",
+        )
+
+        assert result.preferences is not None
+        assert result.preferences.to_payload() == expected_payloads[result.preferences.profile_name]
+
+
+def test_builtin_resource_paths_reject_absolute_and_traversal_paths() -> None:
+    assert validate_builtin_resource_path("preferences/default.yaml").parts == (
+        "preferences",
+        "default.yaml",
+    )
+
+    with pytest.raises(ValueError, match="unsafe resource path"):
+        validate_builtin_resource_path("/preferences/default.yaml")
+    with pytest.raises(ValueError, match="unsafe resource path"):
+        validate_builtin_resource_path("../preferences/default.yaml")
+
+
+def test_source_relative_resource_references_resolve_for_filesystem_and_package_sources(
+    tmp_path: Path,
+) -> None:
+    filesystem_source = ConfigSource(
+        kind="explicit_path",
+        name=str(tmp_path / "ui-preferences.yaml"),
+        path=tmp_path / "ui-preferences.yaml",
+    )
+    filesystem_resource = resolve_resource_reference(
+        "hud/custom.yaml",
+        relative_to=filesystem_source,
+    )
+    package_resource = resolve_resource_reference(
+        "../hud/default-hud.yaml",
+        relative_to=ConfigSource(kind="builtin", name="preferences/default.yaml"),
+    )
+
+    assert filesystem_resource.path == tmp_path / "hud" / "custom.yaml"
+    assert filesystem_resource.kind == "explicit_path"
+    assert package_resource.name == "hud/default-hud.yaml"
+    assert package_resource.kind == "builtin"
+
+
+def test_builtin_relative_resource_rejects_package_root_escape() -> None:
+    assert (
+        resolve_builtin_relative_resource("preferences/default.yaml", "../hud/default-hud.yaml")
+        == "hud/default-hud.yaml"
+    )
+
+    with pytest.raises(ValueError, match="unsafe resource path"):
+        resolve_builtin_relative_resource("preferences/default.yaml", "../../outside.yaml")
 
 
 def test_dense_debug_profile_includes_planned_setting_diagnostics() -> None:

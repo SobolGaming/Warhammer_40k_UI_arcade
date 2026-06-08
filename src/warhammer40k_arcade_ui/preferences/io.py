@@ -11,16 +11,17 @@ import yaml
 from platformdirs import user_config_path
 from yaml import YAMLError
 
-from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.diagnostics import PreferenceDiagnostic
 from warhammer40k_arcade_ui.preferences.schema import (
     UiPreferences,
     parse_preferences_payload,
 )
+from warhammer40k_arcade_ui.resources.source import ConfigSource, read_builtin_text
 
 type PreferenceFormat = Literal["json", "yaml"]
 
 _DEFAULT_FILE_NAME = "ui-preferences.yaml"
+_BUILTIN_DEFAULT_PREFERENCES = "preferences/default.yaml"
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,7 @@ class PreferencesLoadResult:
     diagnostics: tuple[PreferenceDiagnostic, ...]
     source_path: Path | None
     used_builtin_default: bool
+    source: ConfigSource | None = None
 
     @property
     def has_errors(self) -> bool:
@@ -58,13 +60,11 @@ def load_preferences(path: Path | None = None) -> PreferencesLoadResult:
     if path is None:
         default_path = default_preferences_path()
         if not default_path.exists():
-            return PreferencesLoadResult(
-                preferences=default_preferences(),
-                diagnostics=(),
-                source_path=None,
-                used_builtin_default=True,
-            )
-        return _load_existing_file(default_path)
+            return _load_builtin_preferences(_BUILTIN_DEFAULT_PREFERENCES)
+        return _load_existing_file(
+            default_path,
+            source=ConfigSource(kind="user_default", name=str(default_path), path=default_path),
+        )
     if not path.exists():
         return PreferencesLoadResult(
             preferences=None,
@@ -79,8 +79,12 @@ def load_preferences(path: Path | None = None) -> PreferencesLoadResult:
             ),
             source_path=path,
             used_builtin_default=False,
+            source=ConfigSource(kind="explicit_path", name=str(path), path=path),
         )
-    return _load_existing_file(path)
+    return _load_existing_file(
+        path,
+        source=ConfigSource(kind="explicit_path", name=str(path), path=path),
+    )
 
 
 def load_preferences_from_text(
@@ -137,7 +141,7 @@ def write_preferences(
     )
 
 
-def _load_existing_file(path: Path) -> PreferencesLoadResult:
+def _load_existing_file(path: Path, *, source: ConfigSource) -> PreferencesLoadResult:
     try:
         preference_format = _format_from_path(path)
     except ValueError as error:
@@ -154,6 +158,7 @@ def _load_existing_file(path: Path) -> PreferencesLoadResult:
             ),
             source_path=path,
             used_builtin_default=False,
+            source=source,
         )
     try:
         text = path.read_text(encoding="utf-8")
@@ -171,6 +176,7 @@ def _load_existing_file(path: Path) -> PreferencesLoadResult:
             ),
             source_path=path,
             used_builtin_default=False,
+            source=source,
         )
     except UnicodeDecodeError as error:
         return PreferencesLoadResult(
@@ -186,6 +192,7 @@ def _load_existing_file(path: Path) -> PreferencesLoadResult:
             ),
             source_path=path,
             used_builtin_default=False,
+            source=source,
         )
     loaded = load_preferences_from_text(
         text=text,
@@ -196,6 +203,37 @@ def _load_existing_file(path: Path) -> PreferencesLoadResult:
         diagnostics=loaded.diagnostics,
         source_path=path,
         used_builtin_default=False,
+        source=source,
+    )
+
+
+def _load_builtin_preferences(relative_resource: str) -> PreferencesLoadResult:
+    source = ConfigSource(kind="builtin", name=relative_resource)
+    try:
+        text = read_builtin_text(relative_resource)
+    except (OSError, ValueError) as error:
+        return PreferencesLoadResult(
+            preferences=None,
+            diagnostics=(
+                PreferenceDiagnostic(
+                    severity="error",
+                    code="preferences_builtin_read_error",
+                    field="source",
+                    message=f"Could not read built-in preference resource: {error}",
+                    value=relative_resource,
+                ),
+            ),
+            source_path=None,
+            used_builtin_default=True,
+            source=source,
+        )
+    loaded = load_preferences_from_text(text=text, preference_format="yaml")
+    return PreferencesLoadResult(
+        preferences=loaded.preferences,
+        diagnostics=loaded.diagnostics,
+        source_path=None,
+        used_builtin_default=True,
+        source=source,
     )
 
 

@@ -23,6 +23,7 @@ uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --event-trace summary --event-trace-file /tmp/ui-trace.jsonl
 uv run warhammer40k-arcade-ui --crash-report-dir /tmp/ui-crashes
+uv run warhammer40k-hud-preview default-hud
 uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml
 uv run pytest
 ```
@@ -126,8 +127,12 @@ uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --compo
 uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --headless --artifact-dir /tmp/hud-preview
 ```
 
-Runtime HUD composition files live under `docs/hud/`. Preview examples under `docs/hud/examples/`
-use the same YAML dialect plus placeholder `sample_data`.
+Runtime defaults are packaged under `warhammer40k_arcade_ui.resources`, so installed Git/wheel
+launches can run without depending on top-level `docs/`. The documented `docs/preferences` and
+`docs/hud` files remain editable examples. HUD composition can be loaded by built-in profile name
+such as `default-hud`, by a path relative to the preferences YAML file that references it, or by an
+explicit YAML path. Preview examples under `docs/hud/examples/` use the same YAML dialect plus
+placeholder `sample_data`.
 
 ## Forensic event traces
 

@@ -1244,6 +1244,10 @@ def _hud_event_lines(
 
 
 def _preference_source_label(result: PreferencesLoadResult) -> str:
+    if result.source is not None:
+        if result.has_errors:
+            return f"{result.source.display_name} (load diagnostics)"
+        return result.source.display_name
     if result.source_path is not None:
         if result.has_errors:
             return f"{result.source_path.name} (load diagnostics)"

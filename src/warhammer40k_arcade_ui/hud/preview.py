@@ -16,7 +16,7 @@ from PIL import Image
 from warhammer40k_arcade_ui.hud.composition import (
     HudCompositionProfile,
     HudCompositionValidationResult,
-    load_hud_composition,
+    load_hud_composition_reference,
 )
 from warhammer40k_arcade_ui.hud.toolkit import HudDensity, default_hud_theme
 from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
@@ -95,7 +95,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.headless:
         os.environ.setdefault("PYGLET_HEADLESS", "true")
         os.environ.setdefault("ARCADE_HEADLESS", "true")
-    result = load_hud_composition(args.composition_yaml, preview=True)
+    result = load_hud_composition_reference(
+        args.composition_profile,
+        preview=_strict_preview_validation(args.composition_profile),
+    )
     if result.has_errors or result.profile is None:
         _write_diagnostics(result)
         raise SystemExit(2)
@@ -134,7 +137,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse HUD preview CLI arguments."""
 
     parser = argparse.ArgumentParser(description="Preview a Warhammer 40k Arcade HUD YAML file.")
-    parser.add_argument("composition_yaml", type=Path)
+    parser.add_argument(
+        "composition_profile",
+        type=str,
+        help="Built-in HUD profile name or path to a HUD composition YAML file.",
+    )
     parser.add_argument("--component", type=str, default=None)
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--artifact-dir", type=Path, default=Path(".test-artifacts/hud-preview"))
@@ -147,6 +154,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="standard",
     )
     return parser.parse_args(argv)
+
+
+def _strict_preview_validation(composition_profile: str) -> bool:
+    """Return whether this profile should require explicit preview sample data."""
+
+    if composition_profile in ("default-hud", "command-bench-hud"):
+        return False
+    return not composition_profile.startswith("builtin:")
 
 
 def render_headless_artifacts(
@@ -312,6 +327,7 @@ def _write_artifacts(
         "component_id": component_id,
         "layout_preset": profile.layout_preset,
         "source_path": str(profile.source_path) if profile.source_path is not None else None,
+        "source": profile.source.display_name if profile.source is not None else None,
         "width": width,
         "height": height,
         "byte_length": len(rgba),
