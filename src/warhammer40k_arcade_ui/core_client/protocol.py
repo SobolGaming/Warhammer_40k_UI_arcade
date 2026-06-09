@@ -222,37 +222,13 @@ class UiParameterizedProposalRequest:
         cls,
         *,
         payload: JsonValue,
-        fallback_request_id: str,
-        fallback_decision_type: str,
-        fallback_actor_id: str | None,
     ) -> Self:
         decision_payload = _json_object("parameterized decision payload", payload)
         proposal_payload = _json_object(
             "parameterized proposal request",
             decision_payload["proposal_request"],
         )
-        actor_id = _optional_string_value_or_fallback(
-            proposal_payload,
-            "actor_id",
-            fallback_actor_id,
-        )
-        if actor_id is None:
-            raise UiClientProtocolError("actor_id is required.")
-        return cls(
-            request_id=_string_or_fallback(
-                proposal_payload,
-                "request_id",
-                fallback_request_id,
-            ),
-            decision_type=_string_or_fallback(
-                proposal_payload,
-                "decision_type",
-                fallback_decision_type,
-            ),
-            actor_id=actor_id,
-            proposal_kind=_optional_string_value(proposal_payload, "proposal_kind"),
-            payload=proposal_payload,
-        )
+        return cls.from_payload(proposal_payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,9 +285,6 @@ class UiDecision:
         parameterized_proposal = (
             UiParameterizedProposalRequest.from_decision_payload(
                 payload=decision_payload,
-                fallback_request_id=request_id,
-                fallback_decision_type=decision_type,
-                fallback_actor_id=actor_id,
             )
             if is_parameterized
             else None
@@ -691,22 +664,6 @@ def _required_string(payload: JsonObject, key: str) -> str:
 
 def _optional_string_value(payload: JsonObject, key: str) -> str | None:
     return _optional_string(key, payload.get(key))
-
-
-def _optional_string_value_or_fallback(
-    payload: JsonObject,
-    key: str,
-    fallback: str | None,
-) -> str | None:
-    if key not in payload:
-        return fallback
-    return _optional_string_value(payload, key)
-
-
-def _string_or_fallback(payload: JsonObject, key: str, fallback: str) -> str:
-    if key not in payload:
-        return fallback
-    return _required_string(payload, key)
 
 
 def _required_int(payload: JsonObject, key: str) -> int:
