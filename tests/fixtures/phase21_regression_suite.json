@@ -33,7 +33,8 @@
             "unit_instance_id": "intercessor_squad"
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "finite_fight_activation": {
       "request_id": "decision-request-phase21-fight-activation-001",
@@ -59,7 +60,8 @@
             "submission_kind": "eligible_to_fight_pass"
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "finite_fight_interrupt": {
       "request_id": "decision-request-phase21-fight-interrupt-001",
@@ -77,7 +79,8 @@
             "submission_kind": "decline_fight_interrupt"
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "complete_reinforcements": {
       "request_id": "decision-request-phase21-reinforcements-001",
@@ -94,7 +97,8 @@
             "submission_kind": "complete_reinforcements"
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "complete_disembarks": {
       "request_id": "decision-request-phase21-disembarks-001",
@@ -111,7 +115,8 @@
             "submission_kind": "complete_disembarks"
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "complete_shooting_phase": {
       "request_id": "decision-request-phase21-shooting-complete-001",
@@ -128,7 +133,8 @@
             "submission_kind": "complete_shooting_phase"
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "complete_charge_phase": {
       "request_id": "decision-request-phase21-charge-complete-001",
@@ -145,7 +151,8 @@
             "submission_kind": "complete_charge_phase"
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     }
   },
   "pending_proposals": {
@@ -201,7 +208,9 @@
       "context": {
         "movement_mode": "charge",
         "charge_roll_total": 7,
-        "reachable_target_unit_instance_ids": ["guardian_squad"],
+        "reachable_target_unit_instance_ids": [
+          "guardian_squad"
+        ],
         "allow_no_move": true
       }
     },
@@ -248,14 +257,18 @@
       "proposal_kind": "melee_declaration",
       "phase": "fight",
       "unit_instance_id": "intercessor_squad",
-      "target_unit_instance_ids": ["guardian_squad"],
+      "target_unit_instance_ids": [
+        "guardian_squad"
+      ],
       "available_weapons": [
         {
           "model_instance_id": "intercessor_1",
           "wargear_id": "intercessor_1:chainsword",
           "weapon_profile_id": "chainsword",
           "maximum_declared_targets": 1,
-          "engaged_target_unit_instance_ids": ["guardian_squad"]
+          "engaged_target_unit_instance_ids": [
+            "guardian_squad"
+          ]
         }
       ]
     },

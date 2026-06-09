@@ -191,7 +191,14 @@ class LocalSessionClient:
 
 
 def _status_from_lifecycle(status: LifecycleStatus) -> UiClientStatus:
-    return UiClientStatus.from_payload(status.to_payload())
+    payload = dict(status.to_payload())
+    if status.decision_request is not None:
+        decision_payload = dict(status.decision_request.to_payload())
+        decision_payload["is_parameterized"] = (
+            status.decision_request.is_parameterized_submission_request()
+        )
+        payload["decision_request"] = decision_payload
+    return UiClientStatus.from_payload(payload)
 
 
 def _decision_from_request(request: DecisionRequest) -> UiDecision:

@@ -53,6 +53,8 @@ The immediate UI adaptation is defensive and representational:
 - [x] Add protocol regression tests that prove nested `pending_decision.payload.proposal_request`
   identity must be present and match the outer `DecisionRequest` identity before the UI represents
   a parameterized proposal.
+- [x] Add protocol regression tests that prove `is_parameterized` is an explicit core payload field
+  and is not inferred from sentinel parameterized option shape.
 - [x] Add state/HUD regression tests that prove `pile_in`, `consolidate`, `charge_move`,
   `submit_melee_declaration`, `submit_placement_proposal`, and
   `submit_stratagem_target_proposal` render through generic unsupported/proposal surfaces until a
@@ -78,6 +80,8 @@ The immediate UI adaptation is defensive and representational:
 - [x] `pending_proposal` metadata remains strict and fail-fast.
 - [x] Nested parameterized proposal metadata in `DecisionRequest.payload` remains strict,
   fail-fast, and consistent with the outer request envelope.
+- [x] `DecisionRequest` payloads missing `is_parameterized` fail fast instead of silently inferring
+  finite or parameterized behavior from options.
 - [x] No UI code imports mutable engine internals outside `core_client`.
 
 ## Non-Goals
@@ -106,6 +110,11 @@ The immediate UI adaptation is defensive and representational:
 - Hardened `UiParameterizedProposalRequest.from_decision_payload` so nested proposal request
   identity never falls back to outer decision fields and mismatched nested/outer identity fails
   fast.
+- Hardened `UiDecision.from_payload` so `is_parameterized` is required and the UI no longer infers
+  parameterized requests from the sentinel `submit_parameterized_payload` option.
+- Updated the in-process `LocalSessionClient` lifecycle-status bridge to populate explicit
+  `is_parameterized` from the typed core `DecisionRequest` before handing the payload to the strict
+  UI protocol parser. Direct JSON payload parsing remains fail-fast when the field is absent.
 - Hardened `prepare_movement_submission` so the Movement phase draft submitter rejects unsupported
   movement proposal kinds before client submission.
 - Fixed the live-core UI handoff so clicked units update finite-option focus, and proposal-required

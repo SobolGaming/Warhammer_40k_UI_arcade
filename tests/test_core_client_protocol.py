@@ -50,6 +50,7 @@ def test_status_represents_finite_decision() -> None:
                         "payload": {"movement_phase_action": "normal_move"},
                     }
                 ],
+                "is_parameterized": False,
             },
             "message": None,
             "payload": None,
@@ -91,6 +92,7 @@ def test_status_represents_movement_proposal_request() -> None:
                         "payload": {"submission_kind": "parameterized"},
                     }
                 ],
+                "is_parameterized": True,
             },
             "message": None,
             "payload": None,
@@ -132,6 +134,7 @@ def test_status_represents_generic_parameterized_request_without_movement_shape(
                         "payload": {"submission_kind": "parameterized"},
                     }
                 ],
+                "is_parameterized": True,
             },
             "message": None,
             "payload": None,
@@ -175,6 +178,7 @@ def test_status_parameterized_proposal_request_requires_nested_identity_envelope
                             "payload": {"submission_kind": "parameterized"},
                         }
                     ],
+                    "is_parameterized": True,
                 },
                 "message": None,
                 "payload": None,
@@ -233,6 +237,7 @@ def test_status_parameterized_proposal_request_identity_must_match_outer_decisio
                             "payload": {"submission_kind": "parameterized"},
                         }
                     ],
+                    "is_parameterized": True,
                 },
                 "message": None,
                 "payload": None,
@@ -260,6 +265,57 @@ def test_status_parameterized_outer_actor_id_is_required_for_identity_match() ->
                             "proposal_kind": "core:smokescreen",
                         }
                     },
+                    "options": [
+                        {
+                            "option_id": "submit_parameterized_payload",
+                            "label": "Submit Parameterized Payload",
+                            "payload": {"submission_kind": "parameterized"},
+                        }
+                    ],
+                    "is_parameterized": True,
+                },
+                "message": None,
+                "payload": None,
+            }
+        )
+
+
+def test_status_decision_request_requires_explicit_is_parameterized_flag() -> None:
+    with pytest.raises(UiClientProtocolError, match="is_parameterized is required"):
+        UiClientStatus.from_payload(
+            {
+                "stage": "battle",
+                "status_kind": "waiting_for_decision",
+                "decision_request": {
+                    "request_id": "decision-request-000004",
+                    "decision_type": "select_movement_action",
+                    "actor_id": "player-a",
+                    "payload": {"unit_instance_id": "unit-1"},
+                    "options": [
+                        {
+                            "option_id": "normal_move",
+                            "label": "Normal Move",
+                            "payload": {"movement_phase_action": "normal_move"},
+                        }
+                    ],
+                },
+                "message": None,
+                "payload": None,
+            }
+        )
+
+
+def test_status_decision_request_does_not_infer_parameterized_from_sentinel_option() -> None:
+    with pytest.raises(UiClientProtocolError, match="is_parameterized is required"):
+        UiClientStatus.from_payload(
+            {
+                "stage": "battle",
+                "status_kind": "waiting_for_decision",
+                "decision_request": {
+                    "request_id": "decision-request-000005",
+                    "decision_type": "submit_movement_proposal",
+                    "actor_id": "player-a",
+                    "payload": {"proposal_request": _movement_proposal_request_payload()},
                     "options": [
                         {
                             "option_id": "submit_parameterized_payload",

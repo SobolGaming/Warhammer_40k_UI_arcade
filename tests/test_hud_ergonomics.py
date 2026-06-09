@@ -391,6 +391,7 @@ def _movement_proposal_decision() -> UiDecision:
                     "payload": {"submission_kind": "parameterized"},
                 }
             ],
+            "is_parameterized": True,
         }
     )
 

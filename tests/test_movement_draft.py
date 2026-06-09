@@ -398,6 +398,7 @@ def _movement_proposal_decision(
                     "payload": {"submission_kind": "parameterized"},
                 }
             ],
+            "is_parameterized": True,
         }
     )
 

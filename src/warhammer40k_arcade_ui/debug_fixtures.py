@@ -129,6 +129,7 @@ def phase6_debug_parameterized_decision() -> UiDecision:
                     "payload": {"submission_kind": "parameterized"},
                 }
             ],
+            "is_parameterized": True,
         }
     )
 

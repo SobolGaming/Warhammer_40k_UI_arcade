@@ -287,6 +287,7 @@ def _parameterized_decision() -> UiDecision:
                     "payload": {"submission_kind": "parameterized"},
                 }
             ],
+            "is_parameterized": True,
         }
     )
 

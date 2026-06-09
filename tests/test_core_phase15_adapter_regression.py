@@ -238,6 +238,7 @@ def _parameterized_decision_payload(proposal: JsonObject) -> JsonObject:
                 "payload": PARAMETERIZED_OPTION,
             }
         ],
+        "is_parameterized": True,
     }
 
 
@@ -275,6 +276,7 @@ def _normal_move_decision() -> UiDecision:
                     "payload": PARAMETERIZED_OPTION,
                 }
             ],
+            "is_parameterized": True,
         }
     )
 

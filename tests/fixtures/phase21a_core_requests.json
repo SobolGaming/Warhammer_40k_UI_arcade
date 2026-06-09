@@ -16,7 +16,9 @@
       "context": {
         "movement_mode": "pile_in",
         "maximum_distance_inches": 3.0,
-        "legal_pile_in_target_unit_instance_ids": ["guardian_squad"],
+        "legal_pile_in_target_unit_instance_ids": [
+          "guardian_squad"
+        ],
         "ruleset_descriptor_hash": "ruleset-15d-fight-smoke",
         "fight_step": "pile_in"
       }
@@ -37,9 +39,19 @@
       "context": {
         "movement_mode": "consolidate",
         "maximum_distance_inches": 3.0,
-        "legal_consolidate_target_unit_instance_ids": ["guardian_squad"],
-        "legal_consolidation_modes": ["engaging", "objective", "ongoing"],
-        "objective_context": {"objective_ids": ["objective_alpha"]},
+        "legal_consolidate_target_unit_instance_ids": [
+          "guardian_squad"
+        ],
+        "legal_consolidation_modes": [
+          "engaging",
+          "objective",
+          "ongoing"
+        ],
+        "objective_context": {
+          "objective_ids": [
+            "objective_alpha"
+          ]
+        },
         "ruleset_descriptor_hash": "ruleset-15d-fight-smoke",
         "fight_step": "consolidate"
       }
@@ -56,7 +68,9 @@
       "source_fight_activation_request_id": "decision-request-fight-activation-001",
       "source_fight_activation_result_id": "ui-result-fight-activation-001",
       "ruleset_descriptor_hash": "ruleset-15d-fight-smoke",
-      "target_unit_instance_ids": ["guardian_squad"],
+      "target_unit_instance_ids": [
+        "guardian_squad"
+      ],
       "available_weapons": [
         {
           "model_instance_id": "intercessor_1",
@@ -74,7 +88,9 @@
           "is_extra_attacks": false,
           "maximum_declared_targets": 3,
           "fixed_attacks": 3,
-          "engaged_target_unit_instance_ids": ["guardian_squad"]
+          "engaged_target_unit_instance_ids": [
+            "guardian_squad"
+          ]
         }
       ]
     },
@@ -123,7 +139,9 @@
         "heroic_intervention_mode": "leap_to_defend",
         "charge_roll_total": 6,
         "maximum_distance_inches": 6.0,
-        "reachable_target_unit_instance_ids": ["guardian_squad"]
+        "reachable_target_unit_instance_ids": [
+          "guardian_squad"
+        ]
       }
     },
     "placement_reinforcement": {
@@ -138,7 +156,9 @@
       "source_decision_request_id": "decision-request-reinforcement-unit-001",
       "source_decision_result_id": "ui-result-reinforcement-unit-001",
       "movement_phase_action": null,
-      "placement_kinds": ["reinforcement"],
+      "placement_kinds": [
+        "reinforcement"
+      ],
       "context": {
         "placement_kind": "reinforcement",
         "reserve_state": "strategic_reserves"
@@ -160,10 +180,13 @@
           "label": "Complete Reinforcements",
           "payload": {
             "submission_kind": "complete_reinforcements",
-            "skipped_unit_ids": ["intercessor_squad"]
+            "skipped_unit_ids": [
+              "intercessor_squad"
+            ]
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "complete_disembarks": {
       "request_id": "decision-request-disembarks-001",
@@ -181,7 +204,8 @@
             "submission_kind": "complete_disembarks"
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "complete_shooting_phase": {
       "request_id": "decision-request-shooting-complete-001",
@@ -197,10 +221,13 @@
           "label": "Complete Shooting Phase",
           "payload": {
             "submission_kind": "complete_shooting_phase",
-            "skipped_unit_ids": ["intercessor_squad"]
+            "skipped_unit_ids": [
+              "intercessor_squad"
+            ]
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "complete_charge_phase": {
       "request_id": "decision-request-charge-complete-001",
@@ -216,10 +243,13 @@
           "label": "Complete Charge Phase",
           "payload": {
             "submission_kind": "complete_charge_phase",
-            "skipped_unit_ids": ["intercessor_squad"]
+            "skipped_unit_ids": [
+              "intercessor_squad"
+            ]
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "eligible_to_fight_pass": {
       "request_id": "decision-request-fight-pass-001",
@@ -235,11 +265,14 @@
           "label": "Pass",
           "payload": {
             "submission_kind": "eligible_to_fight_pass",
-            "eligible_unit_ids": ["intercessor_squad"],
+            "eligible_unit_ids": [
+              "intercessor_squad"
+            ],
             "pass_distance_inches": 5.0
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     },
     "decline_fight_interrupt": {
       "request_id": "decision-request-fight-interrupt-001",
@@ -260,7 +293,8 @@
             "source_effect_id": "counteroffensive-source-001"
           }
         }
-      ]
+      ],
+      "is_parameterized": false
     }
   }
 }

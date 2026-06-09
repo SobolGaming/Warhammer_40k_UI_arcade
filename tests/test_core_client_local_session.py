@@ -22,6 +22,7 @@ def test_local_session_submit_finite_rejects_stale_explicit_request_id() -> None
     assert status.invalid_diagnostics[0].violation_code == "stale_request_id"
     assert status.decision is not None
     assert status.decision.request_id == "decision-request-000004"
+    assert status.decision.is_parameterized is False
     assert client.session.lifecycle.decision_controller.queue.pending_requests[0].request_id == (
         "decision-request-000004"
     )
