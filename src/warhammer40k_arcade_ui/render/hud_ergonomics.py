@@ -187,12 +187,12 @@ def _workbench_primitives(
         _WorkbenchSection(
             section_id="assignments",
             title="Assignments",
-            subtitle="Preview only until submitted",
+            subtitle=ergonomics.assignment_subtitle,
             rows=tuple(
                 _assignment_row_node(row)
                 for row in ergonomics.assignment_rows[:_MAX_ASSIGNMENT_ROWS]
             ),
-            color_role="preview",
+            color_role=ergonomics.assignment_color_role,
         ),
         _WorkbenchSection(
             section_id="review",
