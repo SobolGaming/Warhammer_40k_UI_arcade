@@ -8,6 +8,7 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     AssignmentGroupRowView as ToolkitAssignmentGroupRowView,
 )
 from warhammer40k_arcade_ui.hud.toolkit import (
+    HudColorRole,
     HudState,
     IconTextBarView,
     StatusChipView,
@@ -16,6 +17,7 @@ from warhammer40k_arcade_ui.hud.toolkit import (
 from warhammer40k_arcade_ui.hud.view_models import (
     AssignmentGroupState,
     AssignmentHudPanelView,
+    AssignmentReadinessState,
     ContextMenuAction,
     FiniteDecisionPanelView,
     MovementDraftPanelView,
@@ -35,6 +37,8 @@ class HudErgonomicsView:
     selected_unit_rows: tuple[IconTextBarView, ...]
     action_rows: tuple[IconTextBarView, ...]
     assignment_rows: tuple[ToolkitAssignmentGroupRowView, ...]
+    assignment_subtitle: str
+    assignment_color_role: HudColorRole
     diagnostic_lines: tuple[str, ...]
     event_lines: tuple[str, ...]
     hotkey_hints: tuple[str, ...]
@@ -70,6 +74,8 @@ def build_hud_ergonomics_view(
             preferences=preferences,
         ),
         assignment_rows=_assignment_rows(assignment_hud_panel),
+        assignment_subtitle=_assignment_subtitle(assignment_hud_panel),
+        assignment_color_role=_assignment_color_role(assignment_hud_panel),
         diagnostic_lines=diagnostic_lines,
         event_lines=_filtered_event_lines(
             event_log_lines=event_log_lines,
@@ -254,6 +260,34 @@ def _assignment_rows(
         )
         for index, group in enumerate(assignment_hud_panel.groups[:3])
     )
+
+
+def _assignment_subtitle(assignment_hud_panel: AssignmentHudPanelView | None) -> str:
+    if assignment_hud_panel is None:
+        return "No active assignment draft"
+    labels: dict[AssignmentReadinessState, str] = {
+        "empty": "Draft empty: add assignments",
+        "incomplete": "Drafting paths: preview only",
+        "ready": "Draft review: ENTER submits to engine",
+        "invalid": "Invalid: fix before submit",
+        "unsupported": "Unsupported request shown",
+        "finite": "Finite choice review",
+    }
+    return labels[assignment_hud_panel.readiness_state]
+
+
+def _assignment_color_role(
+    assignment_hud_panel: AssignmentHudPanelView | None,
+) -> HudColorRole:
+    if assignment_hud_panel is None:
+        return "neutral"
+    if assignment_hud_panel.readiness_state == "ready":
+        return "active"
+    if assignment_hud_panel.readiness_state in ("empty", "incomplete", "unsupported"):
+        return "preview"
+    if assignment_hud_panel.readiness_state == "invalid":
+        return "invalid"
+    return "selected"
 
 
 def _movement_distance_summary(panel: MovementDraftPanelView) -> str:

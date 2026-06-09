@@ -83,6 +83,8 @@ def test_ergonomic_hud_view_summarizes_selected_unit_movement_and_hotkeys() -> N
     assert any(row.primary_label == "Movement" for row in ergonomics.action_rows)
     assert ergonomics.assignment_rows
     assert ergonomics.assignment_rows[0].operation_kind == "movement"
+    assert ergonomics.assignment_subtitle == "Draft review: ENTER submits to engine"
+    assert ergonomics.assignment_color_role == "active"
     assert "ENTER: Confirm local UI action" in ergonomics.hotkey_hints
     assert ergonomics.event_lines == ("movement_proposal_submitted: player_1",)
 
@@ -117,6 +119,7 @@ def test_ergonomic_hud_view_honors_phase_and_event_visibility_preferences() -> N
 
     assert [chip.label for chip in ergonomics.status_chips] == ["Active", "Pending"]
     assert ergonomics.event_lines == ()
+    assert ergonomics.assignment_subtitle == "No active assignment draft"
 
 
 def test_ergonomic_selected_unit_actions_mark_highlighted_option() -> None:
@@ -173,6 +176,113 @@ def test_ergonomic_selected_unit_actions_mark_highlighted_option() -> None:
     )
     assert action_row.secondary_label == "Advance, > Normal Move <"
     assert action_row.state == "selected"
+
+
+def test_ergonomic_assignment_subtitle_distinguishes_preview_from_ready_review() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    layout = build_hud_layout(
+        preferences=preferences,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+    )
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    decision = _movement_proposal_decision()
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+    )
+    assert draft is not None
+    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0))
+
+    finite_panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=0,
+        status_message="Movement draft preview",
+        diagnostics=(),
+    )
+    movement_panel = build_movement_draft_panel(
+        movement_draft=draft,
+        pending_decision=decision,
+    )
+    preview_assignment_panel = build_assignment_hud_panel(
+        movement_draft=draft,
+        pending_decision=decision,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=preferences,
+        preference_source_label="docs/preferences/default.yaml",
+        debug_visible=False,
+    )
+    preview_ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=build_unit_panel(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+        ),
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=movement_panel,
+        assignment_hud_panel=preview_assignment_panel,
+        event_log_lines=(),
+    )
+
+    preview_texts = _text_lines(
+        build_ergonomic_hud_primitives(
+            ergonomics=preview_ergonomics,
+            hud_layout=layout,
+            viewport_width_px=1280,
+            viewport_height_px=800,
+        )
+    )
+    assert preview_ergonomics.assignment_subtitle == "Drafting paths: preview only"
+    assert preview_ergonomics.assignment_color_role == "preview"
+    assert "Drafting paths: preview only" in preview_texts
+
+    ready_draft = draft.mark_ready(view=view)
+    ready_assignment_panel = build_assignment_hud_panel(
+        movement_draft=ready_draft,
+        pending_decision=decision,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=preferences,
+        preference_source_label="docs/preferences/default.yaml",
+        debug_visible=False,
+    )
+    ready_ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=build_unit_panel(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+        ),
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=build_movement_draft_panel(
+            movement_draft=ready_draft,
+            pending_decision=decision,
+        ),
+        assignment_hud_panel=ready_assignment_panel,
+        event_log_lines=(),
+    )
+
+    ready_texts = _text_lines(
+        build_ergonomic_hud_primitives(
+            ergonomics=ready_ergonomics,
+            hud_layout=layout,
+            viewport_width_px=1280,
+            viewport_height_px=800,
+        )
+    )
+    assert ready_ergonomics.assignment_subtitle == "Draft review: ENTER submits to engine"
+    assert ready_ergonomics.assignment_color_role == "active"
+    assert "Draft review: ENTER submits to engine" in ready_texts
 
 
 def test_ergonomic_hud_primitives_use_toolkit_components_in_screen_space() -> None:
@@ -241,6 +351,7 @@ def test_ergonomic_hud_primitives_use_toolkit_components_in_screen_space() -> No
     assert "Intercessors" in texts
     assert "Decision" in texts
     assert "Assignments" in texts
+    assert "Draft review: ENTER submits to engine" in texts
     assert "Review" in texts
     assert any(type(primitive) is PolygonPrimitive for primitive in primitives)
     assert all(primitive.coordinate_space == "screen" for primitive in primitives)
