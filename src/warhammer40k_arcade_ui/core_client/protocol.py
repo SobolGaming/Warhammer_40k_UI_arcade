@@ -222,13 +222,39 @@ class UiParameterizedProposalRequest:
         cls,
         *,
         payload: JsonValue,
+        decision_request_id: str,
+        decision_type: str,
+        actor_id: str | None,
     ) -> Self:
         decision_payload = _json_object("parameterized decision payload", payload)
         proposal_payload = _json_object(
             "parameterized proposal request",
             decision_payload["proposal_request"],
         )
-        return cls.from_payload(proposal_payload)
+        if actor_id is None:
+            raise UiClientProtocolError(
+                "decision_request.actor_id is required for parameterized proposals."
+            )
+        proposal_actor_id = _required_string(proposal_payload, "actor_id")
+        if proposal_actor_id != actor_id:
+            raise UiClientProtocolError("actor_id must match decision_request.actor_id.")
+        return cls(
+            request_id=_required_matching_string(
+                proposal_payload,
+                "request_id",
+                decision_request_id,
+                "decision_request.request_id",
+            ),
+            decision_type=_required_matching_string(
+                proposal_payload,
+                "decision_type",
+                decision_type,
+                "decision_request.decision_type",
+            ),
+            actor_id=proposal_actor_id,
+            proposal_kind=_optional_string_value(proposal_payload, "proposal_kind"),
+            payload=proposal_payload,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,6 +311,9 @@ class UiDecision:
         parameterized_proposal = (
             UiParameterizedProposalRequest.from_decision_payload(
                 payload=decision_payload,
+                decision_request_id=request_id,
+                decision_type=decision_type,
+                actor_id=actor_id,
             )
             if is_parameterized
             else None
@@ -664,6 +693,18 @@ def _required_string(payload: JsonObject, key: str) -> str:
 
 def _optional_string_value(payload: JsonObject, key: str) -> str | None:
     return _optional_string(key, payload.get(key))
+
+
+def _required_matching_string(
+    payload: JsonObject,
+    key: str,
+    expected: str,
+    expected_field_name: str,
+) -> str:
+    value = _required_string(payload, key)
+    if value != expected:
+        raise UiClientProtocolError(f"{key} must match {expected_field_name}.")
+    return value
 
 
 def _required_int(payload: JsonObject, key: str) -> int:

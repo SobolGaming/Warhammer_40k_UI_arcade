@@ -182,6 +182,98 @@ def test_status_parameterized_proposal_request_requires_nested_identity_envelope
         )
 
 
+@pytest.mark.parametrize(
+    ("identity_key", "replacement_value", "expected_message"),
+    [
+        pytest.param(
+            "request_id",
+            "decision-request-other",
+            "request_id must match decision_request.request_id",
+        ),
+        pytest.param(
+            "decision_type",
+            "submit_movement_proposal",
+            "decision_type must match decision_request.decision_type",
+        ),
+        pytest.param(
+            "actor_id",
+            "player-b",
+            "actor_id must match decision_request.actor_id",
+        ),
+    ],
+)
+def test_status_parameterized_proposal_request_identity_must_match_outer_decision(
+    identity_key: str,
+    replacement_value: str,
+    expected_message: str,
+) -> None:
+    proposal_request = {
+        "request_id": "decision-request-000009",
+        "decision_type": "submit_stratagem_target_proposal",
+        "actor_id": "player-a",
+        "proposal_kind": "core:smokescreen",
+        "trigger_window": "after_unit_selected_as_target",
+    }
+    proposal_request[identity_key] = replacement_value
+
+    with pytest.raises(UiClientProtocolError, match=expected_message):
+        UiClientStatus.from_payload(
+            {
+                "stage": "battle",
+                "status_kind": "waiting_for_decision",
+                "decision_request": {
+                    "request_id": "decision-request-000009",
+                    "decision_type": "submit_stratagem_target_proposal",
+                    "actor_id": "player-a",
+                    "payload": {"proposal_request": proposal_request},
+                    "options": [
+                        {
+                            "option_id": "submit_parameterized_payload",
+                            "label": "Submit Parameterized Payload",
+                            "payload": {"submission_kind": "parameterized"},
+                        }
+                    ],
+                },
+                "message": None,
+                "payload": None,
+            }
+        )
+
+
+def test_status_parameterized_outer_actor_id_is_required_for_identity_match() -> None:
+    with pytest.raises(
+        UiClientProtocolError,
+        match=r"decision_request\.actor_id is required for parameterized proposals",
+    ):
+        UiClientStatus.from_payload(
+            {
+                "stage": "battle",
+                "status_kind": "waiting_for_decision",
+                "decision_request": {
+                    "request_id": "decision-request-000009",
+                    "decision_type": "submit_stratagem_target_proposal",
+                    "payload": {
+                        "proposal_request": {
+                            "request_id": "decision-request-000009",
+                            "decision_type": "submit_stratagem_target_proposal",
+                            "actor_id": "player-a",
+                            "proposal_kind": "core:smokescreen",
+                        }
+                    },
+                    "options": [
+                        {
+                            "option_id": "submit_parameterized_payload",
+                            "label": "Submit Parameterized Payload",
+                            "payload": {"submission_kind": "parameterized"},
+                        }
+                    ],
+                },
+                "message": None,
+                "payload": None,
+            }
+        )
+
+
 def test_invalid_status_represents_proposal_diagnostics() -> None:
     status = UiClientStatus.from_payload(
         {
@@ -279,6 +371,11 @@ def test_game_view_represents_viewer_projection() -> None:
 
 
 def test_game_view_pending_proposal_missing_request_id_fails_fast() -> None:
+    nested_proposal = _stratagem_target_proposal_request_payload_with_identity(
+        request_id="decision-request-000006",
+        actor_id="player-b",
+    )
+
     with pytest.raises(UiClientProtocolError, match="request_id is required"):
         UiGameView.from_payload(
             {
@@ -302,7 +399,7 @@ def test_game_view_pending_proposal_missing_request_id_fails_fast() -> None:
                     "decision_type": "submit_stratagem_target_proposal",
                     "actor_id": "player-b",
                     "payload": {
-                        "proposal_request": _stratagem_target_proposal_request_payload(),
+                        "proposal_request": nested_proposal,
                         "declinable": True,
                     },
                     "options": [
@@ -407,3 +504,19 @@ def _stratagem_target_proposal_request_payload() -> dict[str, object]:
         },
         "target_binding": None,
     }
+
+
+def _stratagem_target_proposal_request_payload_with_identity(
+    *,
+    request_id: str,
+    actor_id: str,
+) -> dict[str, object]:
+    payload = _stratagem_target_proposal_request_payload()
+    payload.update(
+        {
+            "request_id": request_id,
+            "decision_type": "submit_stratagem_target_proposal",
+            "actor_id": actor_id,
+        }
+    )
+    return payload
