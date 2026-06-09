@@ -50,6 +50,9 @@ The immediate UI adaptation is defensive and representational:
   - completion-gate finite decisions for Movement, Shooting, Charge, and Fight phase examples.
 - [x] Add protocol regression tests that prove missing `request_id`, `decision_type`, or `actor_id`
   in `pending_proposal` remains a hard UI protocol error rather than a fallback path.
+- [x] Add protocol regression tests that prove nested `pending_decision.payload.proposal_request`
+  identity must be present and match the outer `DecisionRequest` identity before the UI represents
+  a parameterized proposal.
 - [x] Add state/HUD regression tests that prove `pile_in`, `consolidate`, `charge_move`,
   `submit_melee_declaration`, `submit_placement_proposal`, and
   `submit_stratagem_target_proposal` render through generic unsupported/proposal surfaces until a
@@ -73,6 +76,8 @@ The immediate UI adaptation is defensive and representational:
 - [x] Finite completion/pass/decline options are displayed and submitted as exact engine-emitted
   option IDs.
 - [x] `pending_proposal` metadata remains strict and fail-fast.
+- [x] Nested parameterized proposal metadata in `DecisionRequest.payload` remains strict,
+  fail-fast, and consistent with the outer request envelope.
 - [x] No UI code imports mutable engine internals outside `core_client`.
 
 ## Non-Goals
@@ -98,6 +103,9 @@ The immediate UI adaptation is defensive and representational:
   - completion/pass/decline finite options submit exact engine-emitted option IDs.
 - Hardened `UiParameterizedProposalRequest` so `actor_id` is required for parameterized proposal
   parsing.
+- Hardened `UiParameterizedProposalRequest.from_decision_payload` so nested proposal request
+  identity never falls back to outer decision fields and mismatched nested/outer identity fails
+  fast.
 - Hardened `prepare_movement_submission` so the Movement phase draft submitter rejects unsupported
   movement proposal kinds before client submission.
 - Fixed the live-core UI handoff so clicked units update finite-option focus, and proposal-required
