@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import cast
 
 from warhammer40k_core.adapters.contracts import FiniteOptionSubmission, ParameterizedSubmission
 from warhammer40k_core.adapters.event_stream import EventStreamCursor
@@ -12,6 +13,7 @@ from warhammer40k_core.engine.game_state import GameConfig
 from warhammer40k_core.engine.phase import LifecycleStatus
 
 from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
     JsonValue,
     UiClientProtocolError,
     UiClientStatus,
@@ -191,17 +193,31 @@ class LocalSessionClient:
 
 
 def _status_from_lifecycle(status: LifecycleStatus) -> UiClientStatus:
-    return UiClientStatus.from_payload(status.to_payload())
+    return UiClientStatus.from_payload(
+        {
+            "stage": status.stage.value,
+            "status_kind": status.status_kind.value,
+            "decision_request": (
+                None
+                if status.decision_request is None
+                else _decision_payload_from_request(status.decision_request)
+            ),
+            "message": status.message,
+            "payload": status.payload,
+        }
+    )
 
 
 def _decision_from_request(request: DecisionRequest) -> UiDecision:
-    return UiDecision.from_payload(
-        {
-            "request_id": request.request_id,
-            "decision_type": request.decision_type,
-            "actor_id": request.actor_id,
-            "payload": request.payload,
-            "options": [option.to_payload() for option in request.options],
-            "is_parameterized": request.is_parameterized_submission_request(),
-        }
-    )
+    return UiDecision.from_payload(_decision_payload_from_request(request))
+
+
+def _decision_payload_from_request(request: DecisionRequest) -> JsonObject:
+    return {
+        "request_id": request.request_id,
+        "decision_type": request.decision_type,
+        "actor_id": request.actor_id,
+        "payload": request.payload,
+        "options": [cast(JsonValue, option.to_payload()) for option in request.options],
+        "is_parameterized": request.is_parameterized_submission_request(),
+    }

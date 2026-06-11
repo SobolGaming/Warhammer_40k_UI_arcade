@@ -122,6 +122,7 @@ def phase6_debug_parameterized_decision() -> UiDecision:
                     },
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",

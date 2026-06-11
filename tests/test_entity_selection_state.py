@@ -282,6 +282,7 @@ def _movement_proposal_decision(
                     },
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",

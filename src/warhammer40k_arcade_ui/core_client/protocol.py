@@ -6,9 +6,6 @@ import math
 from dataclasses import dataclass
 from typing import Protocol, Self, cast
 
-PARAMETERIZED_DECISION_OPTION_ID = "submit_parameterized_payload"
-PARAMETERIZED_DECISION_OPTION_PAYLOAD: JsonValue = {"submission_kind": "parameterized"}
-
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, JsonValue]
 
@@ -301,9 +298,7 @@ class UiDecision:
         decision = _json_object("decision payload", payload)
         raw_options = _json_list("decision options", decision["options"])
         options = tuple(UiFiniteOption.from_payload(option) for option in raw_options)
-        is_parameterized = _optional_bool(decision, "is_parameterized")
-        if is_parameterized is None:
-            is_parameterized = _options_are_parameterized(options)
+        is_parameterized = _required_bool(decision, "is_parameterized")
         decision_payload = decision["payload"]
         request_id = _required_string(decision, "request_id")
         decision_type = _required_string(decision, "decision_type")
@@ -663,16 +658,6 @@ def _payload_has_movement_proposal_shape(payload: JsonObject) -> bool:
     return all(key in payload for key in required_keys)
 
 
-def _options_are_parameterized(options: tuple[UiFiniteOption, ...]) -> bool:
-    return options == (
-        UiFiniteOption(
-            option_id=PARAMETERIZED_DECISION_OPTION_ID,
-            label="Submit Parameterized Payload",
-            payload=PARAMETERIZED_DECISION_OPTION_PAYLOAD,
-        ),
-    )
-
-
 def _json_object(field_name: str, value: object) -> JsonObject:
     json_value = validate_json_value(value)
     if type(json_value) is not dict:
@@ -714,19 +699,17 @@ def _required_int(payload: JsonObject, key: str) -> int:
     return value
 
 
+def _required_bool(payload: JsonObject, key: str) -> bool:
+    value = _required_value(payload, key)
+    if type(value) is not bool:
+        raise UiClientProtocolError(f"{key} must be a bool.")
+    return value
+
+
 def _required_value(payload: JsonObject, key: str) -> JsonValue:
     if key not in payload:
         raise UiClientProtocolError(f"{key} is required.")
     return payload[key]
-
-
-def _optional_bool(payload: JsonObject, key: str) -> bool | None:
-    value = payload.get(key)
-    if value is None:
-        return None
-    if type(value) is not bool:
-        raise UiClientProtocolError(f"{key} must be a bool.")
-    return value
 
 
 def _string_list(payload: JsonObject, key: str) -> list[str]:

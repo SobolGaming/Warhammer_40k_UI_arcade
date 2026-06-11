@@ -8,6 +8,7 @@
         "phase": "movement",
         "unit_instance_id": "intercessor_squad"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "advance",
@@ -43,6 +44,7 @@
         "phase": "fight",
         "ordering_band": "remaining_combats"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "intercessor_squad",
@@ -69,6 +71,7 @@
         "phase_body_status": "fight_interrupt_required",
         "timing_window_id": "counteroffensive-after-enemy-fought-001"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "decline_fight_interrupt",
@@ -86,6 +89,7 @@
       "payload": {
         "phase": "movement"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "complete_reinforcements",
@@ -103,6 +107,7 @@
       "payload": {
         "phase": "movement"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "complete_disembarks",
@@ -120,6 +125,7 @@
       "payload": {
         "phase": "shooting"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "complete_shooting_phase",
@@ -137,6 +143,7 @@
       "payload": {
         "phase": "charge"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "complete_charge_phase",

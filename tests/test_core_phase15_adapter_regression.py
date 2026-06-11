@@ -231,6 +231,7 @@ def _parameterized_decision_payload(proposal: JsonObject) -> JsonObject:
         "decision_type": _required_str(proposal, "decision_type"),
         "actor_id": _required_str(proposal, "actor_id"),
         "payload": {"proposal_request": proposal},
+        "is_parameterized": True,
         "options": [
             {
                 "option_id": "submit_parameterized_payload",
@@ -268,6 +269,7 @@ def _normal_move_decision() -> UiDecision:
                     },
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",

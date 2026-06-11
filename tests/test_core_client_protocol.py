@@ -43,6 +43,7 @@ def test_status_represents_finite_decision() -> None:
                 "decision_type": "select_movement_action",
                 "actor_id": "player-a",
                 "payload": {"unit_instance_id": "unit-1"},
+                "is_parameterized": False,
                 "options": [
                     {
                         "option_id": "normal_move",
@@ -84,6 +85,7 @@ def test_status_represents_movement_proposal_request() -> None:
                 "decision_type": "submit_movement_proposal",
                 "actor_id": "player-a",
                 "payload": {"proposal_request": proposal_payload},
+                "is_parameterized": True,
                 "options": [
                     {
                         "option_id": "submit_parameterized_payload",
@@ -125,6 +127,7 @@ def test_status_represents_generic_parameterized_request_without_movement_shape(
                         "trigger_window": "after_unit_selected_as_target",
                     }
                 },
+                "is_parameterized": True,
                 "options": [
                     {
                         "option_id": "submit_parameterized_payload",
@@ -143,6 +146,65 @@ def test_status_represents_generic_parameterized_request_without_movement_shape(
     assert status.decision.movement_proposal is None
     assert status.decision.parameterized_proposal is not None
     assert status.decision.parameterized_proposal.proposal_kind == "core:smokescreen"
+
+
+def test_status_requires_explicit_is_parameterized_even_with_parameterized_option() -> None:
+    with pytest.raises(UiClientProtocolError, match="is_parameterized is required"):
+        UiClientStatus.from_payload(
+            {
+                "stage": "battle",
+                "status_kind": "waiting_for_decision",
+                "decision_request": {
+                    "request_id": "decision-request-000009",
+                    "decision_type": "submit_stratagem_target_proposal",
+                    "actor_id": "player-a",
+                    "payload": {
+                        "proposal_request": {
+                            "request_id": "decision-request-000009",
+                            "decision_type": "submit_stratagem_target_proposal",
+                            "actor_id": "player-a",
+                            "proposal_kind": "core:smokescreen",
+                            "trigger_window": "after_unit_selected_as_target",
+                        }
+                    },
+                    "options": [
+                        {
+                            "option_id": "submit_parameterized_payload",
+                            "label": "Submit Parameterized Payload",
+                            "payload": {"submission_kind": "parameterized"},
+                        }
+                    ],
+                },
+                "message": None,
+                "payload": None,
+            }
+        )
+
+
+def test_status_rejects_non_bool_is_parameterized() -> None:
+    with pytest.raises(UiClientProtocolError, match="is_parameterized must be a bool"):
+        UiClientStatus.from_payload(
+            {
+                "stage": "battle",
+                "status_kind": "waiting_for_decision",
+                "decision_request": {
+                    "request_id": "decision-request-000004",
+                    "decision_type": "select_movement_action",
+                    "actor_id": "player-a",
+                    "payload": {"unit_instance_id": "unit-1"},
+                    "is_parameterized": "false",
+                    "options": [
+                        {
+                            "option_id": "normal_move",
+                            "label": "Normal Move",
+                            "payload": {"movement_phase_action": "normal_move"},
+                        }
+                    ],
+                },
+                "message": None,
+                "payload": None,
+            }
+        )
 
 
 @pytest.mark.parametrize("missing_key", ["request_id", "decision_type", "actor_id"])
@@ -168,6 +230,7 @@ def test_status_parameterized_proposal_request_requires_nested_identity_envelope
                     "decision_type": "submit_stratagem_target_proposal",
                     "actor_id": "player-a",
                     "payload": {"proposal_request": proposal_request},
+                    "is_parameterized": True,
                     "options": [
                         {
                             "option_id": "submit_parameterized_payload",
@@ -226,6 +289,7 @@ def test_status_parameterized_proposal_request_identity_must_match_outer_decisio
                     "decision_type": "submit_stratagem_target_proposal",
                     "actor_id": "player-a",
                     "payload": {"proposal_request": proposal_request},
+                    "is_parameterized": True,
                     "options": [
                         {
                             "option_id": "submit_parameterized_payload",
@@ -260,6 +324,7 @@ def test_status_parameterized_outer_actor_id_is_required_for_identity_match() ->
                             "proposal_kind": "core:smokescreen",
                         }
                     },
+                    "is_parameterized": True,
                     "options": [
                         {
                             "option_id": "submit_parameterized_payload",

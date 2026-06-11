@@ -142,6 +142,7 @@ def _movement_proposal_decision() -> UiDecision:
                     },
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",
@@ -176,6 +177,7 @@ def _charge_move_proposal_decision() -> UiDecision:
                     "context": {},
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",
