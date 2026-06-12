@@ -38,12 +38,12 @@ class LocalSessionClient:
 
         if type(config) is not GameConfig:
             raise UiClientProtocolError("LocalSessionClient start_game requires a GameConfig.")
-        return _status_from_lifecycle(self.session.start(config))
+        return status_from_lifecycle(self.session.start(config))
 
     def advance_until_decision_or_terminal(self) -> UiClientStatus:
         """Advance until the core lifecycle requests input or reaches a terminal status."""
 
-        return _status_from_lifecycle(self.session.advance_until_decision_or_terminal())
+        return status_from_lifecycle(self.session.advance_until_decision_or_terminal())
 
     def get_view(self, viewer_player_id: str) -> UiGameView:
         """Return a viewer-scoped game projection."""
@@ -103,7 +103,7 @@ class LocalSessionClient:
             selected_option_id=selected_option_id,
             result_id=result_id or self._next_result_id(),
         )
-        return _status_from_lifecycle(
+        return status_from_lifecycle(
             self.session.lifecycle.submit_decision(submission.to_result(pending_request))
         )
 
@@ -150,7 +150,7 @@ class LocalSessionClient:
             payload=validate_json_value(payload),
             result_id=result_id or self._next_result_id(),
         )
-        return _status_from_lifecycle(
+        return status_from_lifecycle(
             self.session.lifecycle.submit_decision(submission.to_result(pending_request))
         )
 
@@ -192,7 +192,7 @@ class LocalSessionClient:
         return state.stage.value
 
 
-def _status_from_lifecycle(status: LifecycleStatus) -> UiClientStatus:
+def status_from_lifecycle(status: LifecycleStatus) -> UiClientStatus:
     return UiClientStatus.from_payload(
         {
             "stage": status.stage.value,

@@ -63,6 +63,44 @@ def test_core_projection_falls_back_to_axis_aligned_terrain_footprint() -> None:
     )
 
 
+def test_core_projection_uses_structured_deployment_zone_shape() -> None:
+    view = battlefield_view_from_game_view(
+        _game_view(
+            _terrain_feature(
+                center=(10.0, 20.0),
+                size=(6.0, 4.0),
+                source_id="custom-terrain-source",
+            ),
+            deployment_zones=[
+                {
+                    "deployment_zone_id": "deployment-zone-alpha",
+                    "player_id": "player-a",
+                    "shape": {
+                        "polygons": [
+                            {
+                                "vertices": [
+                                    {"x": 0.0, "y": 0.0},
+                                    {"x": 18.0, "y": 0.0},
+                                    {"x": 18.0, "y": 44.0},
+                                    {"x": 0.0, "y": 44.0},
+                                ]
+                            }
+                        ],
+                        "cutouts": [],
+                    },
+                }
+            ],
+        )
+    )
+
+    assert view.deployment_zones[0].polygon == (
+        (0.0, 0.0),
+        (18.0, 0.0),
+        (18.0, 44.0),
+        (0.0, 44.0),
+    )
+
+
 def test_core_projection_rejects_source_terrain_footprint_bound_mismatch() -> None:
     with pytest.raises(
         CoreProjectionRenderError,
@@ -82,7 +120,11 @@ def test_core_projection_rejects_source_terrain_footprint_bound_mismatch() -> No
         )
 
 
-def _game_view(terrain_feature: JsonObject) -> UiGameView:
+def _game_view(
+    terrain_feature: JsonObject,
+    *,
+    deployment_zones: list[JsonObject] | None = None,
+) -> UiGameView:
     return UiGameView(
         viewer_player_id="player-a",
         game_id="projection-test-game",
@@ -131,7 +173,7 @@ def _game_view(terrain_feature: JsonObject) -> UiGameView:
                 "terrain_layout_id": "layout-1",
                 "battlefield_width_inches": 60.0,
                 "battlefield_depth_inches": 44.0,
-                "deployment_zones": [],
+                "deployment_zones": [] if deployment_zones is None else deployment_zones,
                 "objective_markers": [],
                 "terrain_features": [terrain_feature],
             },
