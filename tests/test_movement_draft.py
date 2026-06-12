@@ -391,6 +391,7 @@ def _movement_proposal_decision(
                     "context": proposal_context,
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",

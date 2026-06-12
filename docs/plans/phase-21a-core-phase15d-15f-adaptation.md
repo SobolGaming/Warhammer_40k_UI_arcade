@@ -53,6 +53,8 @@ The immediate UI adaptation is defensive and representational:
 - [x] Add protocol regression tests that prove nested `pending_decision.payload.proposal_request`
   identity must be present and match the outer `DecisionRequest` identity before the UI represents
   a parameterized proposal.
+- [x] Add protocol regression tests that prove `is_parameterized` must be present on every
+  `DecisionRequest` payload and is never inferred from the fixed parameterized submit option.
 - [x] Add state/HUD regression tests that prove `pile_in`, `consolidate`, `charge_move`,
   `submit_melee_declaration`, `submit_placement_proposal`, and
   `submit_stratagem_target_proposal` render through generic unsupported/proposal surfaces until a
@@ -78,6 +80,8 @@ The immediate UI adaptation is defensive and representational:
 - [x] `pending_proposal` metadata remains strict and fail-fast.
 - [x] Nested parameterized proposal metadata in `DecisionRequest.payload` remains strict,
   fail-fast, and consistent with the outer request envelope.
+- [x] Parameterized-versus-finite request classification remains explicit in the core payload and
+  is not inferred from option shape.
 - [x] No UI code imports mutable engine internals outside `core_client`.
 
 ## Non-Goals
@@ -106,6 +110,10 @@ The immediate UI adaptation is defensive and representational:
 - Hardened `UiParameterizedProposalRequest.from_decision_payload` so nested proposal request
   identity never falls back to outer decision fields and mismatched nested/outer identity fails
   fast.
+- Hardened `UiDecision.from_payload` so `is_parameterized` is required and the UI no longer infers
+  parameterized request state from the `submit_parameterized_payload` sentinel option.
+- Updated the local in-process core adapter bridge to serialize `is_parameterized` from the typed
+  core `DecisionRequest` before handing status payloads to the strict UI protocol parser.
 - Hardened `prepare_movement_submission` so the Movement phase draft submitter rejects unsupported
   movement proposal kinds before client submission.
 - Fixed the live-core UI handoff so clicked units update finite-option focus, and proposal-required

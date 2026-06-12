@@ -154,6 +154,7 @@
         "phase": "movement",
         "active_player_id": "player_1"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "complete_reinforcements",
@@ -173,6 +174,7 @@
         "phase": "movement",
         "active_player_id": "player_1"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "complete_disembarks",
@@ -191,6 +193,7 @@
         "phase": "shooting",
         "active_player_id": "player_1"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "complete_shooting_phase",
@@ -210,6 +213,7 @@
         "phase": "charge",
         "active_player_id": "player_1"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "complete_charge_phase",
@@ -229,6 +233,7 @@
         "phase": "fight",
         "ordering_band": "remaining_combats"
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "eligible_to_fight_pass",
@@ -251,6 +256,7 @@
           "timing_window_id": "counteroffensive-after-enemy-fought-001"
         }
       },
+      "is_parameterized": false,
       "options": [
         {
           "option_id": "decline_fight_interrupt",

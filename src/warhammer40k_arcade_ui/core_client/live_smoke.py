@@ -7,6 +7,19 @@ from dataclasses import dataclass
 from warhammer40k_core.core.army_catalog import ArmyCatalog
 from warhammer40k_core.core.ruleset_descriptor import RulesetDescriptor
 from warhammer40k_core.engine.army_mustering import ArmyMusterRequest
+from warhammer40k_core.engine.battlefield_state import BattlefieldPlacementKind, ModelPlacement
+from warhammer40k_core.engine.decision_request import (
+    PARAMETERIZED_DECISION_OPTION_ID,
+    DecisionRequest,
+)
+from warhammer40k_core.engine.decision_result import DecisionResult
+from warhammer40k_core.engine.deployment import (
+    SELECT_DEPLOYMENT_UNIT_DECISION_TYPE,
+    SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE,
+    DeploymentPlacementProposal,
+    DeploymentPlacementRequest,
+)
+from warhammer40k_core.engine.event_log import validate_json_value
 from warhammer40k_core.engine.game_state import GameConfig
 from warhammer40k_core.engine.list_validation import (
     DetachmentSelection,
@@ -14,9 +27,14 @@ from warhammer40k_core.engine.list_validation import (
     UnitMusterSelection,
 )
 from warhammer40k_core.engine.mission_setup import MissionSetup
-from warhammer40k_core.rules.mission_pack_import import chapter_approved_2025_26_mission_pack
+from warhammer40k_core.engine.phase import SetupStep
+from warhammer40k_core.geometry.pose import Pose
+from warhammer40k_core.rules.mission_pack_import import chapter_approved_2026_27_mission_pack
 
-from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
+from warhammer40k_arcade_ui.core_client.local_session_client import (
+    LocalSessionClient,
+    status_from_lifecycle,
+)
 from warhammer40k_arcade_ui.core_client.protocol import UiClientStatus, UiGameView
 from warhammer40k_arcade_ui.render.core_projection import (
     CoreProjectionRenderError,
@@ -25,7 +43,7 @@ from warhammer40k_arcade_ui.render.core_projection import (
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView
 
 LIVE_CORE_SMOKE_VIEWER_PLAYER_ID = "player-a"
-LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID = "fixed:assassination:bring_it_down"
+LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID = "fixed:assassination:bring-it-down"
 
 
 class LiveCoreSmokeError(ValueError):
@@ -67,6 +85,7 @@ def build_live_core_smoke_startup(
         selected_option_id=LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID,
         result_id="ui-live-smoke-secondary-player-b",
     )
+    status = _submit_smoke_deployments(client=client, status=status)
     _assert_expected_pending_decision(status, "select_movement_unit")
     game_view = client.get_view(viewer_player_id)
     event_delta = client.get_events_since(0, viewer_player_id)
@@ -112,6 +131,134 @@ def _submit_expected_finite(
     )
 
 
+def _submit_smoke_deployments(
+    *,
+    client: LocalSessionClient,
+    status: UiClientStatus,
+) -> UiClientStatus:
+    current = status
+    result_number = 1
+    while current.decision is not None and current.decision.decision_type in {
+        SELECT_DEPLOYMENT_UNIT_DECISION_TYPE,
+        SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE,
+    }:
+        decision = current.decision
+        result_id = f"ui-live-smoke-deployment-{result_number:06d}"
+        if decision.decision_type == SELECT_DEPLOYMENT_UNIT_DECISION_TYPE:
+            if not decision.options:
+                raise LiveCoreSmokeError("Expected deployment unit options.")
+            current = client.submit_finite(
+                request_id=decision.request_id,
+                selected_option_id=decision.options[0].option_id,
+                result_id=result_id,
+            )
+        else:
+            request = _pending_core_request(
+                client=client,
+                expected_decision_type=SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE,
+            )
+            current = _submit_deployment_placement(
+                client=client,
+                request=request,
+                result_id=result_id,
+            )
+        result_number += 1
+    return current
+
+
+def _pending_core_request(
+    *,
+    client: LocalSessionClient,
+    expected_decision_type: str,
+) -> DecisionRequest:
+    pending_requests = client.session.lifecycle.decision_controller.queue.pending_requests
+    if len(pending_requests) != 1:
+        raise LiveCoreSmokeError("Expected exactly one pending core decision request.")
+    request = pending_requests[0]
+    if request.decision_type != expected_decision_type:
+        raise LiveCoreSmokeError(f"Expected {expected_decision_type}, got {request.decision_type}.")
+    return request
+
+
+def _submit_deployment_placement(
+    *,
+    client: LocalSessionClient,
+    request: DecisionRequest,
+    result_id: str,
+) -> UiClientStatus:
+    proposal = _deployment_proposal_for_request(request)
+    payload = validate_json_value(proposal.to_payload())
+    return status_from_lifecycle(
+        client.session.lifecycle.submit_decision(
+            DecisionResult(
+                result_id=result_id,
+                request_id=request.request_id,
+                decision_type=request.decision_type,
+                actor_id=request.actor_id,
+                selected_option_id=PARAMETERIZED_DECISION_OPTION_ID,
+                payload=payload,
+            )
+        )
+    )
+
+
+def _deployment_proposal_for_request(request: DecisionRequest) -> DeploymentPlacementProposal:
+    request_context = DeploymentPlacementRequest.from_decision_request_payload(request.payload)
+    model_placements = tuple(
+        ModelPlacement(
+            army_id=_army_id_from_unit_instance_id(request_context.unit_instance_id),
+            player_id=request_context.player_id,
+            unit_instance_id=request_context.unit_instance_id,
+            model_instance_id=model_instance_id,
+            pose=_smoke_deployment_pose(
+                index=index,
+                player_id=request_context.player_id,
+                unit_instance_id=request_context.unit_instance_id,
+            ),
+        )
+        for index, model_instance_id in enumerate(request_context.model_instance_ids)
+    )
+    return DeploymentPlacementProposal(
+        proposal_request_id=request_context.request_id,
+        proposal_kind=request_context.proposal_kind,
+        game_id=request_context.game_id,
+        ruleset_descriptor_hash=request_context.ruleset_descriptor_hash,
+        setup_step=SetupStep.DEPLOY_ARMIES,
+        player_id=request_context.player_id,
+        unit_instance_id=request_context.unit_instance_id,
+        placement_kind=BattlefieldPlacementKind.DEPLOYMENT,
+        model_placements=model_placements,
+        context=request_context.context,
+    )
+
+
+def _army_id_from_unit_instance_id(unit_instance_id: str) -> str:
+    return unit_instance_id.split(":", 1)[0]
+
+
+def _smoke_deployment_pose(
+    *,
+    index: int,
+    player_id: str,
+    unit_instance_id: str,
+) -> Pose:
+    row = index // 3
+    column = index % 3
+    base_y = _deployment_base_y_for_unit(unit_instance_id)
+    if player_id == "player-b":
+        return Pose.at(58.8 - (row * 1.4), base_y + (column * 1.8), 0.0, facing_degrees=180.0)
+    return Pose.at(1.2 + (row * 1.4), base_y + (column * 1.8), 0.0, facing_degrees=0.0)
+
+
+def _deployment_base_y_for_unit(unit_instance_id: str) -> float:
+    unit_suffix = unit_instance_id.rsplit("-", 1)[-1]
+    if unit_suffix in {"1", "2"}:
+        return 7.0
+    if unit_suffix in {"3", "4"}:
+        return 25.0
+    return 16.0
+
+
 def _assert_expected_pending_decision(
     status: UiClientStatus,
     expected_decision_type: str,
@@ -149,14 +296,15 @@ def _live_core_smoke_config() -> GameConfig:
         ),
         player_ids=("player-a", "player-b"),
         turn_order=("player-a", "player-b"),
-        fixed_secondary_mission_ids=("assassination", "bring_it_down", "cleanse"),
+        fixed_secondary_mission_ids=("assassination", "bring-it-down", "cleanse"),
         mission_setup=MissionSetup.from_mission_pack(
-            mission_pack=chapter_approved_2025_26_mission_pack(),
-            mission_pool_entry_id="mission-a",
-            terrain_layout_id="layout-1",
+            mission_pack=chapter_approved_2026_27_mission_pack(),
+            mission_pool_entry_id="mission-take-and-hold-vs-purge-the-foe-layout-3",
+            terrain_layout_id="take-and-hold-vs-purge-the-foe-layout-3",
             attacker_player_id="player-a",
             defender_player_id="player-b",
         ),
+        allow_legacy_non_strict_rosters=True,
     )
 
 
@@ -175,7 +323,7 @@ def _army_muster_request(
         ruleset_id=catalog.ruleset_id,
         detachment_selection=DetachmentSelection(
             faction_id="core-marine-force",
-            detachment_id="core-combined-arms",
+            detachment_ids=("core-combined-arms",),
         ),
         unit_selections=tuple(
             UnitMusterSelection(

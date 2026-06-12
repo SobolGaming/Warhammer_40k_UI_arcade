@@ -777,7 +777,7 @@ dev = [
 [[package]]
 name = "warhammer40k-core-v2"
 version = "0.1.0"
-source = { git = "https://github.com/SobolGaming/Warhammer_40k_AI#cf61e0de23670f58059cffa5905d4b2d4fa89a8c" }
+source = { git = "https://github.com/SobolGaming/Warhammer_40k_AI#4ee7ccddb03401ddaea20684fdf833ba79f5200f" }
 dependencies = [
     { name = "msgspec" },
     { name = "numpy" },

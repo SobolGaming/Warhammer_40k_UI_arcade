@@ -159,6 +159,7 @@ def test_finite_decision_panel_hides_parameterized_fixed_submit_option() -> None
                     "context": {"source_selected_option_id": "normal_move"},
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",
@@ -476,6 +477,7 @@ def _movement_proposal_decision() -> UiDecision:
                     },
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",
@@ -501,6 +503,7 @@ def _shooting_proposal_decision() -> UiDecision:
                     "proposal_kind": "shooting_declaration",
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",
@@ -538,6 +541,7 @@ def _charge_move_proposal_decision() -> UiDecision:
                     },
                 }
             },
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",

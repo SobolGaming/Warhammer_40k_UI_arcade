@@ -280,6 +280,7 @@ def _parameterized_decision() -> UiDecision:
             "decision_type": "submit_movement_proposal",
             "actor_id": "player-a",
             "payload": {"proposal_request": _movement_proposal_request_payload()},
+            "is_parameterized": True,
             "options": [
                 {
                     "option_id": "submit_parameterized_payload",

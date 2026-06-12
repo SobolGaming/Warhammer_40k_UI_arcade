@@ -81,12 +81,7 @@ def _deployment_zones_from_mission_setup(
             zone_id=_required_string(zone, "deployment_zone_id"),
             player_id=_required_string(zone, "player_id"),
             label=f"{_required_string(zone, 'player_id')} deployment",
-            polygon=_rectangle_polygon(
-                min_x=_required_float(zone, "min_x"),
-                min_y=_required_float(zone, "min_y"),
-                max_x=_required_float(zone, "max_x"),
-                max_y=_required_float(zone, "max_y"),
-            ),
+            polygon=_deployment_zone_polygon(zone),
             visible=True,
         )
         for zone in (
@@ -94,6 +89,31 @@ def _deployment_zones_from_mission_setup(
             for value in _required_list(mission_setup, "deployment_zones")
         )
     )
+
+
+def _deployment_zone_polygon(zone: JsonObject) -> tuple[tuple[float, float], ...]:
+    if {"min_x", "min_y", "max_x", "max_y"}.issubset(zone):
+        return _rectangle_polygon(
+            min_x=_required_float(zone, "min_x"),
+            min_y=_required_float(zone, "min_y"),
+            max_x=_required_float(zone, "max_x"),
+            max_y=_required_float(zone, "max_y"),
+        )
+    shape = _json_object("deployment_zone.shape", zone.get("shape"))
+    polygons = _required_list(shape, "polygons")
+    if len(polygons) != 1:
+        raise CoreProjectionRenderError(
+            "deployment_zone.shape must contain exactly one polygon for rendering."
+        )
+    polygon = _json_object("deployment_zone.shape.polygons[0]", polygons[0])
+    return tuple(
+        _xy_point_from_payload(_json_object("deployment_zone.shape.vertex", value))
+        for value in _required_list(polygon, "vertices")
+    )
+
+
+def _xy_point_from_payload(payload: JsonObject) -> tuple[float, float]:
+    return (_required_float(payload, "x"), _required_float(payload, "y"))
 
 
 def _objectives_from_mission_setup(mission_setup: JsonObject) -> tuple[ObjectiveView, ...]:
