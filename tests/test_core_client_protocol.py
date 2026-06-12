@@ -388,6 +388,62 @@ def test_invalid_status_without_payload_uses_message_diagnostic() -> None:
     assert status.invalid_diagnostics[0].message == "Submitted result is invalid."
 
 
+def test_invalid_status_without_payload_or_message_has_malformed_payload_diagnostic() -> None:
+    status = UiClientStatus.from_payload(
+        {
+            "stage": "battle",
+            "status_kind": "invalid",
+            "decision_request": None,
+            "message": None,
+            "payload": None,
+        }
+    )
+
+    assert len(status.invalid_diagnostics) == 1
+    diagnostic = status.invalid_diagnostics[0]
+    assert diagnostic.violation_code == "malformed_invalid_status_payload"
+    assert diagnostic.field == "payload"
+    assert diagnostic.message == "Invalid lifecycle status did not include diagnostics."
+
+
+def test_invalid_status_with_unrecognized_payload_has_malformed_payload_diagnostic() -> None:
+    status = UiClientStatus.from_payload(
+        {
+            "stage": "battle",
+            "status_kind": "invalid",
+            "decision_request": None,
+            "message": None,
+            "payload": {"unexpected": "shape"},
+        }
+    )
+
+    assert status.payload == {"unexpected": "shape"}
+    assert len(status.invalid_diagnostics) == 1
+    diagnostic = status.invalid_diagnostics[0]
+    assert diagnostic.violation_code == "malformed_invalid_status_payload"
+    assert diagnostic.field == "payload"
+    assert diagnostic.message == "Invalid lifecycle status payload is missing diagnostics."
+
+
+def test_invalid_status_with_non_object_payload_has_malformed_payload_diagnostic() -> None:
+    status = UiClientStatus.from_payload(
+        {
+            "stage": "battle",
+            "status_kind": "invalid",
+            "decision_request": None,
+            "message": None,
+            "payload": ["unexpected", "shape"],
+        }
+    )
+
+    assert status.payload == ["unexpected", "shape"]
+    assert len(status.invalid_diagnostics) == 1
+    diagnostic = status.invalid_diagnostics[0]
+    assert diagnostic.violation_code == "malformed_invalid_status_payload"
+    assert diagnostic.field == "payload"
+    assert diagnostic.message == "Invalid lifecycle status payload must be an object."
+
+
 def test_status_represents_terminal_state() -> None:
     status = UiClientStatus.from_payload(
         {

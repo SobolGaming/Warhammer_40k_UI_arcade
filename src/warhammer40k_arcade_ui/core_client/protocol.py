@@ -546,14 +546,16 @@ def invalid_diagnostics_from_status(
         return ()
     if payload is None:
         if message is None:
-            return ()
+            return (_malformed_invalid_status_diagnostic("did not include diagnostics"),)
         return (
             UiInvalidDiagnostic(
                 violation_code="invalid_status",
                 message=message,
             ),
         )
-    body = _json_object("invalid status payload", payload)
+    if type(payload) is not dict:
+        return (_malformed_invalid_status_diagnostic("payload must be an object"),)
+    body = payload
     proposal_validation = body.get("proposal_validation")
     if proposal_validation is not None:
         validation = _json_object("proposal validation", proposal_validation)
@@ -580,12 +582,20 @@ def invalid_diagnostics_from_status(
             ),
         )
     if message is None:
-        return ()
+        return (_malformed_invalid_status_diagnostic("payload is missing diagnostics"),)
     return (
         UiInvalidDiagnostic(
             violation_code="invalid_status",
             message=message,
         ),
+    )
+
+
+def _malformed_invalid_status_diagnostic(reason: str) -> UiInvalidDiagnostic:
+    return UiInvalidDiagnostic(
+        violation_code="malformed_invalid_status_payload",
+        message=f"Invalid lifecycle status {reason}.",
+        field="payload",
     )
 
 
