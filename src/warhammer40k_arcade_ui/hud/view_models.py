@@ -19,6 +19,7 @@ from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
 from warhammer40k_arcade_ui.state.entity_selection import EntityRef
 from warhammer40k_arcade_ui.state.movement_draft import (
     MovementDraft,
+    movement_proposal_context_diagnostic_line,
     unsupported_parameterized_tool_label,
 )
 from warhammer40k_arcade_ui.state.selection import (
@@ -382,6 +383,37 @@ def build_movement_draft_panel(
         if diagnostics and status_message is not None
         else "Movement proposal pending"
     )
+    context_diagnostic = movement_proposal_context_diagnostic_line(movement_proposal)
+    if context_diagnostic is not None:
+        return MovementDraftPanelView(
+            status_line="Movement proposal context incomplete" if not diagnostics else status_line,
+            request_id=movement_proposal.request_id,
+            unit_id=movement_proposal.unit_instance_id,
+            proposal_kind=movement_proposal.proposal_kind,
+            movement_phase_action=movement_proposal.movement_phase_action,
+            movement_mode=None,
+            fall_back_mode=None,
+            active_layer=None,
+            active_model_ids=(),
+            assigned_model_count=0,
+            total_model_count=0,
+            unchanged_model_count=0,
+            current_segment_inches=None,
+            total_path_inches=None,
+            remaining_budget_inches=None,
+            synthetic_witness_model_ids=(),
+            synthetic_witness_point_count=0,
+            payload_witness_lines=(),
+            ready=False,
+            hint_lines=(
+                "Movement proposal mode context is incomplete.",
+                "Adapter-visible movement semantics are missing; submission is blocked.",
+            ),
+            diagnostic_lines=_append_unique_line(
+                _diagnostic_lines(diagnostics),
+                context_diagnostic,
+            ),
+        )
     missing_unit_diagnostic = _missing_proposal_unit_diagnostic_line(
         view=view,
         proposal=movement_proposal,
@@ -472,6 +504,16 @@ def build_assignment_hud_panel(
         return _unsupported_assignment_hud_panel(
             pending_decision=pending_decision,
             unsupported_label=unsupported_label,
+            diagnostic_lines=diagnostic_lines,
+            preferences=preferences,
+            preference_source_label=preference_source_label if debug_visible else None,
+            chain_lines=_chain_lines(preferences, event_log_lines),
+        )
+    context_diagnostic = _movement_proposal_context_diagnostic_line(pending_decision)
+    if context_diagnostic is not None:
+        return _movement_proposal_context_assignment_hud_panel(
+            pending_decision=pending_decision,
+            diagnostic_line=context_diagnostic,
             diagnostic_lines=diagnostic_lines,
             preferences=preferences,
             preference_source_label=preference_source_label if debug_visible else None,
@@ -753,6 +795,52 @@ def _missing_movement_proposal_unit_assignment_hud_panel(
     )
 
 
+def _movement_proposal_context_assignment_hud_panel(
+    *,
+    pending_decision: UiDecision | None,
+    diagnostic_line: str,
+    diagnostic_lines: tuple[str, ...],
+    preferences: UiPreferences,
+    preference_source_label: str | None,
+    chain_lines: tuple[str, ...],
+) -> AssignmentHudPanelView:
+    if pending_decision is None or pending_decision.movement_proposal is None:
+        raise AssertionError("Movement-context assignment HUD requires a movement proposal.")
+    proposal = pending_decision.movement_proposal
+    return AssignmentHudPanelView(
+        request_id=proposal.request_id,
+        decision_type=proposal.decision_type,
+        actor_id=proposal.actor_id,
+        operation_kind="movement",
+        proposal_kind=proposal.proposal_kind,
+        active_layer=None,
+        active_selection_ref_keys=(),
+        assigned_ref_keys=(),
+        unassigned_ref_keys=(),
+        readiness_state="invalid",
+        groups=(
+            AssignmentHudGroupView(
+                group_id=f"invalid-movement-context:{proposal.request_id}",
+                label="Movement proposal context incomplete",
+                state="invalid",
+                source_ref_keys=(f"unit:{proposal.unit_instance_id}",),
+                target_ref_keys=(),
+                summary_lines=(
+                    f"Requested unit: {proposal.unit_instance_id}",
+                    "Missing adapter-visible mode context; submission is blocked.",
+                ),
+            ),
+        ),
+        advisory_lines=("Engine movement request is missing required movement mode context.",),
+        diagnostic_lines=_append_unique_line(diagnostic_lines, diagnostic_line),
+        display_mode=preferences.hud.assignment_hud_mode,
+        warning_markers_visible=preferences.hud.show_assignment_warning_markers,
+        chain_breadcrumbs_visible=preferences.hud.show_chain_breadcrumbs,
+        chain_lines=chain_lines,
+        preference_source_label=preference_source_label,
+    )
+
+
 def _movement_assignment_groups(
     movement_draft: MovementDraft,
 ) -> tuple[AssignmentHudGroupView, ...]:
@@ -887,6 +975,15 @@ def _missing_movement_proposal_unit_diagnostic_line(
     if proposal is None:
         return None
     return _missing_proposal_unit_diagnostic_line(view=view, proposal=proposal)
+
+
+def _movement_proposal_context_diagnostic_line(
+    pending_decision: UiDecision | None,
+) -> str | None:
+    proposal = None if pending_decision is None else pending_decision.movement_proposal
+    if proposal is None:
+        return None
+    return movement_proposal_context_diagnostic_line(proposal)
 
 
 def _missing_proposal_unit_diagnostic_line(
