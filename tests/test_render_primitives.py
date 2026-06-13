@@ -430,6 +430,38 @@ def test_battlefield_view_refreshes_from_render_payload_shape() -> None:
     assert refreshed.hud.pending_decision_summary == "No pending engine decision"
 
 
+def test_battlefield_view_refresh_keeps_geometry_for_absent_projection_state() -> None:
+    view = default_battlefield_view()
+
+    refreshed = view.refreshed_from_projection(
+        battlefield_state=None,
+        phase_label="movement",
+        active_player_id="player_1",
+        pending_decision_summary="No pending engine decision",
+        event_log_lines=("status refresh",),
+    )
+
+    assert refreshed.units == view.units
+    assert refreshed.hud.phase_label == "movement"
+    assert refreshed.hud.event_log_lines == ("status refresh",)
+
+
+def test_battlefield_view_refresh_rejects_unsupported_projection_shape() -> None:
+    view = default_battlefield_view()
+
+    with pytest.raises(
+        RenderViewModelError,
+        match=r"Unsupported battlefield_state projection shape: object keys=\['unknown'\]",
+    ):
+        view.refreshed_from_projection(
+            battlefield_state={"unknown": []},
+            phase_label="movement",
+            active_player_id="player_1",
+            pending_decision_summary="No pending engine decision",
+            event_log_lines=("status refresh",),
+        )
+
+
 def test_render_view_model_rejects_incomplete_payload() -> None:
     payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     del payload["table"]["width"]
