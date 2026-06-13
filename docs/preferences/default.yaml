@@ -87,7 +87,7 @@ hud:
       collapsed: false
     bottom_workbench:
       visible: true
-      size_px: 156
+      size_px: 260
       collapsed: false
     left_player_bench:
       visible: true
