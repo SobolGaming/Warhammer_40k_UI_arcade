@@ -9,6 +9,7 @@ from typing import Protocol, cast
 
 import pytest
 
+from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.hud import preview as hud_preview
 from warhammer40k_arcade_ui.hud.composition import (
     HudCompositionProfile,
@@ -34,8 +35,13 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     parse_status_chip_shape,
 )
 from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
+from warhammer40k_arcade_ui.preferences import io as preferences_io
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.io import load_preferences, write_preferences
+from warhammer40k_arcade_ui.render.arcade_window import (
+    ArcadeWarhammerWindow,
+    HudPreferencesConfigurationError,
+)
 from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
     PolygonPrimitive,
@@ -222,6 +228,30 @@ def test_platform_default_preferences_without_composition_profile_fail_loudly(
     assert diagnostic.code == "platform_preferences_missing_hud_composition"
     assert "Move that file out of the way or update it manually" in diagnostic.message
     assert "warhammer40k-export-preferences --profile default --format yaml" in diagnostic.message
+
+
+def test_stale_platform_default_preferences_raise_terminal_startup_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    preferences = default_preferences()
+    preferences = replace(
+        preferences,
+        hud=replace(preferences.hud, composition_profile=None),
+    )
+    preference_path = tmp_path / "ui-preferences.yaml"
+    write_preferences(preferences=preferences, path=preference_path)
+    monkeypatch.setattr(preferences_io, "default_preferences_path", lambda: preference_path)
+
+    with pytest.raises(HudPreferencesConfigurationError) as exc_info:
+        ArcadeWarhammerWindow(config=AppConfig(window_width=320, window_height=240))
+
+    message = str(exc_info.value)
+    assert str(preference_path) in message
+    assert "Platform default UI preferences are incompatible" in message
+    assert "Move that file out of the way or update it manually" in message
+    assert "warhammer40k-export-preferences --profile default --format yaml" in message
+    assert "mv " in message
 
 
 def test_builtin_and_explicit_hud_composition_references_load() -> None:
@@ -610,6 +640,7 @@ def test_phase23_arcade_scissor_clips_headless_framebuffer() -> None:
     import arcade
 
     window = arcade.Window(64, 64, visible=False)
+    arcade.set_window(window)
     try:
         framebuffer = cast(_FramebufferReader, window.ctx.screen)
         framebuffer.use()

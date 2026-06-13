@@ -131,9 +131,9 @@ uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --headl
 Runtime defaults are packaged under `warhammer40k_arcade_ui.resources`, so installed Git/wheel
 launches can run without depending on top-level `docs/`. If `--ui-prefs` is omitted, the game first
 checks the platform default preferences file and then falls back to the packaged default preferences
-resource. A stale platform default file that predates HUD composition profiles will produce a loud
-HUD compatibility diagnostic instead of silently rendering no HUD. Generate a fresh default profile
-with:
+resource. A stale platform default file that predates HUD composition profiles stops startup with a
+terminal error that names the incompatible file and prints copyable recovery commands. Generate a
+fresh default profile with:
 
 ```bash
 warhammer40k-export-preferences --profile default --format yaml --output ~/.config/warhammer40k-arcade-ui/ui-preferences.yaml

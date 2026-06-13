@@ -44,9 +44,9 @@ If `--ui-prefs` is omitted, the app looks for the platform default preferences f
 ```
 
 If that file is not present, the app uses the packaged built-in `default` profile. If the platform
-default file is present but predates the current HUD composition system, the app shows a loud HUD
-compatibility diagnostic and tells you to move the file out of the way or update it manually. Render
-a fresh known-good default with:
+default file is present but predates the current HUD composition system, startup stops with a
+terminal error that names the incompatible file and tells you to move it out of the way or update it
+manually. Render a fresh known-good default with:
 
 ```bash
 warhammer40k-export-preferences --profile default --format yaml --output ~/.config/warhammer40k-arcade-ui/ui-preferences.yaml
