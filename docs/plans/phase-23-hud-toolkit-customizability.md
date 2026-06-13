@@ -2,8 +2,7 @@
 
 ## Status
 
-Concrete implementation plan. Phase 23 is ready to implement after Phase 22 packaged runtime
-defaults and the legacy text-panel cleanup are merged.
+Implemented in PR `codex/phase23-hud-toolkit-customizability`.
 
 This phase is presentation-only. It must not change core-client payloads, decision submission,
 engine validation, request IDs, option IDs, proposal kinds, visibility rules, or authoritative game
@@ -531,14 +530,29 @@ filters, or hidden-information visibility.
 
 ## Acceptance Criteria
 
-- [ ] A concrete schema exists for size, position, overflow, text, icon, and slot controls.
-- [ ] `StatusChip` supports round and square shapes with deterministic sizing and preview coverage.
-- [ ] Existing HUD YAML remains loadable or has a documented migration.
-- [ ] Runtime data still flows through Phase 20 view models before toolkit binding.
-- [ ] Selected-unit and workbench rows no longer have uncontrolled text overlap.
-- [ ] Arcade scissor clipping is implemented and covered by headless framebuffer tests.
-- [ ] Deterministic measurement and layout allocation are covered by unit tests.
-- [ ] A stress-test HUD YAML profile exists and can be rendered with `warhammer40k-hud-preview`.
-- [ ] Automated tests cover long decision labels and proposal kinds from current engine contracts.
-- [ ] The implementation remains presentation-only and does not change core-client or decision
+- [x] A concrete schema exists for size, position, overflow, text, icon, and slot controls.
+- [x] `StatusChip` supports round and square shapes with deterministic sizing and preview coverage.
+- [x] Existing HUD YAML remains loadable or has a documented migration.
+- [x] Runtime data still flows through Phase 20 view models before toolkit binding.
+- [x] Selected-unit and workbench rows no longer have uncontrolled text overlap.
+- [x] Arcade scissor clipping is implemented and covered by headless framebuffer tests.
+- [x] Deterministic measurement and layout allocation are covered by unit tests.
+- [x] A stress-test HUD YAML profile exists and can be rendered with `warhammer40k-hud-preview`.
+- [x] Automated tests cover long decision labels and proposal kinds from current engine contracts.
+- [x] The implementation remains presentation-only and does not change core-client or decision
   submission behavior.
+
+## Implementation Notes
+
+- Added typed size, overflow, and status-chip shape parsing to the HUD toolkit and composition
+  loader.
+- Added deterministic stack allocation for pixel, percent, fraction, fill, and fit-content child
+  sizes. Grid allocation keeps the existing equal-cell behavior for now, with shaped status chips
+  preserving their aspect ratio inside the allocated cell.
+- Added render-primitive clipping metadata and Arcade scissor application in both the live window and
+  HUD preview draw paths.
+- Added round and square status-chip rendering while keeping chip semantics in the Phase 20 view
+  models.
+- Added `docs/hud/examples/overflow-stress-preview.yaml` for long-label and shaped-chip review.
+- `scroll` overflow remains schema-recognized but non-interactive; it renders as clipped content
+  until a future scroll-container phase adds input handling.

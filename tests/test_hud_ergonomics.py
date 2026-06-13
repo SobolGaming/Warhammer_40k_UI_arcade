@@ -357,7 +357,10 @@ def test_ergonomic_hud_primitives_use_toolkit_components_in_screen_space() -> No
     assert "Assignments" in texts
     assert "Draft review: ENTER submits to engine" in texts
     assert "Synthetic witness" in texts
-    assert "Synthetic midpoint witness evidence: 1 straight path(s)." in texts
+    assert any(
+        text.startswith("Synthetic midpoint witness evidence: 1 straight") and text.endswith("...")
+        for text in texts
+    )
     assert "Review" in texts
     assert any(type(primitive) is PolygonPrimitive for primitive in primitives)
     assert all(primitive.coordinate_space == "screen" for primitive in primitives)

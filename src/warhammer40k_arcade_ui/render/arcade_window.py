@@ -63,6 +63,7 @@ from warhammer40k_arcade_ui.render.primitives import (
     build_hud_primitives,
     build_world_primitives,
 )
+from warhammer40k_arcade_ui.render.scissor import scoped_scissor
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, RenderViewModelError
 from warhammer40k_arcade_ui.state.entity_selection import entity_ref_for_model
 from warhammer40k_arcade_ui.state.finite_decision import (
@@ -1246,15 +1247,17 @@ def _draw_world_primitives(
     primitives: tuple[RenderPrimitive, ...],
     camera: WorldCamera,
 ) -> None:
+    ctx = arcade.get_window().ctx
     for primitive in primitives:
-        if type(primitive) is PolygonPrimitive:
-            _draw_polygon_primitive(primitive, camera)
-        elif type(primitive) is CirclePrimitive:
-            _draw_circle_primitive(primitive, camera)
-        elif type(primitive) is PolylinePrimitive:
-            _draw_polyline_primitive(primitive, camera)
-        elif type(primitive) is TextPrimitive:
-            _draw_text_primitive(primitive, camera)
+        with scoped_scissor(ctx, primitive.clip_rect):
+            if type(primitive) is PolygonPrimitive:
+                _draw_polygon_primitive(primitive, camera)
+            elif type(primitive) is CirclePrimitive:
+                _draw_circle_primitive(primitive, camera)
+            elif type(primitive) is PolylinePrimitive:
+                _draw_polyline_primitive(primitive, camera)
+            elif type(primitive) is TextPrimitive:
+                _draw_text_primitive(primitive, camera)
 
 
 def _draw_polygon_primitive(primitive: PolygonPrimitive, camera: WorldCamera) -> None:

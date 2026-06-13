@@ -124,6 +124,7 @@ HUD composition YAML files can be previewed without starting a game session:
 ```bash
 uv run warhammer40k-hud-preview docs/hud/examples/unit-datasheet-preview.yaml
 uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --component movement_budget_ring
+uv run warhammer40k-hud-preview docs/hud/examples/overflow-stress-preview.yaml --headless --artifact-dir /tmp/hud-stress
 uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --headless --artifact-dir /tmp/hud-preview
 ```
 

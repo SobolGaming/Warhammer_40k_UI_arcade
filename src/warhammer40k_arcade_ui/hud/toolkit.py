@@ -35,7 +35,10 @@ type HudColorRole = Literal[
 type HudLayoutKind = Literal["stack", "grid", "anchor", "overlay"]
 type HudOrientation = Literal["vertical", "horizontal"]
 type HudAlignment = Literal["start", "center", "end", "stretch"]
+type HudSizeUnit = Literal["px", "percent", "fr", "fit_content", "fill", "auto"]
+type HudOverflowMode = Literal["clip", "ellipsis", "wrap", "shrink_to_fit", "scroll", "visible"]
 type HudRenderMode = Literal["none", "panel", "outline", "debug_bounds"]
+type HudStatusChipShape = Literal["round", "square", "rounded_rect", "pill"]
 type HudWidgetType = Literal[
     "HudContainer",
     "HudPanel",
@@ -57,6 +60,53 @@ type HudWidgetType = Literal[
     "Tooltip",
     "Separator",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class SizeSpec:
+    """Parsed HUD size value for deterministic layout allocation."""
+
+    unit: HudSizeUnit
+    value: float | None = None
+
+    @property
+    def is_flexible(self) -> bool:
+        """Return whether this size consumes remaining sibling space."""
+
+        return self.unit in ("fr", "fill", "auto")
+
+
+@dataclass(frozen=True, slots=True)
+class OverflowPolicy:
+    """Text and child overflow behavior for a component."""
+
+    mode: HudOverflowMode = "ellipsis"
+    max_lines: int = 1
+    min_font_size_px: float = 10.0
+    preserve_icon: bool = True
+    debug_bounds: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class StatusChipShapeSpec:
+    """Shape controls for compact status chips."""
+
+    shape: HudStatusChipShape = "rounded_rect"
+    diameter_px: float | None = None
+    size_px: float | None = None
+    corner_radius_px: float = 0.0
+    preserve_aspect_ratio: bool = True
+    content_alignment: HudAlignment = "center"
+
+    @property
+    def square_extent_px(self) -> float | None:
+        """Return the configured square extent for round/square chips."""
+
+        if self.shape == "round":
+            return self.diameter_px
+        if self.shape == "square":
+            return self.size_px
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -396,11 +446,19 @@ _COMMON_ATTRIBUTES = frozenset(
         "density",
         "fill_color_role",
         "height",
+        "icons",
+        "aspect_ratio",
         "max_width",
+        "max_height",
         "min_width",
+        "min_height",
         "opacity",
+        "overflow",
         "padding",
+        "shape",
         "state",
+        "slots",
+        "text",
         "tooltip_key",
         "width",
         "z_order",
@@ -449,7 +507,15 @@ _WIDGET_ATTRIBUTES: dict[HudWidgetType, frozenset[str]] = {
         )
     ),
     "StatusChip": frozenset(
-        ("icon_id", "label", "min_width", "progress_fraction", "shape", "value")
+        (
+            "diameter_px",
+            "icon_id",
+            "label",
+            "preserve_aspect_ratio",
+            "progress_fraction",
+            "size_px",
+            "value",
+        )
     ),
     "EntityChip": frozenset(
         (
@@ -650,6 +716,10 @@ def known_icon_ids() -> frozenset[str]:
             "action.measure",
             "action.movement",
             "action.summary",
+            "decision.attack_resolution",
+            "decision.complete_phase",
+            "decision.melee",
+            "decision.stratagem",
             "dice.damage",
             "dice.hit",
             "dice.save",
@@ -661,6 +731,7 @@ def known_icon_ids() -> frozenset[str]:
             "mission.primary",
             "mission.secondary",
             "phase.movement",
+            "phase.command",
             "status.active",
             "status.invalid",
             "status.selected",
@@ -682,6 +753,18 @@ def known_data_refs() -> frozenset[str]:
             "current_action",
             "current_assignment",
             "debug_status",
+            "hud.selected_unit.card",
+            "hud.selected_unit.rows",
+            "hud.status_chips",
+            "hud.status_chips.active_player",
+            "hud.status_chips.pending",
+            "hud.status_chips.phase",
+            "hud.workbench.actions",
+            "hud.workbench.assignments.groups",
+            "hud.workbench.assignments.notices",
+            "hud.workbench.review.diagnostics",
+            "hud.workbench.review.events",
+            "hud.workbench.review.hotkeys",
             "mission_summary",
             "movement_budget",
             "opponent_roster",
@@ -702,6 +785,113 @@ def widget_type_from_string(raw_type: str) -> HudWidgetType | None:
     return None
 
 
+def parse_size_spec(value: JsonValue) -> SizeSpec:
+    """Parse a JSON-safe size value into a typed size specification."""
+
+    if type(value) is int or type(value) is float:
+        size = float(value)
+        if size < 0.0:
+            raise ValueError("size values must not be negative")
+        return SizeSpec(unit="px", value=size)
+    if type(value) is not str:
+        raise ValueError("size values must be numbers or strings")
+    text = value.strip()
+    if not text:
+        raise ValueError("size values must not be empty")
+    if text in ("fit-content", "fit_content"):
+        return SizeSpec(unit="fit_content")
+    if text == "fill":
+        return SizeSpec(unit="fill")
+    if text == "auto":
+        return SizeSpec(unit="auto")
+    if text.endswith("px"):
+        return SizeSpec(unit="px", value=_positive_float(text[:-2], "px size"))
+    if text.endswith("%"):
+        percent = _positive_float(text[:-1], "percentage size")
+        if percent > 100.0:
+            raise ValueError("percentage sizes must not exceed 100%")
+        return SizeSpec(unit="percent", value=percent)
+    if text.endswith("fr"):
+        fraction = _positive_float(text[:-2], "fraction size")
+        if fraction <= 0.0:
+            raise ValueError("fraction sizes must be greater than zero")
+        return SizeSpec(unit="fr", value=fraction)
+    raise ValueError(f"unsupported size unit: {text}")
+
+
+def parse_overflow_policy(value: JsonValue | None) -> OverflowPolicy:
+    """Parse a JSON-safe overflow value into a typed overflow policy."""
+
+    if value is None:
+        return OverflowPolicy()
+    if type(value) is str:
+        return OverflowPolicy(mode=_overflow_mode(value))
+    if type(value) is not dict:
+        raise ValueError("overflow must be a string or object")
+    raw_mode = value.get("mode", "ellipsis")
+    mode = _overflow_mode(raw_mode) if type(raw_mode) is str else _invalid_overflow_mode()
+    max_lines = _positive_int(value.get("max_lines"), default=1, label="overflow.max_lines")
+    min_font_size_px = _positive_float_value(
+        value.get("min_font_size_px"),
+        default=10.0,
+        label="overflow.min_font_size_px",
+    )
+    preserve_icon = _bool_value(value.get("preserve_icon"), default=True, label="preserve_icon")
+    debug_bounds = _bool_value(value.get("debug_bounds"), default=False, label="debug_bounds")
+    return OverflowPolicy(
+        mode=mode,
+        max_lines=max_lines,
+        min_font_size_px=min_font_size_px,
+        preserve_icon=preserve_icon,
+        debug_bounds=debug_bounds,
+    )
+
+
+def parse_status_chip_shape(value: JsonValue | None) -> StatusChipShapeSpec:
+    """Parse status-chip shape controls from JSON-safe YAML data."""
+
+    if value is None:
+        return StatusChipShapeSpec()
+    if type(value) is str:
+        return StatusChipShapeSpec(shape=_status_chip_shape(value))
+    if type(value) is not dict:
+        raise ValueError("status chip shape must be a string or object")
+    raw_shape = value.get("shape", "rounded_rect")
+    shape = _status_chip_shape(raw_shape) if type(raw_shape) is str else _invalid_status_shape()
+    diameter_px = _optional_positive_float(value.get("diameter_px"), label="shape.diameter_px")
+    size_px = _optional_positive_float(value.get("size_px"), label="shape.size_px")
+    corner_radius_px = _positive_float_value(
+        value.get("corner_radius_px"),
+        default=0.0,
+        label="shape.corner_radius_px",
+    )
+    preserve_aspect_ratio = _bool_value(
+        value.get("preserve_aspect_ratio"),
+        default=True,
+        label="shape.preserve_aspect_ratio",
+    )
+    raw_alignment = value.get("content_alignment", "center")
+    content_alignment: HudAlignment = "center"
+    if raw_alignment == "start":
+        content_alignment = "start"
+    elif raw_alignment == "center":
+        content_alignment = "center"
+    elif raw_alignment == "end":
+        content_alignment = "end"
+    elif raw_alignment == "stretch":
+        content_alignment = "stretch"
+    elif raw_alignment is not None:
+        raise ValueError("shape.content_alignment must be start, center, end, or stretch")
+    return StatusChipShapeSpec(
+        shape=shape,
+        diameter_px=diameter_px,
+        size_px=size_px,
+        corner_radius_px=corner_radius_px,
+        preserve_aspect_ratio=preserve_aspect_ratio,
+        content_alignment=content_alignment,
+    )
+
+
 def json_text(value: JsonValue | None, *, default: str = "") -> str:
     """Return a compact display string for YAML sample/runtime values."""
 
@@ -710,3 +900,86 @@ def json_text(value: JsonValue | None, *, default: str = "") -> str:
     if type(value) is int or type(value) is float or type(value) is bool:
         return str(value)
     return default
+
+
+def _overflow_mode(value: str) -> HudOverflowMode:
+    if value == "clip":
+        return "clip"
+    if value == "ellipsis":
+        return "ellipsis"
+    if value == "wrap":
+        return "wrap"
+    if value == "shrink_to_fit":
+        return "shrink_to_fit"
+    if value == "scroll":
+        return "scroll"
+    if value == "visible":
+        return "visible"
+    raise ValueError(
+        "overflow.mode must be clip, ellipsis, wrap, shrink_to_fit, scroll, or visible"
+    )
+
+
+def _invalid_overflow_mode() -> HudOverflowMode:
+    raise ValueError("overflow.mode must be a string")
+
+
+def _status_chip_shape(value: str) -> HudStatusChipShape:
+    if value == "round":
+        return "round"
+    if value == "square":
+        return "square"
+    if value == "rounded_rect":
+        return "rounded_rect"
+    if value == "pill":
+        return "pill"
+    raise ValueError("status chip shape must be round, square, rounded_rect, or pill")
+
+
+def _invalid_status_shape() -> HudStatusChipShape:
+    raise ValueError("shape.shape must be a string")
+
+
+def _positive_float(text: str, label: str) -> float:
+    try:
+        value = float(text)
+    except ValueError as exc:
+        raise ValueError(f"{label} must contain a number") from exc
+    if value < 0.0:
+        raise ValueError(f"{label} must not be negative")
+    return value
+
+
+def _optional_positive_float(value: JsonValue | None, *, label: str) -> float | None:
+    if value is None:
+        return None
+    return _positive_float_value(value, default=0.0, label=label)
+
+
+def _positive_float_value(value: JsonValue | None, *, default: float, label: str) -> float:
+    if value is None:
+        return default
+    if type(value) is not int and type(value) is not float:
+        raise ValueError(f"{label} must be numeric")
+    numeric = float(value)
+    if numeric < 0.0:
+        raise ValueError(f"{label} must not be negative")
+    return numeric
+
+
+def _positive_int(value: JsonValue | None, *, default: int, label: str) -> int:
+    if value is None:
+        return default
+    if type(value) is not int:
+        raise ValueError(f"{label} must be an integer")
+    if value < 1:
+        raise ValueError(f"{label} must be at least 1")
+    return value
+
+
+def _bool_value(value: JsonValue | None, *, default: bool, label: str) -> bool:
+    if value is None:
+        return default
+    if type(value) is not bool:
+        raise ValueError(f"{label} must be true or false")
+    return value
