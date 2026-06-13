@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from typing import cast
 
 import arcade
@@ -10,6 +11,7 @@ import pytest
 
 from tests.support.gui_driver import GuiTestDriver
 from warhammer40k_arcade_ui.config import AppConfig
+from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
 from warhammer40k_arcade_ui.core_client.protocol import JsonObject
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
@@ -121,6 +123,31 @@ def test_movement_workflow_marks_ready_survives_hover_and_submits(
     assert driver.pending_decision_type is None
     assert not driver.movement_payload_ready
     assert driver.finite_status_message == "Debug movement accepted."
+
+
+def test_movement_submission_flags_unsupported_projection_shape(
+    driver: GuiTestDriver,
+) -> None:
+    assert isinstance(driver.core_client, FakeCoreClient)
+    fake_client = driver.core_client
+    base_view = fake_client.view
+    assert base_view is not None
+    driver.click_world((7.0, 18.0))
+    driver.press_key(arcade.key.ENTER)
+    driver.click_world((10.0, 18.0))
+    driver.press_key(arcade.key.ENTER)
+    fake_client.movement_view_from_payload = lambda _payload: replace(
+        base_view,
+        battlefield_state={"unknown": []},
+    )
+
+    driver.press_key(arcade.key.ENTER)
+
+    assert driver.finite_status_kind == "fatal"
+    assert driver.window.finite_state.diagnostics[0].violation_code == "fatal_game_engine_error"
+    assert "Unsupported battlefield_state projection shape" in (
+        driver.window.finite_state.diagnostics[0].message
+    )
 
 
 def test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_draft() -> None:

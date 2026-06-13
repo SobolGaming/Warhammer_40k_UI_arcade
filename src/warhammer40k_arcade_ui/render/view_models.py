@@ -326,11 +326,18 @@ class BattlefieldView:
         """Return a render view refreshed from supported UI/core projection shapes."""
 
         updated_view = self
-        if _looks_like_render_battlefield_view_payload(battlefield_state):
+        if battlefield_state is None:
+            updated_view = self
+        elif _looks_like_render_battlefield_view_payload(battlefield_state):
             updated_view = BattlefieldView.from_payload(battlefield_state)
         elif _looks_like_core_battlefield_runtime_payload(battlefield_state):
             updated_view = self.with_model_positions(
                 _model_positions_from_core_battlefield_payload(battlefield_state)
+            )
+        else:
+            raise RenderViewModelError(
+                "Unsupported battlefield_state projection shape: "
+                f"{_projection_shape_description(battlefield_state)}."
             )
         return updated_view.with_hud(
             phase_label=phase_label,
@@ -352,6 +359,14 @@ def _looks_like_render_battlefield_view_payload(payload: object) -> bool:
 
 def _looks_like_core_battlefield_runtime_payload(payload: object) -> bool:
     return type(payload) is dict and "placed_armies" in payload
+
+
+def _projection_shape_description(payload: object) -> str:
+    if type(payload) is dict:
+        object_payload = cast(dict[object, object], payload)
+        keys = sorted(str(key) for key in object_payload)
+        return f"object keys={keys}"
+    return type(payload).__name__
 
 
 def _model_positions_from_core_battlefield_payload(payload: object) -> dict[str, Point]:

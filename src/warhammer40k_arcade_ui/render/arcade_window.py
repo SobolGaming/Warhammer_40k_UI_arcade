@@ -866,10 +866,14 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._set_finite_state(self._fatal_game_engine_state(exc))
             return
         if result.refreshed_view is not None:
-            self._apply_refreshed_game_view(
-                view=result.refreshed_view,
-                state=result.finite_state,
-            )
+            try:
+                self._apply_refreshed_game_view(
+                    view=result.refreshed_view,
+                    state=result.finite_state,
+                )
+            except RenderViewModelError as exc:
+                self._set_finite_state(self._fatal_game_engine_state(exc))
+                return
         if result.clear_movement_draft:
             self._movement_draft = None
             self._selection_state = self._selection_state.without_movement_draft_overlays(
