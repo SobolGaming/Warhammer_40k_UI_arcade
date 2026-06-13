@@ -113,10 +113,15 @@ bug or crash.
 
 - Added `warhammer40k_arcade_ui.diagnostics.forensic_trace` with:
   - `ForensicTraceConfig` for `EVENT_TRACE`, `EVENT_TRACE_FILE`, `EVENT_TRACE_DIR`,
-    `EVENT_TRACE_MAX_BYTES`, `--event-trace`, and `--event-trace-file`;
+    `EVENT_TRACE_MAX_BYTES`, `EVENT_TRACE_INCLUDE`, `EVENT_TRACE_EXCLUDE`,
+    `EVENT_TRACE_INCLUDE_CATEGORIES`, `EVENT_TRACE_EXCLUDE_CATEGORIES`, `EVENT_TRACE_CFG`,
+    `--event-trace`, `--event-trace-file`, `--event-trace-include`,
+    `--event-trace-exclude`, category include/exclude options, and `--event-trace-cfg`;
   - `JsonLinesTraceWriter` / `NoOpTraceWriter`;
   - token-like key redaction;
   - JSON-safe dataclass/container serialization;
+  - exact event-name and category include/exclude filters for noisy traces;
+  - JSON config loading through an `event_trace_cfg` envelope;
   - simple one-file rotation;
   - `TracedCoreClient` for facade-level core request/response tracing.
 - Wired UI window hooks for key press/release, mouse press/release/motion/scroll/drag, command
@@ -124,5 +129,6 @@ bug or crash.
   movement/finite submission attempts and outcomes, projection refresh, fatal engine errors, and
   optional render frame markers.
 - Added tests in `tests/test_forensic_trace.py` for disabled, summary, payload, redaction,
-  JSON-safety rejection, rotation, and GUI-driver event/core trace coverage.
+  JSON-safety rejection, rotation, include/exclude filtering, JSON config parsing, and GUI-driver
+  event/core trace coverage.
 - Updated `README.md` with usage and bug-report attachment guidance.

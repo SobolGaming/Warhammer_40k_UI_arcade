@@ -49,8 +49,13 @@ class FakeArcadeRuntime:
         self.calls.append("run")
 
 
-def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_configures_logging_then_runs_app(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     calls: list[tuple[str, Path | None, bool | None, str | None, Path | None, Path | None]] = []
+    config_path = tmp_path / "event-trace-cfg.json"
+    config_path.write_text('{"event_trace_cfg": {"level": "summary"}}', encoding="utf-8")
 
     def fake_configure_logging() -> None:
         calls.append(("configure_logging", None, None, None, None, None))
@@ -61,12 +66,22 @@ def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) 
         live_core_smoke: bool = False,
         event_trace_level: str | None = None,
         event_trace_file: Path | None = None,
+        event_trace_cfg_file: Path | None = None,
+        event_trace_include: tuple[str, ...] = (),
+        event_trace_exclude: tuple[str, ...] = (),
+        event_trace_include_categories: tuple[str, ...] = (),
+        event_trace_exclude_categories: tuple[str, ...] = (),
         trace_writer: object | None = None,
         crash_report_context: object | None = None,
         crash_report_dir: Path | None = None,
     ) -> None:
         assert trace_writer is not None
         assert crash_report_context is not None
+        assert event_trace_cfg_file == config_path
+        assert event_trace_include == ("ui.key_press", "ui.command_dispatch")
+        assert event_trace_exclude == ("ui.mouse_motion", "ui.key_release")
+        assert event_trace_include_categories == ("core_client",)
+        assert event_trace_exclude_categories == ("render",)
         calls.append(
             (
                 "run_app",
@@ -90,6 +105,17 @@ def test_main_configures_logging_then_runs_app(monkeypatch: pytest.MonkeyPatch) 
             "payload",
             "--event-trace-file",
             "/tmp/ui-trace.jsonl",
+            "--event-trace-cfg",
+            str(config_path),
+            "--event-trace-include",
+            "ui.key_press",
+            "ui.command_dispatch",
+            "--event-trace-exclude",
+            "ui.mouse_motion,ui.key_release",
+            "--event-trace-include-category",
+            "core_client",
+            "--event-trace-exclude-category",
+            "render",
             "--crash-report-dir",
             "/tmp/ui-crashes",
         ]
@@ -138,6 +164,17 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
             "summary",
             "--event-trace-file",
             "/tmp/trace.jsonl",
+            "--event-trace-cfg",
+            "/tmp/event-trace-cfg.json",
+            "--event-trace-include",
+            "ui.key_press",
+            "ui.command_dispatch",
+            "--event-trace-exclude",
+            "ui.mouse_motion,ui.key_release",
+            "--event-trace-include-category",
+            "core_client",
+            "--event-trace-exclude-category",
+            "render",
             "--crash-report-dir",
             "/tmp/crashes",
         ]
@@ -147,6 +184,11 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
     assert parsed.live_core_smoke is True
     assert parsed.event_trace_level == "summary"
     assert parsed.event_trace_file == Path("/tmp/trace.jsonl")
+    assert parsed.event_trace_cfg_file == Path("/tmp/event-trace-cfg.json")
+    assert parsed.event_trace_include == ("ui.key_press", "ui.command_dispatch")
+    assert parsed.event_trace_exclude == ("ui.mouse_motion", "ui.key_release")
+    assert parsed.event_trace_include_categories == ("core_client",)
+    assert parsed.event_trace_exclude_categories == ("render",)
     assert parsed.crash_report_dir == Path("/tmp/crashes")
 
 

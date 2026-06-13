@@ -154,6 +154,8 @@ Enable a structured JSON Lines trace when a UI/core interaction needs bug-report
 EVENT_TRACE=summary uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml
 EVENT_TRACE=payload EVENT_TRACE_FILE=/tmp/ui-trace.jsonl uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --event-trace payload --event-trace-file /tmp/ui-trace.jsonl
+uv run warhammer40k-arcade-ui --event-trace payload --event-trace-exclude ui.mouse_motion ui.key_release
+uv run warhammer40k-arcade-ui --event-trace-cfg docs/diagnostics/event-trace-cfg.json
 ```
 
 Trace levels:
@@ -169,6 +171,39 @@ If no file is specified, trace files are written under
 `~/.local/state/warhammer40k-arcade-ui/event-traces/`. Set `EVENT_TRACE_DIR` to choose another
 directory, or `EVENT_TRACE_FILE` / `--event-trace-file` for an exact file. Files rotate when they
 reach `EVENT_TRACE_MAX_BYTES` bytes, defaulting to 5 MB.
+
+Trace rows can be filtered by exact event name or category when a trace would otherwise be too
+noisy. Include filters switch the trace to allow-list mode; only matching events or categories are
+written. Exclude filters suppress matching events or categories from the remaining output. Excludes
+win when an event matches both include and exclude filters.
+
+```bash
+EVENT_TRACE=summary EVENT_TRACE_EXCLUDE=ui.mouse_motion,ui.key_release uv run warhammer40k-arcade-ui
+EVENT_TRACE=payload EVENT_TRACE_INCLUDE=core.submit_movement_payload.request uv run warhammer40k-arcade-ui --live-core-smoke
+EVENT_TRACE=payload EVENT_TRACE_EXCLUDE_CATEGORIES=ui_input uv run warhammer40k-arcade-ui
+uv run warhammer40k-arcade-ui --event-trace payload --event-trace-include ui.key_press ui.command_dispatch
+uv run warhammer40k-arcade-ui --event-trace payload --event-trace-exclude-category render
+```
+
+The same settings can be supplied through a JSON config file passed with `--event-trace-cfg` or
+`EVENT_TRACE_CFG`. CLI options override environment variables, and environment variables override the
+config file. The config may use an `event_trace_cfg` envelope:
+
+```json
+{
+  "event_trace_cfg": {
+    "level": "payload",
+    "file": "/tmp/ui-trace.jsonl",
+    "max_bytes": 5000000,
+    "exclude": ["ui.mouse_motion", "ui.key_release"],
+    "exclude_categories": ["render"]
+  }
+}
+```
+
+Use `include` or `include_categories` instead of `exclude` when you want the trace to emit only a
+small allow-list of events. A starter example lives at
+[docs/diagnostics/event-trace-cfg.json](docs/diagnostics/event-trace-cfg.json).
 
 Trace rows are viewer-scoped and redact token-like fields such as `github_token`, `access_token`,
 `authorization`, `password`, and `api_key`. Attach the JSONL file to bug reports alongside the exact

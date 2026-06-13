@@ -28,6 +28,11 @@ class CliArgs:
     live_core_smoke: bool
     event_trace_level: str | None
     event_trace_file: Path | None
+    event_trace_cfg_file: Path | None
+    event_trace_include: tuple[str, ...]
+    event_trace_exclude: tuple[str, ...]
+    event_trace_include_categories: tuple[str, ...]
+    event_trace_exclude_categories: tuple[str, ...]
     crash_report_dir: Path | None
 
 
@@ -40,6 +45,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         ForensicTraceConfig.from_runtime(
             event_trace_level=args.event_trace_level,
             event_trace_file=args.event_trace_file,
+            event_trace_cfg_file=args.event_trace_cfg_file,
+            event_trace_include=args.event_trace_include,
+            event_trace_exclude=args.event_trace_exclude,
+            event_trace_include_categories=args.event_trace_include_categories,
+            event_trace_exclude_categories=args.event_trace_exclude_categories,
         )
     )
     crash_context = CrashReportContext(
@@ -57,6 +67,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         live_core_smoke=args.live_core_smoke,
         event_trace_level=args.event_trace_level,
         event_trace_file=args.event_trace_file,
+        event_trace_cfg_file=args.event_trace_cfg_file,
+        event_trace_include=args.event_trace_include,
+        event_trace_exclude=args.event_trace_exclude,
+        event_trace_include_categories=args.event_trace_include_categories,
+        event_trace_exclude_categories=args.event_trace_exclude_categories,
         trace_writer=trace_writer,
         crash_report_context=crash_context,
         crash_report_dir=args.crash_report_dir,
@@ -86,6 +101,51 @@ def parse_args(argv: Sequence[str] | None) -> CliArgs:
         help="Write the forensic event trace JSON Lines file to this path.",
     )
     parser.add_argument(
+        "--event-trace-cfg",
+        type=Path,
+        help="Path to an event trace JSON config file.",
+    )
+    parser.add_argument(
+        "--event-trace-include",
+        action="append",
+        nargs="+",
+        metavar="EVENT",
+        help=(
+            "Only emit matching event names. Accepts repeated values, space-separated values, "
+            "or comma-separated values."
+        ),
+    )
+    parser.add_argument(
+        "--event-trace-exclude",
+        action="append",
+        nargs="+",
+        metavar="EVENT",
+        help=(
+            "Suppress matching event names. Accepts repeated values, space-separated values, "
+            "or comma-separated values."
+        ),
+    )
+    parser.add_argument(
+        "--event-trace-include-category",
+        action="append",
+        nargs="+",
+        metavar="CATEGORY",
+        help=(
+            "Only emit matching event categories. Accepts repeated values, space-separated values, "
+            "or comma-separated values."
+        ),
+    )
+    parser.add_argument(
+        "--event-trace-exclude-category",
+        action="append",
+        nargs="+",
+        metavar="CATEGORY",
+        help=(
+            "Suppress matching event categories. Accepts repeated values, space-separated values, "
+            "or comma-separated values."
+        ),
+    )
+    parser.add_argument(
         "--crash-report-dir",
         type=Path,
         help="Write crash diagnostic bundles under this directory.",
@@ -96,6 +156,11 @@ def parse_args(argv: Sequence[str] | None) -> CliArgs:
         live_core_smoke=namespace.live_core_smoke,
         event_trace_level=namespace.event_trace,
         event_trace_file=namespace.event_trace_file,
+        event_trace_cfg_file=namespace.event_trace_cfg,
+        event_trace_include=_flatten_filter_args(namespace.event_trace_include),
+        event_trace_exclude=_flatten_filter_args(namespace.event_trace_exclude),
+        event_trace_include_categories=_flatten_filter_args(namespace.event_trace_include_category),
+        event_trace_exclude_categories=_flatten_filter_args(namespace.event_trace_exclude_category),
         crash_report_dir=namespace.crash_report_dir,
     )
 
@@ -106,6 +171,21 @@ def _runtime_mode(args: CliArgs) -> str:
     if phase_debug_enabled():
         return "debug_fixture"
     return "fake_fixture"
+
+
+def _flatten_filter_args(raw_values: list[list[str]] | None) -> tuple[str, ...]:
+    if raw_values is None:
+        return ()
+    return tuple(
+        candidate
+        for group in raw_values
+        for value in group
+        for candidate in _split_filter_arg(value)
+    )
+
+
+def _split_filter_arg(value: str) -> tuple[str, ...]:
+    return tuple(candidate.strip() for candidate in value.split(",") if candidate.strip())
 
 
 if __name__ == "__main__":

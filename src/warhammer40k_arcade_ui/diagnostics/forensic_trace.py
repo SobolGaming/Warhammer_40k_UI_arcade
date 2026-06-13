@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
 from importlib import metadata
@@ -26,6 +26,11 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 EVENT_TRACE_ENV = "EVENT_TRACE"
 EVENT_TRACE_FILE_ENV = "EVENT_TRACE_FILE"
 EVENT_TRACE_DIR_ENV = "EVENT_TRACE_DIR"
+EVENT_TRACE_CFG_ENV = "EVENT_TRACE_CFG"
+EVENT_TRACE_INCLUDE_ENV = "EVENT_TRACE_INCLUDE"
+EVENT_TRACE_EXCLUDE_ENV = "EVENT_TRACE_EXCLUDE"
+EVENT_TRACE_INCLUDE_CATEGORIES_ENV = "EVENT_TRACE_INCLUDE_CATEGORIES"
+EVENT_TRACE_EXCLUDE_CATEGORIES_ENV = "EVENT_TRACE_EXCLUDE_CATEGORIES"
 EVENT_TRACE_MAX_BYTES_ENV = "EVENT_TRACE_MAX_BYTES"
 DEFAULT_TRACE_MAX_BYTES = 5_000_000
 TRACE_SCHEMA_VERSION = "1"
@@ -76,6 +81,10 @@ class ForensicTraceConfig:
     max_bytes: int = DEFAULT_TRACE_MAX_BYTES
     ui_commit_sha: str | None = None
     ui_release_version: str | None = None
+    included_event_names: frozenset[str] = frozenset()
+    excluded_event_names: frozenset[str] = frozenset()
+    included_categories: frozenset[str] = frozenset()
+    excluded_categories: frozenset[str] = frozenset()
 
     @classmethod
     def from_runtime(
@@ -83,22 +92,68 @@ class ForensicTraceConfig:
         *,
         event_trace_level: str | None = None,
         event_trace_file: Path | None = None,
+        event_trace_cfg_file: Path | None = None,
+        event_trace_include: Sequence[str] | None = None,
+        event_trace_exclude: Sequence[str] | None = None,
+        event_trace_include_categories: Sequence[str] | None = None,
+        event_trace_exclude_categories: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
     ) -> ForensicTraceConfig:
         """Resolve trace configuration from CLI overrides and environment variables."""
 
         environment = environ if env is None else env
-        raw_level = event_trace_level
-        if raw_level is None:
-            raw_level = environment.get(EVENT_TRACE_ENV)
+        config_file_payload = _load_trace_config_file(
+            _resolve_trace_config_path(
+                event_trace_cfg_file=event_trace_cfg_file,
+                environment=environment,
+            )
+        )
+        raw_level = _first_non_none(
+            event_trace_level,
+            environment.get(EVENT_TRACE_ENV),
+            _optional_trace_config_string(config_file_payload, "level"),
+        )
         level = parse_trace_level(raw_level)
-        max_bytes = _parse_max_bytes(environment.get(EVENT_TRACE_MAX_BYTES_ENV))
+        max_bytes = _parse_max_bytes(
+            _first_non_none(
+                environment.get(EVENT_TRACE_MAX_BYTES_ENV),
+                _optional_trace_config_int_or_string(config_file_payload, "max_bytes"),
+            )
+        )
+        included_event_names = _resolve_trace_filter(
+            cli_values=event_trace_include,
+            env_value=environment.get(EVENT_TRACE_INCLUDE_ENV),
+            config_payload=config_file_payload,
+            config_key="include",
+        )
+        excluded_event_names = _resolve_trace_filter(
+            cli_values=event_trace_exclude,
+            env_value=environment.get(EVENT_TRACE_EXCLUDE_ENV),
+            config_payload=config_file_payload,
+            config_key="exclude",
+        )
+        included_categories = _resolve_trace_filter(
+            cli_values=event_trace_include_categories,
+            env_value=environment.get(EVENT_TRACE_INCLUDE_CATEGORIES_ENV),
+            config_payload=config_file_payload,
+            config_key="include_categories",
+        )
+        excluded_categories = _resolve_trace_filter(
+            cli_values=event_trace_exclude_categories,
+            env_value=environment.get(EVENT_TRACE_EXCLUDE_CATEGORIES_ENV),
+            config_payload=config_file_payload,
+            config_key="exclude_categories",
+        )
         if level == "off":
             return cls(
                 level=level,
                 max_bytes=max_bytes,
                 ui_commit_sha=_ui_commit_sha(environment),
                 ui_release_version=_ui_release_version(),
+                included_event_names=included_event_names,
+                excluded_event_names=excluded_event_names,
+                included_categories=included_categories,
+                excluded_categories=excluded_categories,
             )
         trace_path = event_trace_file
         if trace_path is None:
@@ -106,7 +161,11 @@ class ForensicTraceConfig:
             if raw_trace_file is not None and raw_trace_file.strip():
                 trace_path = Path(raw_trace_file)
         if trace_path is None:
-            trace_dir = _trace_directory(environment)
+            raw_config_trace_file = _optional_trace_config_string(config_file_payload, "file")
+            if raw_config_trace_file is not None:
+                trace_path = Path(raw_config_trace_file)
+        if trace_path is None:
+            trace_dir = _trace_directory(environment, config_file_payload)
             trace_path = trace_dir / _timestamped_trace_filename()
         return cls(
             level=level,
@@ -114,6 +173,10 @@ class ForensicTraceConfig:
             max_bytes=max_bytes,
             ui_commit_sha=_ui_commit_sha(environment),
             ui_release_version=_ui_release_version(),
+            included_event_names=included_event_names,
+            excluded_event_names=excluded_event_names,
+            included_categories=included_categories,
+            excluded_categories=excluded_categories,
         )
 
     @property
@@ -133,6 +196,22 @@ class ForensicTraceConfig:
         """Return whether high-level render/frame markers should be emitted."""
 
         return self.level == "render"
+
+    def should_emit(self, *, category: str, event_name: str) -> bool:
+        """Return whether a trace event passes configured include/exclude filters."""
+
+        category_name = _non_empty_trace_string("category", category)
+        trace_event_name = _non_empty_trace_string("event_name", event_name)
+        has_include_filter = bool(self.included_event_names or self.included_categories)
+        if has_include_filter and (
+            trace_event_name not in self.included_event_names
+            and category_name not in self.included_categories
+        ):
+            return False
+        return (
+            trace_event_name not in self.excluded_event_names
+            and category_name not in self.excluded_categories
+        )
 
 
 class ForensicTraceWriter(Protocol):
@@ -241,6 +320,8 @@ class JsonLinesTraceWriter:
         """Write a single trace row to the configured JSON Lines file."""
 
         if not self.enabled:
+            return
+        if not self.config.should_emit(category=category, event_name=event_name):
             return
         trace_path = self.trace_path
         if trace_path is None:
@@ -627,11 +708,141 @@ def _parse_max_bytes(value: str | None) -> int:
     return parsed
 
 
-def _trace_directory(environment: Mapping[str, str]) -> Path:
+def _trace_directory(
+    environment: Mapping[str, str],
+    config_payload: JsonObject,
+) -> Path:
     raw_dir = environment.get(EVENT_TRACE_DIR_ENV)
     if raw_dir is not None and raw_dir.strip():
         return Path(raw_dir)
+    raw_config_dir = _optional_trace_config_string(config_payload, "dir")
+    if raw_config_dir is not None:
+        return Path(raw_config_dir)
     return Path.home() / ".local" / "state" / TRACE_PACKAGE_NAME / "event-traces"
+
+
+def _resolve_trace_config_path(
+    *,
+    event_trace_cfg_file: Path | None,
+    environment: Mapping[str, str],
+) -> Path | None:
+    if event_trace_cfg_file is not None:
+        return event_trace_cfg_file
+    raw_env_path = environment.get(EVENT_TRACE_CFG_ENV)
+    if raw_env_path is None or not raw_env_path.strip():
+        return None
+    return Path(raw_env_path)
+
+
+def _load_trace_config_file(path: Path | None) -> JsonObject:
+    if path is None:
+        return {}
+    try:
+        raw_config = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise TraceConfigurationError(f"Could not read event trace config file {path}.") from exc
+    except json.JSONDecodeError as exc:
+        raise TraceConfigurationError(
+            f"Event trace config file {path} must contain valid JSON."
+        ) from exc
+    try:
+        config_payload = validate_json_value(raw_config)
+    except UiClientProtocolError as exc:
+        raise TraceConfigurationError(
+            f"Event trace config file {path} must contain JSON-safe data."
+        ) from exc
+    if type(config_payload) is not dict:
+        raise TraceConfigurationError("Event trace config file root must be a JSON object.")
+    if "event_trace_cfg" not in config_payload:
+        return config_payload
+    nested_payload = config_payload["event_trace_cfg"]
+    if type(nested_payload) is not dict:
+        raise TraceConfigurationError("event_trace_cfg must be a JSON object.")
+    return nested_payload
+
+
+def _resolve_trace_filter(
+    *,
+    cli_values: Sequence[str] | None,
+    env_value: str | None,
+    config_payload: JsonObject,
+    config_key: str,
+) -> frozenset[str]:
+    if cli_values:
+        return _parse_trace_filter_values(cli_values, source=_filter_cli_option_name(config_key))
+    if env_value is not None:
+        return _parse_trace_filter_values((env_value,), source=_filter_env_name(config_key))
+    config_values = config_payload.get(config_key)
+    if config_values is None:
+        return frozenset()
+    if type(config_values) is not list:
+        raise TraceConfigurationError(f"event_trace_cfg.{config_key} must be a list of strings.")
+    return _parse_trace_filter_values(config_values, source=f"event_trace_cfg.{config_key}")
+
+
+def _parse_trace_filter_values(values: Sequence[object], *, source: str) -> frozenset[str]:
+    parsed: set[str] = set()
+    for value in values:
+        if type(value) is not str:
+            raise TraceConfigurationError(f"{source} values must be strings.")
+        for candidate in value.split(","):
+            stripped = candidate.strip()
+            if not stripped:
+                continue
+            parsed.add(stripped)
+    return frozenset(sorted(parsed))
+
+
+def _filter_env_name(config_key: str) -> str:
+    if config_key == "include":
+        return EVENT_TRACE_INCLUDE_ENV
+    if config_key == "exclude":
+        return EVENT_TRACE_EXCLUDE_ENV
+    if config_key == "include_categories":
+        return EVENT_TRACE_INCLUDE_CATEGORIES_ENV
+    if config_key == "exclude_categories":
+        return EVENT_TRACE_EXCLUDE_CATEGORIES_ENV
+    raise TraceConfigurationError(f"Unknown event trace filter key {config_key!r}.")
+
+
+def _filter_cli_option_name(config_key: str) -> str:
+    if config_key == "include":
+        return "--event-trace-include"
+    if config_key == "exclude":
+        return "--event-trace-exclude"
+    if config_key == "include_categories":
+        return "--event-trace-include-category"
+    if config_key == "exclude_categories":
+        return "--event-trace-exclude-category"
+    raise TraceConfigurationError(f"Unknown event trace filter key {config_key!r}.")
+
+
+def _optional_trace_config_string(config_payload: JsonObject, key: str) -> str | None:
+    value = config_payload.get(key)
+    if value is None:
+        return None
+    if type(value) is not str:
+        raise TraceConfigurationError(f"event_trace_cfg.{key} must be a string.")
+    stripped = value.strip()
+    if not stripped:
+        return None
+    return stripped
+
+
+def _optional_trace_config_int_or_string(config_payload: JsonObject, key: str) -> str | None:
+    value = config_payload.get(key)
+    if value is None:
+        return None
+    if type(value) is int or type(value) is str:
+        return str(value)
+    raise TraceConfigurationError(f"event_trace_cfg.{key} must be an integer or string.")
+
+
+def _first_non_none(*values: str | None) -> str | None:
+    for value in values:
+        if value is not None:
+            return value
+    return None
 
 
 def _timestamped_trace_filename() -> str:
