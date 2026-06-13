@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from warhammer40k_core.adapters.local_session import LocalGameSession
 from warhammer40k_core.engine.decision_request import DecisionOption, DecisionRequest
 
@@ -25,6 +26,17 @@ def test_local_session_submit_finite_rejects_stale_explicit_request_id() -> None
     assert client.session.lifecycle.decision_controller.queue.pending_requests[0].request_id == (
         "decision-request-000004"
     )
+
+
+def test_local_session_submit_finite_requires_explicit_result_id() -> None:
+    client = LocalSessionClient(session=LocalGameSession())
+    client.session.lifecycle.decision_controller.request_decision(_finite_request())
+
+    with pytest.raises(TypeError):
+        client.submit_finite(  # type: ignore[call-arg]
+            request_id="decision-request-000004",
+            selected_option_id="normal_move",
+        )
 
 
 def test_local_session_submit_finite_rejects_non_pending_option_id() -> None:
@@ -73,6 +85,17 @@ def test_local_session_submit_movement_payload_rejects_stale_explicit_request_id
     assert status.decision.is_parameterized is True
     assert status.decision.movement_proposal is not None
     assert status.decision.movement_proposal.request_id == "decision-request-000005"
+
+
+def test_local_session_submit_movement_payload_requires_explicit_result_id() -> None:
+    client = LocalSessionClient(session=LocalGameSession())
+    client.session.lifecycle.decision_controller.request_decision(_movement_proposal_request())
+
+    with pytest.raises(TypeError):
+        client.submit_movement_payload(  # type: ignore[call-arg]
+            request_id="decision-request-000005",
+            payload={"proposal_request_id": "decision-request-000005"},
+        )
 
 
 def _finite_request() -> DecisionRequest:

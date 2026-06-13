@@ -396,7 +396,7 @@ class TracedCoreClient:
         *,
         request_id: str,
         selected_option_id: str,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
         """Submit an engine-provided finite option and trace request/response."""
 
@@ -433,7 +433,7 @@ class TracedCoreClient:
         *,
         request_id: str,
         payload: JsonValue,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
         """Submit a movement proposal payload and trace request/response."""
 

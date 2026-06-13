@@ -42,7 +42,7 @@ class UiCoreClient(Protocol):
         *,
         request_id: str,
         selected_option_id: str,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
         """Submit an engine-provided finite option for an explicit request ID."""
 
@@ -53,7 +53,7 @@ class UiCoreClient(Protocol):
         *,
         request_id: str,
         payload: JsonValue,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
         """Submit a movement proposal payload for an explicit request ID."""
 
