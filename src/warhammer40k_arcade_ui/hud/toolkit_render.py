@@ -9,12 +9,18 @@ from warhammer40k_arcade_ui.hud.composition import (
     HudCompositionProfile,
     find_component,
 )
-from warhammer40k_arcade_ui.hud.layouts import ScreenRect, build_hud_layout
+from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, ScreenRect, build_hud_layout
 from warhammer40k_arcade_ui.hud.toolkit import (
     HudComponentNode,
     HudTheme,
+    OverflowPolicy,
+    SizeSpec,
+    StatusChipShapeSpec,
     default_hud_theme,
     json_text,
+    parse_overflow_policy,
+    parse_size_spec,
+    parse_status_chip_shape,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.schema import JsonObject, JsonValue
@@ -37,6 +43,9 @@ def render_composition_profile(
     viewport_height_px: int,
     component_id: str | None = None,
     theme: HudTheme | None = None,
+    runtime_data: JsonObject | None = None,
+    hud_layout: HudLayoutView | None = None,
+    include_background: bool = True,
 ) -> tuple[RenderPrimitive, ...]:
     """Render a composition profile or one component subtree to deterministic primitives."""
 
@@ -45,15 +54,19 @@ def render_composition_profile(
     if viewport_height_px <= 0:
         raise ValueError("viewport_height_px must be positive")
     render_theme = theme or default_hud_theme()
-    root_background = PolygonPrimitive(
-        layer="hud_preview_background",
-        points=_rect_points(ScreenRect(0.0, 0.0, viewport_width_px, viewport_height_px)),
-        fill_color=_PREVIEW_BACKGROUND,
-        outline_color=_PREVIEW_BACKGROUND,
-        line_width=0.0,
-        coordinate_space="screen",
-    )
-    primitives: list[RenderPrimitive] = [root_background]
+    active_data = profile.sample_data if runtime_data is None else runtime_data
+    primitives: list[RenderPrimitive] = []
+    if include_background:
+        primitives.append(
+            PolygonPrimitive(
+                layer="hud_preview_background",
+                points=_rect_points(ScreenRect(0.0, 0.0, viewport_width_px, viewport_height_px)),
+                fill_color=_PREVIEW_BACKGROUND,
+                outline_color=_PREVIEW_BACKGROUND,
+                line_width=0.0,
+                coordinate_space="screen",
+            )
+        )
     if component_id is not None:
         component = find_component(profile, component_id)
         if component is None:
@@ -64,18 +77,13 @@ def render_composition_profile(
                 component,
                 rect=root_rect,
                 theme=render_theme,
-                sample_data=profile.sample_data,
+                sample_data=active_data,
             )
         )
         return tuple(primitives)
 
-    preferences = default_preferences()
-    preferences = replace(
-        preferences,
-        hud=replace(preferences.hud, layout_preset=profile.layout_preset),
-    )
-    layout = build_hud_layout(
-        preferences=preferences,
+    layout = hud_layout or _default_layout_for_profile(
+        profile=profile,
         viewport_width_px=viewport_width_px,
         viewport_height_px=viewport_height_px,
     )
@@ -88,10 +96,28 @@ def render_composition_profile(
                 region.widget,
                 rect=resolved_region.rect.inset(8.0),
                 theme=render_theme,
-                sample_data=profile.sample_data,
+                sample_data=active_data,
             )
         )
     return tuple(primitives)
+
+
+def _default_layout_for_profile(
+    *,
+    profile: HudCompositionProfile,
+    viewport_width_px: int,
+    viewport_height_px: int,
+) -> HudLayoutView:
+    preferences = default_preferences()
+    preferences = replace(
+        preferences,
+        hud=replace(preferences.hud, layout_preset=profile.layout_preset),
+    )
+    return build_hud_layout(
+        preferences=preferences,
+        viewport_width_px=viewport_width_px,
+        viewport_height_px=viewport_height_px,
+    )
 
 
 def render_component_tree(
@@ -104,15 +130,24 @@ def render_component_tree(
     """Render one component subtree inside a parent-relative rectangle."""
 
     primitives: list[RenderPrimitive] = []
-    primitives.extend(_component_shell(node, rect=rect, theme=theme, sample_data=sample_data))
+    node_clip = rect if _clip_enabled(node) else None
+    primitives.extend(
+        _with_clip(
+            _component_shell(node, rect=rect, theme=theme, sample_data=sample_data),
+            node_clip,
+        )
+    )
     child_rects = _child_rects(node, rect)
     for child, child_rect in zip(node.children, child_rects, strict=True):
         primitives.extend(
-            render_component_tree(
-                child,
-                rect=child_rect,
-                theme=theme,
-                sample_data=sample_data,
+            _with_clip(
+                render_component_tree(
+                    child,
+                    rect=child_rect,
+                    theme=theme,
+                    sample_data=sample_data,
+                ),
+                node_clip,
             )
         )
     return tuple(primitives)
@@ -147,10 +182,11 @@ def _component_shell(
         return _icon_slot(node, rect=rect, theme=theme)
     if node.widget_type == "DatasheetPanel":
         return _datasheet_panel(node, rect=rect, theme=theme, data_value=data_value)
+    if node.widget_type == "StatusChip":
+        return _status_chip(node, rect=rect, theme=theme, data_value=data_value)
     if node.widget_type in (
         "HudPanel",
         "IconTextBar",
-        "StatusChip",
         "EntityChip",
         "UnitRailCard",
         "DatasheetHeader",
@@ -178,6 +214,7 @@ def _labelled_box(
     subtitle = _component_subtitle(node, data_value=data_value)
     color_role = _attribute_text(node, "color_role", default=None)
     accent = theme.color_for_role(color_role)
+    overflow = _overflow_policy(node)
     primitives: list[RenderPrimitive] = [
         _panel(rect, theme=theme, outline_color=_with_alpha(accent, 184))
     ]
@@ -191,14 +228,22 @@ def _labelled_box(
         )
         primitives.extend(_icon_placeholder(icon_rect, theme=theme, label=_icon_label(icon_id)))
     text_x = rect.x + theme.inner_padding_px + (theme.icon_size_px + 8.0 if icon_id else 0.0)
+    text_width = max(theme.compact_font_size_px, rect.right - text_x - theme.inner_padding_px)
     title_y = rect.top - theme.inner_padding_px - 2.0
     primitives.append(
         TextPrimitive(
             layer="hud_widget_text",
-            text=_truncate(title, max_chars=_max_chars(rect.width, theme.title_font_size_px)),
+            text=_overflow_text(
+                title, width_px=text_width, font_size_px=theme.title_font_size_px, policy=overflow
+            ),
             position=(text_x, title_y),
             color=theme.text,
-            font_size=theme.title_font_size_px,
+            font_size=_font_size_for_text(
+                title,
+                width_px=text_width,
+                font_size_px=theme.title_font_size_px,
+                policy=overflow,
+            ),
             coordinate_space="screen",
             anchor_y="top",
         )
@@ -207,17 +252,89 @@ def _labelled_box(
         primitives.append(
             TextPrimitive(
                 layer="hud_widget_text",
-                text=_truncate(
-                    subtitle, max_chars=_max_chars(rect.width, theme.compact_font_size_px)
+                text=_overflow_text(
+                    subtitle,
+                    width_px=text_width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
                 ),
                 position=(text_x, title_y - theme.line_height_px),
                 color=theme.muted_text,
-                font_size=theme.compact_font_size_px,
+                font_size=_font_size_for_text(
+                    subtitle,
+                    width_px=text_width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
                 coordinate_space="screen",
                 anchor_y="top",
             )
         )
     return tuple(primitives)
+
+
+def _status_chip(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    data_value: JsonValue | None,
+) -> tuple[RenderPrimitive, ...]:
+    shape = _status_chip_shape(node)
+    if shape.shape not in ("round", "square"):
+        return _labelled_box(node, rect=rect, theme=theme, data_value=data_value)
+    extent = shape.square_extent_px or min(rect.width, rect.height)
+    extent = max(8.0, min(extent, rect.width, rect.height))
+    chip_rect = ScreenRect(
+        rect.x + ((rect.width - extent) / 2.0),
+        rect.y + ((rect.height - extent) / 2.0),
+        extent,
+        extent,
+    )
+    color_role = _attribute_text(node, "color_role", default=None)
+    accent = theme.color_for_role(color_role)
+    label = _icon_label(node.icon_id or _attribute_text(node, "icon_id", default="status.active"))
+    title = _component_title(node, data_value=data_value)
+    if shape.shape == "round":
+        center = (chip_rect.x + (chip_rect.width / 2.0), chip_rect.y + (chip_rect.height / 2.0))
+        return (
+            CirclePrimitive(
+                layer="hud_widget_status_chip",
+                center=center,
+                radius=chip_rect.width / 2.0,
+                fill_color=theme.panel_fill,
+                outline_color=_with_alpha(accent, 214),
+                line_width=1.0,
+                coordinate_space="screen",
+            ),
+            TextPrimitive(
+                layer="hud_widget_status_chip_text",
+                text=_truncate(label, max_chars=2),
+                position=center,
+                color=theme.text,
+                font_size=max(8.0, min(theme.compact_font_size_px, chip_rect.width * 0.28)),
+                coordinate_space="screen",
+                anchor_x="center",
+                anchor_y="center",
+            ),
+        )
+    title_text = _truncate(title, max_chars=max(1, int(chip_rect.width / 10.0)))
+    return (
+        _panel(chip_rect, theme=theme, outline_color=_with_alpha(accent, 214)),
+        TextPrimitive(
+            layer="hud_widget_status_chip_text",
+            text=title_text,
+            position=(
+                chip_rect.x + (chip_rect.width / 2.0),
+                chip_rect.y + (chip_rect.height / 2.0),
+            ),
+            color=theme.text,
+            font_size=max(8.0, min(theme.compact_font_size_px, chip_rect.width * 0.22)),
+            coordinate_space="screen",
+            anchor_x="center",
+            anchor_y="center",
+        ),
+    )
 
 
 def _datasheet_panel(
@@ -467,26 +584,218 @@ def _child_rects(node: HudComponentNode, rect: ScreenRect) -> tuple[ScreenRect, 
             )
         return tuple(cells)
     if node.layout.orientation == "horizontal":
-        child_width = max(0.0, (inner.width - (gap * (count - 1))) / count)
-        return tuple(
-            ScreenRect(
-                x=inner.x + (index * (child_width + gap)),
-                y=inner.y,
-                width=child_width,
-                height=inner.height,
-            )
-            for index in range(count)
+        widths = _allocated_axis_sizes(
+            node.children,
+            total_size=inner.width,
+            gap_px=gap,
+            axis="width",
         )
-    child_height = max(0.0, (inner.height - (gap * (count - 1))) / count)
-    return tuple(
-        ScreenRect(
-            x=inner.x,
-            y=inner.top - ((index + 1) * child_height) - (index * gap),
-            width=inner.width,
-            height=child_height,
-        )
-        for index in range(count)
+        x = inner.x
+        horizontal_rects: list[ScreenRect] = []
+        for width in widths:
+            horizontal_rects.append(ScreenRect(x=x, y=inner.y, width=width, height=inner.height))
+            x += width + gap
+        return tuple(horizontal_rects)
+    heights = _allocated_axis_sizes(
+        node.children,
+        total_size=inner.height,
+        gap_px=gap,
+        axis="height",
     )
+    y_top = inner.top
+    vertical_rects: list[ScreenRect] = []
+    for height in heights:
+        vertical_rects.append(
+            ScreenRect(x=inner.x, y=y_top - height, width=inner.width, height=height)
+        )
+        y_top -= height + gap
+    return tuple(vertical_rects)
+
+
+def _allocated_axis_sizes(
+    children: tuple[HudComponentNode, ...],
+    *,
+    total_size: float,
+    gap_px: float,
+    axis: str,
+) -> tuple[float, ...]:
+    if not children:
+        return ()
+    available = max(0.0, total_size - (gap_px * (len(children) - 1)))
+    explicit_sizes: list[float | None] = []
+    flexible_weight = 0.0
+    fixed_total = 0.0
+    for child in children:
+        size = _axis_size(child, axis=axis, parent_size=available)
+        explicit_sizes.append(size)
+        if size is None:
+            flexible_weight += _axis_flex_weight(child, axis=axis)
+        else:
+            fixed_total += size
+    remaining = max(0.0, available - fixed_total)
+    fallback_size = remaining / flexible_weight if flexible_weight > 0.0 else 0.0
+    allocated: list[float] = []
+    for child, size in zip(children, explicit_sizes, strict=True):
+        if size is None:
+            size = fallback_size * _axis_flex_weight(child, axis=axis)
+        allocated.append(_constrain_axis_size(child, axis=axis, size=size, parent_size=available))
+    return tuple(allocated)
+
+
+def _axis_size(child: HudComponentNode, *, axis: str, parent_size: float) -> float | None:
+    spec = _size_spec(child.attributes.get(axis))
+    if spec is None:
+        status_chip_size = _status_chip_axis_size(child)
+        if status_chip_size is not None:
+            return status_chip_size
+        return None
+    if spec.unit == "px":
+        return spec.value or 0.0
+    if spec.unit == "percent":
+        return parent_size * ((spec.value or 0.0) / 100.0)
+    if spec.unit == "fit_content":
+        width, height = _estimated_component_size(child)
+        return width if axis == "width" else height
+    return None
+
+
+def _axis_flex_weight(child: HudComponentNode, *, axis: str) -> float:
+    spec = _size_spec(child.attributes.get(axis))
+    if spec is not None and spec.unit == "fr":
+        return spec.value or 1.0
+    return 1.0
+
+
+def _constrain_axis_size(
+    child: HudComponentNode,
+    *,
+    axis: str,
+    size: float,
+    parent_size: float,
+) -> float:
+    min_size = _axis_constraint(child, f"min_{axis}", parent_size=parent_size)
+    max_size = _axis_constraint(child, f"max_{axis}", parent_size=parent_size)
+    constrained = max(min_size or 0.0, size)
+    if max_size is not None:
+        constrained = min(constrained, max_size)
+    return max(0.0, constrained)
+
+
+def _axis_constraint(child: HudComponentNode, key: str, *, parent_size: float) -> float | None:
+    spec = _size_spec(child.attributes.get(key))
+    if spec is None:
+        return None
+    if spec.unit == "px":
+        return spec.value or 0.0
+    if spec.unit == "percent":
+        return parent_size * ((spec.value or 0.0) / 100.0)
+    return None
+
+
+def _status_chip_axis_size(child: HudComponentNode) -> float | None:
+    if child.widget_type != "StatusChip":
+        return None
+    shape = _status_chip_shape(child)
+    return shape.square_extent_px
+
+
+def _estimated_component_size(child: HudComponentNode) -> tuple[float, float]:
+    title = _component_title(child, data_value=None)
+    subtitle = _component_subtitle(child, data_value=None)
+    text_width = max(_estimated_text_width(title, 16.0), _estimated_text_width(subtitle, 12.0))
+    icon_bonus = 32.0 if child.icon_id or child.attributes.get("icon_id") else 0.0
+    width = max(40.0, text_width + icon_bonus + 24.0)
+    height = 28.0 + (18.0 if subtitle else 0.0)
+    return (width, height)
+
+
+def _size_spec(value: JsonValue | None) -> SizeSpec | None:
+    if value is None:
+        return None
+    try:
+        return parse_size_spec(value)
+    except ValueError:
+        return None
+
+
+def _estimated_text_width(text: str, font_size_px: float) -> float:
+    return len(text) * font_size_px * 0.58
+
+
+def _clip_enabled(node: HudComponentNode) -> bool:
+    value = node.attributes.get("clip_children")
+    if type(value) is bool:
+        return value
+    return True
+
+
+def _with_clip(
+    primitives: tuple[RenderPrimitive, ...],
+    clip_rect: ScreenRect | None,
+) -> tuple[RenderPrimitive, ...]:
+    if clip_rect is None:
+        return primitives
+    clipped: list[RenderPrimitive] = []
+    for primitive in primitives:
+        if primitive.clip_rect is not None:
+            clipped.append(primitive)
+            continue
+        clipped.append(replace(primitive, clip_rect=clip_rect))
+    return tuple(clipped)
+
+
+def _overflow_policy(node: HudComponentNode) -> OverflowPolicy:
+    try:
+        return parse_overflow_policy(node.attributes.get("overflow"))
+    except ValueError:
+        return OverflowPolicy()
+
+
+def _status_chip_shape(node: HudComponentNode) -> StatusChipShapeSpec:
+    raw_shape = node.attributes.get("shape")
+    if raw_shape is None:
+        raw_shape = {
+            "shape": "rounded_rect",
+            "diameter_px": node.attributes.get("diameter_px"),
+            "size_px": node.attributes.get("size_px"),
+            "preserve_aspect_ratio": node.attributes.get("preserve_aspect_ratio"),
+        }
+    try:
+        return parse_status_chip_shape(raw_shape)
+    except ValueError:
+        return StatusChipShapeSpec()
+
+
+def _overflow_text(
+    text: str,
+    *,
+    width_px: float,
+    font_size_px: float,
+    policy: OverflowPolicy,
+) -> str:
+    if policy.mode in ("clip", "visible", "scroll"):
+        return text
+    max_chars = _max_chars(width_px, font_size_px)
+    if policy.mode == "wrap":
+        return _truncate(text, max_chars=max_chars * max(1, policy.max_lines))
+    return _truncate(text, max_chars=max_chars)
+
+
+def _font_size_for_text(
+    text: str,
+    *,
+    width_px: float,
+    font_size_px: float,
+    policy: OverflowPolicy,
+) -> float:
+    if policy.mode != "shrink_to_fit":
+        return font_size_px
+    if _estimated_text_width(text, font_size_px) <= width_px:
+        return font_size_px
+    if not text:
+        return font_size_px
+    estimated = width_px / (len(text) * 0.58)
+    return max(policy.min_font_size_px, min(font_size_px, estimated))
 
 
 def _component_title(node: HudComponentNode, *, data_value: JsonValue | None) -> str:
@@ -604,9 +913,9 @@ def _truncate(text: str, *, max_chars: int) -> str:
         return ""
     if len(text) <= max_chars:
         return text
-    if max_chars <= 1:
+    if max_chars <= 3:
         return text[:max_chars]
-    return f"{text[: max_chars - 1]}..."
+    return f"{text[: max_chars - 3]}..."
 
 
 def _max_chars(width_px: float, font_size_px: float) -> int:

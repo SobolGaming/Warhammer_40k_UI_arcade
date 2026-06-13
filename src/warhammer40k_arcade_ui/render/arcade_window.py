@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
 
 import arcade
 
@@ -35,8 +33,18 @@ from warhammer40k_arcade_ui.hud.action_summary import (
     ActionSummaryIntensity,
     build_action_visual_summary,
 )
-from warhammer40k_arcade_ui.hud.ergonomics import build_hud_ergonomics_view
-from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, build_hud_layout
+from warhammer40k_arcade_ui.hud.composition import (
+    HudCompositionDiagnostic,
+    HudCompositionProfile,
+    load_hud_composition_for_preferences,
+)
+from warhammer40k_arcade_ui.hud.ergonomics import HudErgonomicsView, build_hud_ergonomics_view
+from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, ScreenRect, build_hud_layout
+from warhammer40k_arcade_ui.hud.runtime_data import (
+    runtime_data_for_ergonomic_hud,
+    theme_for_ergonomic_hud,
+)
+from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
@@ -53,7 +61,6 @@ from warhammer40k_arcade_ui.preferences.io import PreferencesLoadResult, load_pr
 from warhammer40k_arcade_ui.preferences.schema import UiPreferences
 from warhammer40k_arcade_ui.render.camera import WorldCamera, WorldPoint
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
-from warhammer40k_arcade_ui.render.hud_ergonomics import build_ergonomic_hud_primitives
 from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
     PolygonPrimitive,
@@ -63,6 +70,7 @@ from warhammer40k_arcade_ui.render.primitives import (
     build_hud_primitives,
     build_world_primitives,
 )
+from warhammer40k_arcade_ui.render.scissor import scoped_scissor
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, RenderViewModelError
 from warhammer40k_arcade_ui.state.entity_selection import entity_ref_for_model
 from warhammer40k_arcade_ui.state.finite_decision import (
@@ -123,15 +131,25 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         self.background_color = arcade.color.DARK_SLATE_GRAY
         self._battlefield_view = battlefield_view or default_battlefield_view()
+        preference_source = None
         if preferences is None:
             loaded_preferences = load_preferences(preferences_path)
             self._preferences = loaded_preferences.preferences or default_preferences()
             self._preference_diagnostics = loaded_preferences.diagnostics
             self._preference_source_label = _preference_source_label(loaded_preferences)
+            preference_source = loaded_preferences.source
         else:
             self._preferences = preferences
             self._preference_diagnostics = ()
             self._preference_source_label = "injected preferences"
+        hud_composition_result = load_hud_composition_for_preferences(
+            self._preferences,
+            source=preference_source,
+        )
+        self._hud_composition_profile: HudCompositionProfile | None = hud_composition_result.profile
+        self._hud_composition_diagnostics: tuple[HudCompositionDiagnostic, ...] = (
+            hud_composition_result.diagnostics
+        )
         self._selection_state = SelectionState.initial(self._preferences)
         self._core_client = core_client
         self._viewer_player_id = viewer_player_id
@@ -164,10 +182,6 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._right_mouse_press_screen: tuple[float, float] | None = None
         self._right_mouse_drag_distance_px = 0.0
         self._fatal_exit_deadline_monotonic: float | None = None
-        self._hud_zone_manager: Any | None = _create_hud_zone_manager(self)
-        if self._hud_zone_manager is not None:
-            self._hud_zone_manager.enable()
-        self._hud_zone_layout_signature: tuple[object, ...] | None = None
         self._trace_writer = trace_writer or NoOpTraceWriter()
         self._crash_report_context = crash_report_context or CrashReportContext(
             runtime_mode="arcade_window",
@@ -186,6 +200,12 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "trace_path": str(self._trace_writer.trace_path)
                 if self._trace_writer.trace_path is not None
                 else None,
+                "hud_composition_profile": None
+                if self._hud_composition_profile is None
+                else self._hud_composition_profile.profile_id,
+                "hud_composition_diagnostics": [
+                    diagnostic.code for diagnostic in self._hud_composition_diagnostics
+                ],
             },
         )
 
@@ -338,15 +358,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             max_labels=self._preferences.hud.action_summary_max_labels,
         )
         hud_layout = build_hud_layout(
-            preferences=self._preferences,
+            preferences=self._hud_layout_preferences(),
             viewport_width_px=self.width,
             viewport_height_px=self.height,
         )
-        hud_zone_widgets_available = (
-            self._hud_zone_manager is not None and not _headless_rendering_enabled()
-        )
-        if hud_zone_widgets_available:
-            self._sync_hud_zone_widgets(hud_layout)
         ergonomic_hud = build_hud_ergonomics_view(
             view=self._battlefield_view,
             preferences=self._preferences,
@@ -369,20 +384,49 @@ class ArcadeWarhammerWindow(arcade.Window):
             mouse_world_position=self._mouse_world_position,
             context_menu=context_menu,
             hud_layout=hud_layout,
-            include_layout_skeleton=not hud_zone_widgets_available,
+            include_layout_skeleton=False,
             include_layout_labels=False,
         )
-        ergonomic_primitives = build_ergonomic_hud_primitives(
-            ergonomics=ergonomic_hud,
+        composition_primitives = self._hud_composition_primitives(
+            ergonomic_hud=ergonomic_hud,
             hud_layout=hud_layout,
-            viewport_width_px=self.width,
-            viewport_height_px=self.height,
         )
         _draw_world_primitives(world_primitives, self._camera)
         _draw_world_primitives(hud_primitives, self._camera)
-        if hud_zone_widgets_available and self._hud_zone_manager is not None:
-            self._hud_zone_manager.draw()
-        _draw_world_primitives(ergonomic_primitives, self._camera)
+        _draw_world_primitives(composition_primitives, self._camera)
+
+    def _hud_layout_preferences(self) -> UiPreferences:
+        if self._hud_composition_profile is None:
+            return self._preferences
+        return replace(
+            self._preferences,
+            hud=replace(
+                self._preferences.hud,
+                layout_preset=self._hud_composition_profile.layout_preset,
+            ),
+        )
+
+    def _hud_composition_primitives(
+        self,
+        *,
+        ergonomic_hud: HudErgonomicsView,
+        hud_layout: HudLayoutView,
+    ) -> tuple[RenderPrimitive, ...]:
+        if self._hud_composition_profile is None:
+            return _hud_composition_diagnostic_primitives(
+                diagnostics=self._hud_composition_diagnostics,
+                viewport_width_px=self.width,
+                viewport_height_px=self.height,
+            )
+        return render_composition_profile(
+            self._hud_composition_profile,
+            viewport_width_px=self.width,
+            viewport_height_px=self.height,
+            theme=theme_for_ergonomic_hud(ergonomic_hud),
+            runtime_data=runtime_data_for_ergonomic_hud(ergonomic_hud),
+            hud_layout=hud_layout,
+            include_background=False,
+        )
 
     def on_resize(self, width: int, height: int) -> None:
         """Keep camera viewport dimensions aligned with the Arcade window."""
@@ -1137,20 +1181,6 @@ class ArcadeWarhammerWindow(arcade.Window):
             trace_path=self._trace_writer.trace_path,
         )
 
-    def _sync_hud_zone_widgets(self, hud_layout: HudLayoutView) -> None:
-        if self._hud_zone_manager is None:
-            return
-        from warhammer40k_arcade_ui.hud.widgets import (
-            install_hud_zone_widgets,
-            layout_signature,
-        )
-
-        signature = layout_signature(hud_layout)
-        if signature == self._hud_zone_layout_signature:
-            return
-        install_hud_zone_widgets(manager=self._hud_zone_manager, layout=hud_layout)
-        self._hud_zone_layout_signature = signature
-
 
 def _context_menu_action_at(
     *,
@@ -1172,23 +1202,6 @@ def _context_menu_action_at(
     if action_index < 0 or action_index >= len(menu.actions):
         return None
     return menu.actions[action_index]
-
-
-def _create_hud_zone_manager(window: arcade.Window) -> Any | None:
-    try:
-        from arcade.gui import UIManager
-    except AttributeError:
-        return None
-
-    return UIManager(window=window)
-
-
-def _headless_rendering_enabled() -> bool:
-    return _truthy_env("PYGLET_HEADLESS") or _truthy_env("ARCADE_HEADLESS")
-
-
-def _truthy_env(name: str) -> bool:
-    return os.environ.get(name, "").casefold() in {"1", "true", "yes", "on"}
 
 
 def _pending_decision_summary(pending_decision: UiDecision | None) -> str:
@@ -1228,6 +1241,58 @@ def _hud_event_lines(
     return current_lines
 
 
+def _hud_composition_diagnostic_primitives(
+    *,
+    diagnostics: tuple[HudCompositionDiagnostic, ...],
+    viewport_width_px: int,
+    viewport_height_px: int,
+) -> tuple[RenderPrimitive, ...]:
+    if not diagnostics:
+        return ()
+    rect = ScreenRect(
+        x=24.0,
+        y=max(24.0, viewport_height_px - 132.0),
+        width=min(720.0, max(260.0, viewport_width_px - 48.0)),
+        height=92.0,
+    )
+    diagnostic = diagnostics[0]
+    return (
+        PolygonPrimitive(
+            layer="hud_composition_error",
+            points=(
+                (rect.x, rect.y),
+                (rect.right, rect.y),
+                (rect.right, rect.top),
+                (rect.x, rect.top),
+            ),
+            fill_color=(42, 16, 18, 224),
+            outline_color=(248, 92, 92, 255),
+            line_width=1.0,
+            coordinate_space="screen",
+        ),
+        TextPrimitive(
+            layer="hud_composition_error_text",
+            text="HUD composition error",
+            position=(rect.x + 12.0, rect.top - 12.0),
+            color=(248, 250, 242, 255),
+            font_size=16.0,
+            coordinate_space="screen",
+            anchor_y="top",
+            clip_rect=rect,
+        ),
+        TextPrimitive(
+            layer="hud_composition_error_text",
+            text=f"{diagnostic.code}: {diagnostic.message}",
+            position=(rect.x + 12.0, rect.top - 38.0),
+            color=(248, 190, 190, 255),
+            font_size=12.0,
+            coordinate_space="screen",
+            anchor_y="top",
+            clip_rect=rect,
+        ),
+    )
+
+
 def _preference_source_label(result: PreferencesLoadResult) -> str:
     if result.source is not None:
         if result.has_errors:
@@ -1246,15 +1311,17 @@ def _draw_world_primitives(
     primitives: tuple[RenderPrimitive, ...],
     camera: WorldCamera,
 ) -> None:
+    ctx = arcade.get_window().ctx
     for primitive in primitives:
-        if type(primitive) is PolygonPrimitive:
-            _draw_polygon_primitive(primitive, camera)
-        elif type(primitive) is CirclePrimitive:
-            _draw_circle_primitive(primitive, camera)
-        elif type(primitive) is PolylinePrimitive:
-            _draw_polyline_primitive(primitive, camera)
-        elif type(primitive) is TextPrimitive:
-            _draw_text_primitive(primitive, camera)
+        with scoped_scissor(ctx, primitive.clip_rect):
+            if type(primitive) is PolygonPrimitive:
+                _draw_polygon_primitive(primitive, camera)
+            elif type(primitive) is CirclePrimitive:
+                _draw_circle_primitive(primitive, camera)
+            elif type(primitive) is PolylinePrimitive:
+                _draw_polyline_primitive(primitive, camera)
+            elif type(primitive) is TextPrimitive:
+                _draw_text_primitive(primitive, camera)
 
 
 def _draw_polygon_primitive(primitive: PolygonPrimitive, camera: WorldCamera) -> None:

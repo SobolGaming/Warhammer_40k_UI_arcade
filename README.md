@@ -124,6 +124,7 @@ HUD composition YAML files can be previewed without starting a game session:
 ```bash
 uv run warhammer40k-hud-preview docs/hud/examples/unit-datasheet-preview.yaml
 uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --component movement_budget_ring
+uv run warhammer40k-hud-preview docs/hud/examples/overflow-stress-preview.yaml --headless --artifact-dir /tmp/hud-stress
 uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --headless --artifact-dir /tmp/hud-preview
 ```
 
@@ -132,7 +133,8 @@ launches can run without depending on top-level `docs/`. The documented `docs/pr
 `docs/hud` files remain editable examples. HUD composition can be loaded by built-in profile name
 such as `default-hud`, by a path relative to the preferences YAML file that references it, or by an
 explicit YAML path. Preview examples under `docs/hud/examples/` use the same YAML dialect plus
-placeholder `sample_data`.
+placeholder `sample_data`. For a user-level guide to zones, widgets, bindings, sizing, overflow, and
+shape customization, see [docs/hud-customization.md](docs/hud-customization.md).
 
 ## Forensic event traces
 

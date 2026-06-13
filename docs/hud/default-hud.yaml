@@ -8,7 +8,7 @@ regions:
       type: HudContainer
       id: top_ribbon_root
       render_mode: none
-      layout: {kind: grid, columns: 3, gap_px: 8, padding_px: 8}
+      layout: {kind: grid, columns: 3, gap_px: 8, padding_px: 4}
       children:
       - type: StatusChip
         id: phase_status_chip
@@ -51,8 +51,11 @@ regions:
       - type: DatasheetPanel
         id: selected_unit_datasheet
         data_ref: selected_unit
-        density: compact
+        density: detailed
         title: Selected Unit
+        stat_cell_height: 42
+        stat_cell_min_width: 34
+        stat_cell_gap: 4
       - type: AssignmentGroupRow
         id: current_assignment_row
         data_ref: current_assignment

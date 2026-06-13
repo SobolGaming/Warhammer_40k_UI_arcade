@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import Protocol, cast
 
 import pytest
 
@@ -17,6 +18,7 @@ from warhammer40k_arcade_ui.hud.composition import (
     load_hud_composition_reference,
     parse_hud_composition_payload,
 )
+from warhammer40k_arcade_ui.hud.layouts import ScreenRect
 from warhammer40k_arcade_ui.hud.preview import main as hud_preview_main
 from warhammer40k_arcade_ui.hud.toolkit import (
     DonutGaugeView,
@@ -27,6 +29,9 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     known_data_refs,
     known_icon_ids,
     known_widget_types,
+    parse_overflow_policy,
+    parse_size_spec,
+    parse_status_chip_shape,
 )
 from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
@@ -35,6 +40,11 @@ from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
     PolygonPrimitive,
     TextPrimitive,
+)
+from warhammer40k_arcade_ui.render.scissor import (
+    intersect_scissors,
+    scissor_tuple,
+    scoped_scissor,
 )
 from warhammer40k_arcade_ui.resources.source import ConfigSource
 
@@ -76,6 +86,70 @@ def test_toolkit_view_models_preserve_tunable_widget_attributes() -> None:
     assert gauge.outer_diameter_px == 92.0
 
 
+def test_phase23_size_overflow_and_status_chip_shape_parsers() -> None:
+    assert parse_size_spec("48px").value == 48.0
+    assert parse_size_spec("35%").unit == "percent"
+    assert parse_size_spec("2fr").unit == "fr"
+    assert parse_size_spec("fit-content").unit == "fit_content"
+    overflow = parse_overflow_policy({"mode": "shrink_to_fit", "min_font_size_px": 9})
+    assert overflow.mode == "shrink_to_fit"
+    assert overflow.min_font_size_px == 9.0
+    round_shape = parse_status_chip_shape({"shape": "round", "diameter_px": 44})
+    square_shape = parse_status_chip_shape({"shape": "square", "size_px": 52})
+    assert round_shape.square_extent_px == 44.0
+    assert square_shape.square_extent_px == 52.0
+
+
+def test_composition_rejects_invalid_phase23_schema_values() -> None:
+    payload = {
+        "schema_version": 1,
+        "profile_id": "bad_phase23_values",
+        "layout_preset": "compass_ring",
+        "theme": "default",
+        "regions": {
+            "top_ribbon": {
+                "widget": {
+                    "type": "HudContainer",
+                    "id": "root",
+                    "layout": {"kind": "stack", "orientation": "horizontal"},
+                    "children": [
+                        {
+                            "type": "StatusChip",
+                            "id": "bad_chip",
+                            "label": "Bad",
+                            "width": "-1px",
+                            "shape": {"shape": "triangle"},
+                        },
+                        {
+                            "type": "IconTextBar",
+                            "id": "bad_bar",
+                            "primary_label": "Bad",
+                            "overflow": {"mode": "explode"},
+                        },
+                        {
+                            "type": "Tooltip",
+                            "id": "bad_constraints",
+                            "title": "Bad constraints",
+                            "min_width": "120px",
+                            "max_width": "64px",
+                        },
+                    ],
+                }
+            }
+        },
+    }
+
+    result = parse_hud_composition_payload(payload)
+
+    assert result.profile is None
+    assert {
+        "invalid_size_spec",
+        "invalid_status_chip_shape",
+        "invalid_overflow_policy",
+        "invalid_size_constraint",
+    }.issubset(_codes(result))
+
+
 def test_documented_production_hud_compositions_load() -> None:
     docs_dir = Path(__file__).parents[1] / "docs" / "hud"
     for filename in ("default-hud.yaml", "command-bench-hud.yaml"):
@@ -84,6 +158,15 @@ def test_documented_production_hud_compositions_load() -> None:
         assert result.profile is not None, result.diagnostics
         assert result.diagnostics == ()
         assert result.profile.sample_data == {}
+
+
+def test_phase23_overflow_stress_preview_loads() -> None:
+    path = Path(__file__).parents[1] / "docs" / "hud" / "examples" / "overflow-stress-preview.yaml"
+
+    result = load_hud_composition(path, preview=True)
+
+    assert result.profile is not None, result.diagnostics
+    assert result.profile.profile_id == "overflow_stress_preview"
 
 
 def test_preview_composition_supports_sample_data_and_component_lookup() -> None:
@@ -378,6 +461,154 @@ def test_non_renderable_container_positions_children_without_own_panel() -> None
     assert any(type(primitive) is CirclePrimitive for primitive in primitives)
 
 
+def test_phase23_status_chip_shapes_and_axis_sizes_render_deterministically() -> None:
+    path = Path(__file__).parents[1] / "docs" / "hud" / "examples" / "overflow-stress-preview.yaml"
+    result = load_hud_composition(path, preview=True)
+    assert result.profile is not None, result.diagnostics
+
+    primitives = render_composition_profile(
+        result.profile,
+        viewport_width_px=960,
+        viewport_height_px=540,
+        component_id="overflow_stress_top_ribbon",
+    )
+    round_chip = next(
+        primitive
+        for primitive in primitives
+        if type(primitive) is CirclePrimitive and primitive.layer == "hud_widget_status_chip"
+    )
+    square_panel = _square_panel(primitives, size=52.0)
+
+    assert round_chip.radius == 24.0
+    assert _polygon_right(square_panel) - _polygon_left(square_panel) == 52.0
+    assert _polygon_top(square_panel) - _polygon_bottom(square_panel) == 52.0
+
+
+def test_phase23_stack_layout_honors_px_fr_fill_and_fit_content() -> None:
+    payload = {
+        "schema_version": 1,
+        "profile_id": "phase23_axis_sizes",
+        "layout_preset": "compass_ring",
+        "theme": "default",
+        "regions": {
+            "bottom_workbench": {
+                "widget": {
+                    "type": "HudContainer",
+                    "id": "root",
+                    "render_mode": "none",
+                    "layout": {
+                        "kind": "stack",
+                        "orientation": "horizontal",
+                        "gap_px": 0,
+                        "padding_px": 0,
+                    },
+                    "children": [
+                        {
+                            "type": "IconTextBar",
+                            "id": "fixed",
+                            "primary_label": "Fixed",
+                            "width": "100px",
+                        },
+                        {
+                            "type": "IconTextBar",
+                            "id": "fraction",
+                            "primary_label": "Fraction",
+                            "width": "2fr",
+                        },
+                        {
+                            "type": "IconTextBar",
+                            "id": "fill",
+                            "primary_label": "Fill",
+                            "width": "fill",
+                        },
+                        {
+                            "type": "IconTextBar",
+                            "id": "fit",
+                            "primary_label": "Fit content",
+                            "width": "fit-content",
+                        },
+                    ],
+                }
+            }
+        },
+    }
+    result = parse_hud_composition_payload(payload)
+    assert result.profile is not None, result.diagnostics
+
+    primitives = render_composition_profile(
+        result.profile,
+        viewport_width_px=500,
+        viewport_height_px=220,
+        component_id="root",
+    )
+    fixed_panel = _panel_for_text(primitives, "Fixed")
+    fraction_panel = _panel_for_text(primitives, "Fraction")
+    fill_panel = _panel_for_text(primitives, "Fill")
+
+    assert _polygon_right(fixed_panel) - _polygon_left(fixed_panel) == 100.0
+    assert (_polygon_right(fraction_panel) - _polygon_left(fraction_panel)) > (
+        _polygon_right(fill_panel) - _polygon_left(fill_panel)
+    )
+
+
+def test_phase23_component_primitives_carry_clip_rects() -> None:
+    path = Path(__file__).parents[1] / "docs" / "hud" / "examples" / "overflow-stress-preview.yaml"
+    result = load_hud_composition(path, preview=True)
+    assert result.profile is not None, result.diagnostics
+
+    primitives = render_composition_profile(
+        result.profile,
+        viewport_width_px=960,
+        viewport_height_px=540,
+        component_id="long_pending_action_status",
+    )
+
+    assert any(
+        type(primitive) is TextPrimitive and primitive.clip_rect is not None
+        for primitive in primitives
+    )
+
+
+def test_phase23_scissor_helpers_intersect_and_restore_context() -> None:
+    ctx = FakeScissorContext()
+    ctx.scissor = (0, 0, 100, 100)
+
+    assert scissor_tuple(ScreenRect(4.2, 5.8, 10.1, 20.1)) == (4, 5, 11, 21)
+    assert intersect_scissors((0, 0, 100, 100), (50, 20, 100, 10)) == (50, 20, 50, 10)
+
+    with scoped_scissor(ctx, ScreenRect(20.0, 30.0, 90.0, 90.0)):
+        assert ctx.scissor == (20, 30, 80, 70)
+
+    assert ctx.scissor == (0, 0, 100, 100)
+
+
+def test_phase23_arcade_scissor_clips_headless_framebuffer() -> None:
+    import arcade
+
+    window = arcade.Window(64, 64, visible=False)
+    try:
+        framebuffer = cast(_FramebufferReader, window.ctx.screen)
+        framebuffer.use()
+        window.clear(color=(0, 0, 0, 255))
+        with scoped_scissor(window.ctx, ScreenRect(0.0, 0.0, 32.0, 64.0)):
+            arcade.draw_polygon_filled(
+                ((0.0, 0.0), (64.0, 0.0), (64.0, 64.0), (0.0, 64.0)),
+                (255, 0, 0, 255),
+            )
+        window.ctx.finish()
+        rgba = framebuffer.read(
+            viewport=(0, 0, 64, 64),
+            components=4,
+            attachment=0,
+            dtype="f1",
+        )
+    finally:
+        window.close()
+
+    assert _pixel(rgba, x=8, y=32) == (255, 0, 0, 255)
+    assert _pixel(rgba, x=56, y=32) == (0, 0, 0, 255)
+
+
 def test_hud_preview_headless_writes_png_and_metadata(tmp_path: Path) -> None:
     path = Path(__file__).parents[1] / "docs" / "hud" / "examples" / "workbench-preview.yaml"
 
@@ -548,6 +779,34 @@ class FakePreviewRuntime:
         return None
 
 
+class FakeScissorContext:
+    """Small context double for scoped scissor tests."""
+
+    def __init__(self) -> None:
+        self.scissor: tuple[int, int, int, int] | None = None
+
+
+class _FramebufferReader(Protocol):
+    """Subset of Arcade framebuffer behavior used by the scissor regression test."""
+
+    def use(self) -> None:
+        """Bind the framebuffer."""
+
+        ...
+
+    def read(
+        self,
+        *,
+        viewport: tuple[int, int, int, int],
+        components: int,
+        attachment: int,
+        dtype: str,
+    ) -> bytes:
+        """Read raw framebuffer bytes."""
+
+        ...
+
+
 def _codes(result: HudCompositionValidationResult) -> set[str]:
     return {diagnostic.code for diagnostic in result.diagnostics}
 
@@ -581,6 +840,18 @@ def _panel_for_text(
     return max(containing_panels, key=lambda panel: _polygon_left(panel))
 
 
+def _square_panel(primitives: tuple[object, ...], *, size: float) -> PolygonPrimitive:
+    matches = [
+        primitive
+        for primitive in primitives
+        if type(primitive) is PolygonPrimitive
+        and _polygon_right(primitive) - _polygon_left(primitive) == size
+        and _polygon_top(primitive) - _polygon_bottom(primitive) == size
+    ]
+    assert len(matches) == 1
+    return matches[0]
+
+
 def _polygon_left(primitive: PolygonPrimitive) -> float:
     return min(point[0] for point in primitive.points)
 
@@ -595,3 +866,8 @@ def _polygon_top(primitive: PolygonPrimitive) -> float:
 
 def _polygon_bottom(primitive: PolygonPrimitive) -> float:
     return min(point[1] for point in primitive.points)
+
+
+def _pixel(rgba: bytes, *, x: int, y: int) -> tuple[int, int, int, int]:
+    index = ((y * 64) + x) * 4
+    return (rgba[index], rgba[index + 1], rgba[index + 2], rgba[index + 3])

@@ -16,6 +16,9 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     component_allowed_attributes,
     known_data_refs,
     known_icon_ids,
+    parse_overflow_policy,
+    parse_size_spec,
+    parse_status_chip_shape,
     widget_type_from_string,
 )
 from warhammer40k_arcade_ui.preferences.schema import JsonObject, JsonValue, UiPreferences
@@ -40,6 +43,9 @@ _VALID_ORIENTATIONS = frozenset(("vertical", "horizontal"))
 _VALID_ALIGNMENTS = frozenset(("start", "center", "end", "stretch"))
 _VALID_LAYOUT_PRESETS = frozenset(("compass_ring", "command_bench"))
 _FORBIDDEN_INCLUDE_KEYS = frozenset(("include", "includes", "template", "templates"))
+_SIZE_ATTRIBUTES = frozenset(
+    ("width", "height", "min_width", "max_width", "min_height", "max_height")
+)
 _BUILTIN_COMPOSITION_PROFILES = {
     "default-hud": "hud/default-hud.yaml",
     "command-bench-hud": "hud/command-bench-hud.yaml",
@@ -513,7 +519,16 @@ def _parse_attributes(
                 )
             )
             continue
-        attributes[key] = _json_safe_value(value, f"{field}.{key}", diagnostics)
+        safe_value = _json_safe_value(value, f"{field}.{key}", diagnostics)
+        _validate_attribute_value(
+            key=key,
+            value=safe_value,
+            field=f"{field}.{key}",
+            widget_type=widget_type,
+            diagnostics=diagnostics,
+        )
+        attributes[key] = safe_value
+    _validate_size_constraints(attributes, field, diagnostics)
     return attributes
 
 
@@ -595,6 +610,153 @@ def _parse_layout(
         gap_px=_optional_float(section, "gap_px", default=8.0),
         padding_px=_optional_float(section, "padding_px", default=8.0),
         alignment=layout_alignment,
+    )
+
+
+def _validate_attribute_value(
+    *,
+    key: str,
+    value: JsonValue,
+    field: str,
+    widget_type: HudWidgetType,
+    diagnostics: list[HudCompositionDiagnostic],
+) -> None:
+    if key in _SIZE_ATTRIBUTES:
+        try:
+            parse_size_spec(value)
+        except ValueError as exc:
+            diagnostics.append(
+                _diagnostic(
+                    severity="error",
+                    code="invalid_size_spec",
+                    field=field,
+                    message=str(exc),
+                    value=repr(value),
+                )
+            )
+    elif key == "aspect_ratio":
+        _validate_aspect_ratio(value=value, field=field, diagnostics=diagnostics)
+    elif key == "overflow":
+        try:
+            parse_overflow_policy(value)
+        except ValueError as exc:
+            diagnostics.append(
+                _diagnostic(
+                    severity="error",
+                    code="invalid_overflow_policy",
+                    field=field,
+                    message=str(exc),
+                    value=repr(value),
+                )
+            )
+    elif key == "shape" and widget_type == "StatusChip":
+        try:
+            parse_status_chip_shape(value)
+        except ValueError as exc:
+            diagnostics.append(
+                _diagnostic(
+                    severity="error",
+                    code="invalid_status_chip_shape",
+                    field=field,
+                    message=str(exc),
+                    value=repr(value),
+                )
+            )
+    elif key in ("text", "icons", "slots") and type(value) is not dict:
+        diagnostics.append(
+            _diagnostic(
+                severity="error",
+                code="invalid_widget_mapping",
+                field=field,
+                message=f"{key} must be an object.",
+                value=repr(value),
+            )
+        )
+
+
+def _validate_size_constraints(
+    attributes: JsonObject,
+    field: str,
+    diagnostics: list[HudCompositionDiagnostic],
+) -> None:
+    _validate_size_constraint_pair(
+        attributes,
+        min_key="min_width",
+        max_key="max_width",
+        field=field,
+        diagnostics=diagnostics,
+    )
+    _validate_size_constraint_pair(
+        attributes,
+        min_key="min_height",
+        max_key="max_height",
+        field=field,
+        diagnostics=diagnostics,
+    )
+
+
+def _validate_size_constraint_pair(
+    attributes: JsonObject,
+    *,
+    min_key: str,
+    max_key: str,
+    field: str,
+    diagnostics: list[HudCompositionDiagnostic],
+) -> None:
+    min_value = _pixel_size_value(attributes.get(min_key))
+    max_value = _pixel_size_value(attributes.get(max_key))
+    if min_value is None or max_value is None or min_value <= max_value:
+        return
+    diagnostics.append(
+        _diagnostic(
+            severity="error",
+            code="invalid_size_constraint",
+            field=field,
+            message=f"{min_key} must not be greater than {max_key}.",
+            value=f"{min_value} > {max_value}",
+        )
+    )
+
+
+def _pixel_size_value(value: JsonValue | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        spec = parse_size_spec(value)
+    except ValueError:
+        return None
+    if spec.unit != "px":
+        return None
+    return spec.value
+
+
+def _validate_aspect_ratio(
+    *,
+    value: JsonValue,
+    field: str,
+    diagnostics: list[HudCompositionDiagnostic],
+) -> None:
+    if (type(value) is int or type(value) is float) and float(value) > 0.0:
+        return
+    if type(value) is str:
+        parts = value.split(":", maxsplit=1)
+        if len(parts) == 2:
+            try:
+                first = float(parts[0])
+                second = float(parts[1])
+            except ValueError:
+                first = 0.0
+                second = 0.0
+            if first > 0.0 and second > 0.0:
+                return
+    diagnostics.append(
+        _diagnostic(
+            severity="error",
+            code="invalid_aspect_ratio",
+            field=field,
+            message="aspect_ratio must be a positive number or ratio string like 1:1.",
+            value=repr(value),
+        )
     )
 
 

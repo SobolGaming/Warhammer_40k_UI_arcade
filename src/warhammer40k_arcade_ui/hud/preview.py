@@ -27,6 +27,7 @@ from warhammer40k_arcade_ui.render.primitives import (
     RenderPrimitive,
     TextPrimitive,
 )
+from warhammer40k_arcade_ui.render.scissor import ScissorContext, scoped_scissor
 
 DEFAULT_PREVIEW_WIDTH_PX = 1280
 DEFAULT_PREVIEW_HEIGHT_PX = 800
@@ -254,55 +255,68 @@ def _draw_primitives(arcade_runtime: object, primitives: tuple[RenderPrimitive, 
         getattr(arcade_runtime, "draw_line"),  # noqa: B009
     )
     draw_text = cast(Callable[..., None], getattr(arcade_runtime, "draw_text"))  # noqa: B009
+    ctx = _arcade_context(arcade_runtime)
     for primitive in primitives:
-        if type(primitive) is PolygonPrimitive:
-            if primitive.fill_color[3] > 0:
-                draw_polygon_filled(primitive.points, primitive.fill_color)
-            if primitive.outline_color[3] > 0 and primitive.line_width > 0.0:
-                draw_polygon_outline(
-                    primitive.points,
-                    primitive.outline_color,
-                    primitive.line_width,
-                )
-        elif type(primitive) is CirclePrimitive:
-            center_x, center_y = primitive.center
-            if primitive.fill_color[3] > 0:
-                draw_circle_filled(
-                    center_x,
-                    center_y,
-                    primitive.radius,
-                    primitive.fill_color,
-                )
-            if primitive.outline_color[3] > 0 and primitive.line_width > 0.0:
-                draw_circle_outline(
-                    center_x,
-                    center_y,
-                    primitive.radius,
-                    primitive.outline_color,
-                    primitive.line_width,
-                )
-        elif type(primitive) is PolylinePrimitive:
-            for index in range(len(primitive.points) - 1):
-                start = primitive.points[index]
-                end = primitive.points[index + 1]
-                draw_line(
-                    start[0],
-                    start[1],
-                    end[0],
-                    end[1],
+        with scoped_scissor(ctx, primitive.clip_rect):
+            if type(primitive) is PolygonPrimitive:
+                if primitive.fill_color[3] > 0:
+                    draw_polygon_filled(primitive.points, primitive.fill_color)
+                if primitive.outline_color[3] > 0 and primitive.line_width > 0.0:
+                    draw_polygon_outline(
+                        primitive.points,
+                        primitive.outline_color,
+                        primitive.line_width,
+                    )
+            elif type(primitive) is CirclePrimitive:
+                center_x, center_y = primitive.center
+                if primitive.fill_color[3] > 0:
+                    draw_circle_filled(
+                        center_x,
+                        center_y,
+                        primitive.radius,
+                        primitive.fill_color,
+                    )
+                if primitive.outline_color[3] > 0 and primitive.line_width > 0.0:
+                    draw_circle_outline(
+                        center_x,
+                        center_y,
+                        primitive.radius,
+                        primitive.outline_color,
+                        primitive.line_width,
+                    )
+            elif type(primitive) is PolylinePrimitive:
+                for index in range(len(primitive.points) - 1):
+                    start = primitive.points[index]
+                    end = primitive.points[index + 1]
+                    draw_line(
+                        start[0],
+                        start[1],
+                        end[0],
+                        end[1],
+                        primitive.color,
+                        primitive.line_width,
+                    )
+            elif type(primitive) is TextPrimitive:
+                draw_text(
+                    primitive.text,
+                    primitive.position[0],
+                    primitive.position[1],
                     primitive.color,
-                    primitive.line_width,
+                    font_size=primitive.font_size,
+                    anchor_x=primitive.anchor_x,
+                    anchor_y=primitive.anchor_y,
                 )
-        elif type(primitive) is TextPrimitive:
-            draw_text(
-                primitive.text,
-                primitive.position[0],
-                primitive.position[1],
-                primitive.color,
-                font_size=primitive.font_size,
-                anchor_x=primitive.anchor_x,
-                anchor_y=primitive.anchor_y,
-            )
+
+
+def _arcade_context(arcade_runtime: object) -> ScissorContext | None:
+    get_window = getattr(arcade_runtime, "get_window", None)
+    if not callable(get_window):
+        return None
+    window = get_window()
+    ctx = getattr(window, "ctx", None)
+    if ctx is None or not hasattr(ctx, "scissor"):
+        return None
+    return cast(ScissorContext, ctx)
 
 
 def _write_artifacts(

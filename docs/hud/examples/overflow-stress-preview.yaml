@@ -1,0 +1,78 @@
+schema_version: 1
+profile_id: overflow_stress_preview
+layout_preset: command_bench
+theme: default
+sample_data:
+  hud.status_chips.phase:
+    label: Movement phase with deliberately long label
+    value: Player command step
+  hud.status_chips.active_player:
+    label: Active player
+    value: player-alpha-with-a-very-long-identifier
+  hud.workbench.actions:
+    label: submit_melee_declaration_with_excessively_long_contract_name
+    summary: >
+      This row intentionally contains a long summary so preview users can verify
+      clipping, ellipsis, and shrink-to-fit behavior without launching a game.
+  hud.workbench.assignments.groups:
+    label: assignment-group-00000000000000000001
+    summary: >
+      Five models assigned to a target unit with a long generated identifier and
+      a future weapon profile name that should never spill into another panel.
+regions:
+  top_ribbon:
+    widget:
+      type: HudContainer
+      id: overflow_stress_top_ribbon
+      render_mode: panel
+      layout: {kind: stack, orientation: horizontal, gap_px: 10, padding_px: 10}
+      children:
+      - type: StatusChip
+        id: round_phase_chip
+        data_ref: hud.status_chips.phase
+        icon_id: phase.command
+        label: Phase
+        shape: {shape: round, diameter_px: 48}
+        width: 48px
+        height: 48px
+      - type: StatusChip
+        id: square_active_player_chip
+        data_ref: hud.status_chips.active_player
+        icon_id: status.active
+        label: Active
+        shape: {shape: square, size_px: 52, corner_radius_px: 4}
+        width: 52px
+        height: 52px
+      - type: IconTextBar
+        id: long_pending_action_status
+        data_ref: hud.workbench.actions
+        icon_id: decision.melee
+        primary_label: submit_melee_declaration_with_excessively_long_contract_name
+        secondary_label: Preview only until submitted; should ellipsize.
+        width: fill
+        min_width: 220px
+        overflow: {mode: ellipsis, max_lines: 2}
+  bottom_command_bench:
+    widget:
+      type: HudContainer
+      id: overflow_stress_workbench
+      render_mode: panel
+      layout: {kind: stack, orientation: horizontal, gap_px: 10, padding_px: 10}
+      children:
+      - type: AssignmentGroupRow
+        id: long_assignment_group_row
+        data_ref: hud.workbench.assignments.groups
+        group_label: assignment-group-00000000000000000001
+        operation_kind: movement
+        width: 2fr
+        min_width: 260px
+        overflow: {mode: ellipsis, max_lines: 2}
+      - type: Tooltip
+        id: long_diagnostic_tooltip
+        title: Invalid diagnostic
+        body: >
+          invalid_parameterized_payload_field_with_a_very_long_name [field.path.to.deep.value]:
+          this diagnostic intentionally stresses wrapping and clipping.
+        width: 1fr
+        min_width: 220px
+        overflow: {mode: clip}

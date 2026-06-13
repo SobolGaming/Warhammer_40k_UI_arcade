@@ -63,6 +63,7 @@ class PolygonPrimitive:
     outline_color: Color
     line_width: float
     coordinate_space: CoordinateSpace = "world"
+    clip_rect: ScreenRect | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +77,7 @@ class CirclePrimitive:
     outline_color: Color
     line_width: float
     coordinate_space: CoordinateSpace = "world"
+    clip_rect: ScreenRect | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +89,7 @@ class PolylinePrimitive:
     color: Color
     line_width: float
     coordinate_space: CoordinateSpace = "world"
+    clip_rect: ScreenRect | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +104,7 @@ class TextPrimitive:
     coordinate_space: CoordinateSpace
     anchor_x: Literal["left", "center", "right"] = "left"
     anchor_y: Literal["baseline", "center", "top"] = "baseline"
+    clip_rect: ScreenRect | None = None
 
 
 def build_world_primitives(

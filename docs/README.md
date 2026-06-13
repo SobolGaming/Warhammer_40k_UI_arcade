@@ -10,6 +10,8 @@ plans separate from engine/core documentation.
 - `protocol-notes.md` — future UI-facing notes about the engine adapter/session protocol.
 - `movement-ui-flow.md` — future detailed movement interaction flow.
 - `ui-configuration.md` — Phase 4 notes for the shareable UI preferences framework.
+- `hud-customization.md` — user-level guide for HUD zones, composition files, widgets, bindings,
+  sizing, overflow, and shape customization.
 - `preferences/` — documented portable example profiles for the default, dense-debug,
   keyboard-heavy, and command-bench configurations.
 - `hud/` — Phase 19 HUD composition YAML profiles and preview-only examples for widget review.
