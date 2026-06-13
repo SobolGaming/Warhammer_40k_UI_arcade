@@ -48,6 +48,8 @@ for a numbered phase.
   plan for Charge Move proposal requests after charge roll resolution.
 - [Fight order UI](preliminary-fight-order-ui.md) - preliminary future plan for richer finite
   Fight phase activation and interrupt presentation.
+- [Dice tray and roll workbench](preliminary-dice-tray-and-roll-workbench.md) - preliminary future
+  plan for engine-owned dice result display, legal reroll selection, and whole-game roll workflow.
 - [Shooting declaration assignment tool](preliminary-shooting-declaration-assignment-tool.md) -
   preliminary future plan for model/weapon-to-target assignment.
 - [Stratagem target-binding assignment tool](preliminary-stratagem-target-binding-tool.md) -
