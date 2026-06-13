@@ -305,6 +305,51 @@ def test_missing_movement_proposal_unit_is_loud_projection_diagnostic() -> None:
     assert assignment_panel.diagnostic_lines == movement_panel.diagnostic_lines
 
 
+def test_missing_movement_mode_context_is_loud_assignment_diagnostic() -> None:
+    view = default_battlefield_view()
+    decision = _movement_proposal_decision(
+        context={
+            "source_selected_option_id": "normal_move",
+            "movement_budget_inches": 6.0,
+        },
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+
+    movement_panel = build_movement_draft_panel(
+        movement_draft=draft,
+        pending_decision=decision,
+        view=view,
+    )
+    assignment_panel = build_assignment_hud_panel(
+        movement_draft=draft,
+        pending_decision=decision,
+        view=view,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=default_preferences(),
+        preference_source_label="default.yaml",
+        debug_visible=False,
+    )
+
+    assert draft is None
+    assert movement_panel is not None
+    assert movement_panel.status_line == "Movement proposal context incomplete"
+    assert movement_panel.diagnostic_lines == (
+        "movement_mode_missing_from_proposal_context [context.movement_mode]: "
+        "Movement proposal context is missing required movement_mode for normal_move; "
+        "local draft submission is blocked.",
+    )
+    assert assignment_panel is not None
+    assert assignment_panel.readiness_state == "invalid"
+    assert assignment_panel.groups[0].label == "Movement proposal context incomplete"
+    assert assignment_panel.groups[0].source_ref_keys == ("unit:intercessor_squad",)
+    assert assignment_panel.diagnostic_lines == movement_panel.diagnostic_lines
+
+
 def test_assignment_hud_shows_ready_movement_groups_and_refs() -> None:
     view = default_battlefield_view()
     preferences = default_preferences()
@@ -502,7 +547,19 @@ def _finite_decision_for(unit_id: str) -> UiDecision:
     )
 
 
-def _movement_proposal_decision(unit_id: str = "intercessor_squad") -> UiDecision:
+def _movement_proposal_decision(
+    unit_id: str = "intercessor_squad",
+    context: dict[str, object] | None = None,
+) -> UiDecision:
+    proposal_context = (
+        {
+            "source_selected_option_id": "normal_move",
+            "movement_mode": "normal",
+            "movement_budget_inches": 6.0,
+        }
+        if context is None
+        else context
+    )
     return UiDecision.from_payload(
         {
             "request_id": "decision-request-000005",
@@ -522,11 +579,7 @@ def _movement_proposal_decision(unit_id: str = "intercessor_squad") -> UiDecisio
                     "source_decision_result_id": "ui-result-000001",
                     "movement_phase_action": "normal_move",
                     "placement_kinds": [],
-                    "context": {
-                        "source_selected_option_id": "normal_move",
-                        "movement_mode": "normal",
-                        "movement_budget_inches": 6.0,
-                    },
+                    "context": proposal_context,
                 }
             },
             "is_parameterized": True,

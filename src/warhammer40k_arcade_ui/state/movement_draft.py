@@ -38,6 +38,21 @@ class MovementDraftError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class MovementProposalContextDiagnostic:
+    """Typed diagnostic for missing adapter-visible movement proposal context."""
+
+    violation_code: str
+    field: str
+    message: str
+
+    @property
+    def line(self) -> str:
+        """Return a compact HUD diagnostic line."""
+
+        return f"{self.violation_code} [{self.field}]: {self.message}"
+
+
+@dataclass(frozen=True, slots=True)
 class MovementModelPath:
     """Path points for one model in a local movement draft."""
 
@@ -232,6 +247,14 @@ class MovementDraft:
             "fall_back_mode",
             _optional_string("fall_back_mode", self.fall_back_mode),
         )
+        context_diagnostic = _movement_context_diagnostic(
+            proposal_kind=self.proposal_kind,
+            movement_phase_action=self.movement_phase_action,
+            movement_mode=self.movement_mode,
+            fall_back_mode=self.fall_back_mode,
+        )
+        if context_diagnostic is not None:
+            raise MovementDraftError(context_diagnostic.message)
         object.__setattr__(
             self,
             "source_decision_request_id",
@@ -303,6 +326,10 @@ class MovementDraft:
             return None
         if proposal.movement_phase_action is None:
             raise MovementDraftError("Movement proposal requires movement_phase_action.")
+        movement_mode = _context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY)
+        fall_back_mode = _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY)
+        if movement_proposal_context_diagnostic(proposal) is not None:
+            return None
         entity_selection = _seed_entity_selection(
             view=view,
             selection=selection,
@@ -314,8 +341,8 @@ class MovementDraft:
             proposal_request_id=proposal.request_id,
             proposal_kind=proposal.proposal_kind,
             movement_phase_action=proposal.movement_phase_action,
-            movement_mode=_context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY),
-            fall_back_mode=_context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY),
+            movement_mode=movement_mode,
+            fall_back_mode=fall_back_mode,
             source_decision_request_id=proposal.source_decision_request_id,
             source_decision_result_id=proposal.source_decision_result_id,
             mode="model_assignments",
@@ -740,6 +767,7 @@ class MovementDraft:
             "proposal_kind": self.proposal_kind,
             "unit_instance_id": self.selected_unit_id,
             "movement_phase_action": self.movement_phase_action,
+            "movement_mode": _non_empty_string("movement_mode", self.movement_mode),
             "witness": {
                 "model_paths": [
                     {
@@ -758,9 +786,12 @@ class MovementDraft:
                 for path in self.model_paths
             ],
         }
-        if self.movement_mode is not None:
-            body["movement_mode"] = self.movement_mode
-        if self.fall_back_mode is not None:
+        if _requires_fall_back_mode(
+            proposal_kind=self.proposal_kind,
+            movement_phase_action=self.movement_phase_action,
+        ):
+            body["fall_back_mode"] = _non_empty_string("fall_back_mode", self.fall_back_mode)
+        elif self.fall_back_mode is not None:
             body["fall_back_mode"] = self.fall_back_mode
         return _json_object("movement proposal payload", body)
 
@@ -823,9 +854,33 @@ def movement_proposal_for_selected_unit(
         return None
     if proposal.proposal_kind not in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS:
         return None
+    if movement_proposal_context_diagnostic(proposal) is not None:
+        return None
     if proposal.unit_instance_id != selection.selected_unit_id:
         return None
     return proposal
+
+
+def movement_proposal_context_diagnostic(
+    proposal: UiMovementProposalRequest,
+) -> MovementProposalContextDiagnostic | None:
+    """Return a typed diagnostic when movement proposal mode context is incomplete."""
+
+    return _movement_context_diagnostic(
+        proposal_kind=proposal.proposal_kind,
+        movement_phase_action=proposal.movement_phase_action,
+        movement_mode=_context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY),
+        fall_back_mode=_context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY),
+    )
+
+
+def movement_proposal_context_diagnostic_line(
+    proposal: UiMovementProposalRequest,
+) -> str | None:
+    """Return a compact diagnostic line for incomplete movement proposal context."""
+
+    diagnostic = movement_proposal_context_diagnostic(proposal)
+    return None if diagnostic is None else diagnostic.line
 
 
 def _draftable_movement_proposal(
@@ -838,7 +893,51 @@ def _draftable_movement_proposal(
         return None
     if proposal.proposal_kind not in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS:
         return None
+    if movement_proposal_context_diagnostic(proposal) is not None:
+        return None
     return proposal
+
+
+def _movement_context_diagnostic(
+    *,
+    proposal_kind: str,
+    movement_phase_action: str | None,
+    movement_mode: str | None,
+    fall_back_mode: str | None,
+) -> MovementProposalContextDiagnostic | None:
+    if proposal_kind in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS and movement_mode is None:
+        return MovementProposalContextDiagnostic(
+            violation_code="movement_mode_missing_from_proposal_context",
+            field=f"context.{MOVEMENT_MODE_CONTEXT_KEY}",
+            message=(
+                "Movement proposal context is missing required movement_mode for "
+                f"{proposal_kind}; local draft submission is blocked."
+            ),
+        )
+    if (
+        _requires_fall_back_mode(
+            proposal_kind=proposal_kind,
+            movement_phase_action=movement_phase_action,
+        )
+        and fall_back_mode is None
+    ):
+        return MovementProposalContextDiagnostic(
+            violation_code="fall_back_mode_missing_from_proposal_context",
+            field=f"context.{FALL_BACK_MODE_CONTEXT_KEY}",
+            message=(
+                "Fall Back movement proposal context is missing required fall_back_mode; "
+                "local draft submission is blocked."
+            ),
+        )
+    return None
+
+
+def _requires_fall_back_mode(
+    *,
+    proposal_kind: str,
+    movement_phase_action: str | None,
+) -> bool:
+    return proposal_kind == "fall_back" or movement_phase_action == "fall_back"
 
 
 def _unit_by_id(view: BattlefieldView, unit_id: str) -> UnitView | None:

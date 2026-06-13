@@ -297,6 +297,8 @@ def _is_warning_assignment_advisory(line: str) -> bool:
         or "unsupported" in lower_line
         or "projection/request drift" in lower_line
         or "missing from this viewer projection" in lower_line
+        or "mode context" in lower_line
+        or "submission is blocked" in lower_line
     )
 
 
@@ -308,6 +310,8 @@ def _assignment_notice_label(line: str) -> str:
         or "missing from this viewer projection" in line.lower()
     ):
         return "Projection drift"
+    if "mode context" in line.lower():
+        return "Context missing"
     return "Advisory"
 
 

@@ -230,6 +230,51 @@ def test_fall_back_payload_preserves_engine_issued_mode_context() -> None:
     assert payload["fall_back_mode"] == "desperate_escape"
 
 
+def test_missing_movement_mode_context_blocks_movement_draft() -> None:
+    view = default_battlefield_view()
+    decision = _movement_proposal_decision(
+        context={
+            "source_selected_option_id": "normal_move",
+            "movement_budget_inches": 6.0,
+        },
+    )
+
+    proposal = movement_proposal_for_selected_unit(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+
+    assert proposal is None
+    assert draft is None
+
+
+def test_fall_back_missing_fall_back_mode_context_blocks_movement_draft() -> None:
+    view = default_battlefield_view()
+    decision = _movement_proposal_decision(
+        proposal_kind="fall_back",
+        movement_phase_action="fall_back",
+        context={
+            "source_selected_option_id": "fall_back:desperate_escape",
+            "movement_mode": "fall_back",
+            "movement_budget_inches": 6.0,
+        },
+    )
+
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+
+    assert draft is None
+
+
 def test_request_drift_starts_new_draft_without_previous_assignments() -> None:
     view = default_battlefield_view()
     selection = _selected_intercessors()
