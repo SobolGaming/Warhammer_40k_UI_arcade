@@ -11,7 +11,6 @@ import pytest
 from warhammer40k_arcade_ui.core_client.protocol import (
     UiDecision,
     UiFiniteOption,
-    UiInvalidDiagnostic,
 )
 from warhammer40k_arcade_ui.hud.action_summary import (
     ActionVisualSummary,
@@ -20,12 +19,7 @@ from warhammer40k_arcade_ui.hud.action_summary import (
 )
 from warhammer40k_arcade_ui.hud.layouts import build_hud_layout
 from warhammer40k_arcade_ui.hud.view_models import (
-    build_assignment_hud_panel,
     build_context_menu,
-    build_debug_inspector,
-    build_finite_decision_panel,
-    build_movement_draft_panel,
-    build_unit_panel,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
@@ -199,7 +193,7 @@ def test_action_visual_summary_review_mode_labels_are_capped() -> None:
     assert review_labels == ["first"]
 
 
-def test_hud_primitives_are_screen_space_and_include_mouse_coordinates() -> None:
+def test_hud_primitives_are_screen_space_and_include_mouse_coordinates_only() -> None:
     payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     view = BattlefieldView.from_payload(payload)
 
@@ -211,10 +205,7 @@ def test_hud_primitives_are_screen_space_and_include_mouse_coordinates() -> None
     )
 
     assert all(primitive.coordinate_space == "screen" for primitive in primitives)
-    text_primitives = _text_primitives(primitives)
-    assert text_primitives[0].position == (16.0, 776.0)
-    assert "Pending: Select movement action" in _text_lines(primitives)
-    assert "Mouse: 12.35, 22.00 in" in _text_lines(primitives)
+    assert _text_lines(primitives) == ["Mouse: 12.35, 22.00 in"]
 
 
 def test_hud_layout_primitives_include_configurable_zone_skeleton() -> None:
@@ -243,7 +234,6 @@ def test_hud_layout_primitives_include_configurable_zone_skeleton() -> None:
     assert "hud_zone_left_rail" in polygon_layers
     assert "hud_zone_right_inspector" in polygon_layers
     assert "hud_zone_bottom_workbench" in polygon_layers
-    assert "HUD layout: Compass Ring" in texts
     assert "Action workbench [open]" in texts
     assert all(primitive.coordinate_space == "screen" for primitive in primitives)
 
@@ -277,7 +267,7 @@ def test_hud_layout_labels_remain_primitives_when_widget_shell_is_active() -> No
     assert "Action workbench [open]" in texts
 
 
-def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> None:
+def test_hud_primitives_include_context_menu_without_legacy_panels() -> None:
     payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     view = BattlefieldView.from_payload(payload)
     preferences = default_preferences()
@@ -307,214 +297,19 @@ def test_hud_primitives_include_selection_panel_menu_and_debug_inspector() -> No
         viewport_width_px=1280,
         viewport_height_px=800,
         mouse_world_position=(7.0, 18.0),
-        unit_panel=build_unit_panel(
-            view=view,
-            selection=selection,
-            pending_decision=decision,
-            highlighted_option_id="normal_move",
-        ),
         context_menu=build_context_menu(
             view=view,
             selection=selection,
             pending_decision=decision,
         ),
-        finite_decision_panel=build_finite_decision_panel(
-            pending_decision=decision,
-            highlighted_option_index=0,
-            status_message="Waiting: select_movement_action",
-            diagnostics=(),
-        ),
-        movement_draft_panel=build_movement_draft_panel(
-            movement_draft=None,
-            pending_decision=None,
-        ),
-        debug_inspector=build_debug_inspector(
-            selection=selection,
-            pending_decision=decision,
-            cursor_position=(7.0, 18.0),
-            event_cursor=3,
-            preference_source_label="built-in default",
-        ),
     )
 
     texts = _text_lines(primitives)
-    assert "Unit: Intercessors" in texts
-    assert "Action: > Normal Move <" in texts
     assert "Actions: intercessor_squad" in texts
-    assert "Decision" in texts
-    assert "> Normal Move [normal_move]" in texts
-    assert "Debug inspector" in texts
-    assert "UI prefs: built-in default" in texts
-
-
-def test_hud_primitives_include_movement_draft_panel() -> None:
-    view = default_battlefield_view()
-    preferences = default_preferences()
-    selection = SelectionState.initial(preferences).select_at(
-        view=view,
-        world_point=(7.0, 18.0),
-        preferences=preferences,
-    )
-    draft = MovementDraft.start_for_pending(
-        view=view,
-        selection=selection,
-        pending_decision=_movement_proposal_decision(),
-    )
-    assert draft is not None
-    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
-
-    primitives = build_hud_primitives(
-        view=view,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-        mouse_world_position=(10.0, 22.0),
-        movement_draft_panel=build_movement_draft_panel(
-            movement_draft=draft,
-            pending_decision=_movement_proposal_decision(),
-        ),
-    )
-
-    texts = _text_lines(primitives)
-    assert "Movement draft" in texts
-    assert "Payload preview: ready" in texts
-    assert "Mode: normal" in texts
-    assert "Active models: intercessor_1" in texts
-    assert "Assignments: 1/3 moved, 2 no-op" in texts
-    assert "Synthetic witness: 1 midpoint(s)" in texts
-    assert "Witness: intercessor_1: 3 witness point(s), synthetic midpoint" in texts
-
-
-def test_hud_primitives_include_assignment_review_panel() -> None:
-    view = default_battlefield_view()
-    preferences = default_preferences()
-    selection = SelectionState.initial(preferences).select_at(
-        view=view,
-        world_point=(7.0, 18.0),
-        preferences=preferences,
-    )
-    draft = MovementDraft.start_for_pending(
-        view=view,
-        selection=selection,
-        pending_decision=_movement_proposal_decision(),
-    )
-    assert draft is not None
-    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
-
-    primitives = build_hud_primitives(
-        view=view,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-        mouse_world_position=None,
-        assignment_hud_panel=build_assignment_hud_panel(
-            movement_draft=draft,
-            pending_decision=_movement_proposal_decision(),
-            highlighted_option_index=0,
-            diagnostics=(),
-            preferences=preferences,
-            preference_source_label="default.yaml",
-            debug_visible=True,
-            event_log_lines=("movement_proposal_submitted", "movement_proposal_accepted"),
-        ),
-    )
-
-    texts = _text_lines(primitives)
-    assert "Assignment review" in texts
-    assert "Operation: movement" in texts
-    assert "Ready: ready" in texts
-    assert "Proposal: normal_move" in texts
-    assert "> assignment-group-000001: 1 model(s)" in texts
-    assert "- No-op ready: 2 model(s)" in texts
-    assert any("synthetic midpoint witness evidence" in text for text in texts)
-    assert "Chain: movement_proposal_submitted" in texts
-    assert "Chain: movement_proposal_accepted" in texts
-    assert "UI prefs: default.yaml" in texts
-    assert all(
-        primitive.coordinate_space == "screen"
-        for primitive in primitives
-        if primitive.layer == "assignment_hud_panel"
-    )
-
-
-def test_assignment_review_panel_is_clipped_inside_layout_region() -> None:
-    view = default_battlefield_view()
-    preferences = default_preferences()
-    layout = build_hud_layout(
-        preferences=preferences,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-    )
-    selection = SelectionState.initial(preferences).select_at(
-        view=view,
-        world_point=(7.0, 18.0),
-        preferences=preferences,
-    )
-    draft = MovementDraft.start_for_pending(
-        view=view,
-        selection=selection,
-        pending_decision=_movement_proposal_decision(),
-    )
-    assert draft is not None
-    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
-
-    primitives = build_hud_primitives(
-        view=view,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-        mouse_world_position=None,
-        assignment_hud_panel=build_assignment_hud_panel(
-            movement_draft=draft,
-            pending_decision=_movement_proposal_decision(),
-            highlighted_option_index=0,
-            diagnostics=(),
-            preferences=preferences,
-            preference_source_label="default.yaml",
-            debug_visible=True,
-            event_log_lines=tuple(f"event-{index}" for index in range(20)),
-        ),
-        hud_layout=layout,
-    )
-
-    assignment_texts = [
-        primitive.text
-        for primitive in _text_primitives(primitives)
-        if primitive.layer == "assignment_hud_panel"
-    ]
-    bottom_workbench = layout.region("bottom_workbench")
-    assert bottom_workbench is not None
-    assert len(assignment_texts) <= bottom_workbench.rect.line_capacity(
-        line_height_px=15.5,
-        top_padding_px=38.0,
-    )
-    assert any(text.startswith("... ") for text in assignment_texts)
-
-
-def test_movement_draft_panel_renders_invalid_diagnostic_lines() -> None:
-    view = default_battlefield_view()
-
-    primitives = build_hud_primitives(
-        view=view,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-        mouse_world_position=None,
-        movement_draft_panel=build_movement_draft_panel(
-            movement_draft=None,
-            pending_decision=None,
-            status_message="Movement proposal is invalid.",
-            diagnostics=(
-                UiInvalidDiagnostic(
-                    violation_code="proposal_payload_missing_field",
-                    message="Proposal payload missing required field.",
-                    field="witness",
-                ),
-            ),
-        ),
-    )
-
-    texts = _text_lines(primitives)
-    assert (
-        "Invalid: proposal_payload_missing_field [witness]: "
-        "Proposal payload missing required field."
-    ) in texts
+    assert "Normal Move" in texts
+    assert "Unit: Intercessors" not in texts
+    assert "Decision" not in texts
+    assert "Debug inspector" not in texts
 
 
 def test_battlefield_view_refreshes_matching_core_runtime_model_positions() -> None:
