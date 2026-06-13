@@ -23,6 +23,9 @@ def test_local_session_submit_finite_rejects_stale_explicit_request_id() -> None
     assert status.invalid_diagnostics[0].violation_code == "stale_request_id"
     assert status.decision is not None
     assert status.decision.request_id == "decision-request-000004"
+    assert isinstance(status.payload, dict)
+    assert status.payload["submitted_request_id"] == "decision-request-stale"
+    assert status.payload["queue_head_request_id"] == "decision-request-000004"
     assert client.session.lifecycle.decision_controller.queue.pending_requests[0].request_id == (
         "decision-request-000004"
     )
@@ -52,6 +55,30 @@ def test_local_session_submit_finite_rejects_non_pending_option_id() -> None:
     assert status.status_kind == "invalid"
     assert status.invalid_diagnostics[0].violation_code == "selected_option_not_pending"
     assert status.invalid_diagnostics[0].field == "selected_option_id"
+
+
+def test_local_session_submit_finite_rejects_matching_non_head_pending_request() -> None:
+    client = LocalSessionClient(session=LocalGameSession())
+    client.session.lifecycle.decision_controller.request_decision(_finite_request())
+    client.session.lifecycle.decision_controller.request_decision(_alternate_finite_request())
+
+    status = client.submit_finite(
+        request_id="decision-request-000006",
+        selected_option_id="advance_move",
+        result_id="ui-result-000002",
+    )
+
+    assert status.status_kind == "invalid"
+    assert status.invalid_diagnostics[0].violation_code == "non_head_pending_request"
+    assert status.invalid_diagnostics[0].field == "request_id"
+    assert status.decision is not None
+    assert status.decision.request_id == "decision-request-000004"
+    assert isinstance(status.payload, dict)
+    assert status.payload["submitted_request_id"] == "decision-request-000006"
+    assert status.payload["queue_head_request_id"] == "decision-request-000004"
+    assert client.session.lifecycle.decision_controller.queue.pending_requests[0].request_id == (
+        "decision-request-000004"
+    )
 
 
 def test_local_session_submit_movement_payload_rejects_finite_request() -> None:
@@ -85,6 +112,31 @@ def test_local_session_submit_movement_payload_rejects_stale_explicit_request_id
     assert status.decision.is_parameterized is True
     assert status.decision.movement_proposal is not None
     assert status.decision.movement_proposal.request_id == "decision-request-000005"
+    assert isinstance(status.payload, dict)
+    assert status.payload["submitted_request_id"] == "decision-request-stale"
+    assert status.payload["queue_head_request_id"] == "decision-request-000005"
+
+
+def test_local_session_submit_movement_payload_rejects_matching_non_head_request() -> None:
+    client = LocalSessionClient(session=LocalGameSession())
+    client.session.lifecycle.decision_controller.request_decision(_finite_request())
+    client.session.lifecycle.decision_controller.request_decision(_movement_proposal_request())
+
+    status = client.submit_movement_payload(
+        request_id="decision-request-000005",
+        payload={"proposal_request_id": "decision-request-000005"},
+        result_id="ui-result-000002",
+    )
+
+    assert status.status_kind == "invalid"
+    assert status.invalid_diagnostics[0].violation_code == "non_head_pending_request"
+    assert status.invalid_diagnostics[0].field == "request_id"
+    assert status.decision is not None
+    assert status.decision.request_id == "decision-request-000004"
+    assert status.decision.is_parameterized is False
+    assert isinstance(status.payload, dict)
+    assert status.payload["submitted_request_id"] == "decision-request-000005"
+    assert status.payload["queue_head_request_id"] == "decision-request-000004"
 
 
 def test_local_session_submit_movement_payload_requires_explicit_result_id() -> None:
@@ -109,6 +161,22 @@ def _finite_request() -> DecisionRequest:
                 option_id="normal_move",
                 label="Normal Move",
                 payload={"movement_phase_action": "normal_move"},
+            ),
+        ),
+    )
+
+
+def _alternate_finite_request() -> DecisionRequest:
+    return DecisionRequest(
+        request_id="decision-request-000006",
+        decision_type="select_movement_action",
+        actor_id="player-a",
+        payload={"unit_instance_id": "unit-2"},
+        options=(
+            DecisionOption(
+                option_id="advance_move",
+                label="Advance",
+                payload={"movement_phase_action": "advance_move"},
             ),
         ),
     )
