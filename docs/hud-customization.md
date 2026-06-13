@@ -76,6 +76,15 @@ The `composition_profile` value can be:
   `../hud/default-hud.yaml`;
 - an absolute path.
 
+Built-in IDs resolve to packaged resources under `warhammer40k_arcade_ui.resources`, not to the
+editable `docs/hud/` examples. For example, `composition_profile: default-hud` loads the packaged
+`hud/default-hud.yaml`. To test an edited docs file directly from `docs/preferences/default.yaml`,
+use a relative reference such as:
+
+```yaml
+composition_profile: ../hud/default-hud.yaml
+```
+
 Launch examples:
 
 ```bash
@@ -206,6 +215,10 @@ Phase 23 also reserves named HUD presentation groups for runtime view-model outp
 
 Not every reserved group is populated by every current runtime screen. The renderer treats missing
 data as absent display data, not as a gameplay fallback.
+
+The current live selected-unit datasheet binding reserves the standard stat labels `M`, `T`, `SV`,
+`W`, `LD`, and `OC`. If the engine projection does not expose those values yet, the live HUD renders
+`?` placeholders so the card keeps the same shape as previews and future real datasheets.
 
 ## Available Icons
 

@@ -149,13 +149,7 @@ def _selected_unit_data(
             "status": "",
             "stats": {},
         }
-    selected_model = _selected_model_data(rows)
-    stats: JsonObject = {}
-    model_count = _first_int(card.model_count_summary)
-    if model_count is not None:
-        stats["Models"] = model_count
-    if selected_model.get("summary"):
-        stats["Sel"] = "1"
+    stats = _unknown_datasheet_stats()
     return {
         "label": card.unit_label,
         "unit_label": card.unit_label,
@@ -305,13 +299,12 @@ def _roster_summary(selected_unit: JsonObject) -> str:
     return "Select a unit to inspect"
 
 
-def _first_int(text: str) -> int | None:
-    digits = ""
-    for character in text:
-        if character.isdigit():
-            digits += character
-        elif digits:
-            break
-    if not digits:
-        return None
-    return int(digits)
+def _unknown_datasheet_stats() -> JsonObject:
+    return {
+        "M": "?",
+        "T": "?",
+        "SV": "?",
+        "W": "?",
+        "LD": "?",
+        "OC": "?",
+    }

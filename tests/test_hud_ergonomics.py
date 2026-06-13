@@ -441,8 +441,10 @@ def test_ergonomic_hud_renders_through_configured_default_composition() -> None:
     assert not any(layer.startswith("hud_zone_") for layer in polygon_layers)
     assert "Selected Unit" in texts
     assert "Intercessors" in texts
-    assert "Models" in texts
+    assert {"M", "T", "SV", "W", "LD", "OC"}.issubset(set(texts))
+    assert "?" in texts
     assert "Current Action" in texts
+    assert any("Fixture: Command Phase" in text for text in texts)
     assert any("Movement draft ready" in text for text in texts)
     assert "Current Assignment" in texts
 
