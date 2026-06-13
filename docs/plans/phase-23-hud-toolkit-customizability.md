@@ -232,6 +232,9 @@ Expose widget-level and theme-level controls:
 - icon size;
 - icon side: left, right, both, or none;
 - icon-only chip mode;
+- status-chip shape: `round`, `square`, `rounded_rect`, or `pill`;
+- status-chip shape sizing controls such as `diameter_px`, `corner_radius_px`, and optional
+  equal-width/equal-height enforcement for round and square chips;
 - state/color-role overrides;
 - high-contrast token overrides;
 - per-widget padding and gap controls;
@@ -254,6 +257,24 @@ Support reusable slot names for compound widgets:
 - `Tooltip`: `title`, `body`, `footer`;
 
 Slots are placement hooks only. Slot YAML cannot define game semantics.
+
+### Status Chip Shape Controls
+
+Status chips need first-class shape controls because different HUD layouts may want compact circular
+badges, square command tiles, long rounded rectangles, or pill-like phase/status banners.
+
+Add a `StatusChipShape` model with:
+
+- `shape`: `round`, `square`, `rounded_rect`, or `pill`;
+- `diameter_px` for round chips;
+- `size_px` for square chips;
+- `corner_radius_px` for square and rounded-rectangle chips;
+- `preserve_aspect_ratio` to keep icon-only round/square chips from stretching inside flex layouts;
+- `content_alignment` for icon/label/value placement inside non-rectangular chips.
+
+Round and square status chips should remain normal toolkit widgets. They may display an icon only or
+an icon plus short text if space allows, but their shape must not imply status semantics. The view
+model still provides the same chip label, value, icon token, and color role.
 
 ## YAML Dialect Target
 
@@ -286,6 +307,35 @@ text:
   value_font_size_px: 12
 icons:
   default: action.movement
+```
+
+And compact status chips like this:
+
+```yaml
+type: StatusChip
+id: command_phase_badge
+data_ref: hud.status_chips.phase
+shape:
+  shape: round
+  diameter_px: 44
+overflow:
+  mode: ellipsis
+icons:
+  default: phase.command
+```
+
+Or square command tiles like this:
+
+```yaml
+type: StatusChip
+id: active_player_tile
+data_ref: hud.status_chips.active_player
+shape:
+  shape: square
+  size_px: 52
+  corner_radius_px: 4
+text:
+  primary_font_size_px: 11
 ```
 
 And repeated assignment rows like this:
@@ -443,6 +493,8 @@ filters, or hidden-information visibility.
 - Unit-test deterministic content-size estimates for representative text/icon combinations.
 - Unit-test layout allocation for stack, grid, overlay, fit-content, fill, and fraction cases.
 - Unit-test named slot allocation in compound widgets.
+- Unit-test round and square status-chip allocation, including equal width/height preservation under
+  stack, grid, and flex layouts.
 - Regression-test long labels in `StatusChip`, `IconTextBar`, `AssignmentGroupRow`,
   `DatasheetPanel`, and `Tooltip`.
 - Regression-test long current-contract decision labels and proposal kinds.
@@ -458,6 +510,8 @@ filters, or hidden-information visibility.
   assignment, review, and status-chip text stays inside its allocated panels.
 - Launch `docs/preferences/command-bench.yaml` and verify the same overflow protections work in the
   alternate preset.
+- Preview at least one round status chip and one square status chip and verify they stay visually
+  round/square instead of stretching with their parent layout.
 - Use `warhammer40k-hud-preview` on the stress profile and inspect `debug_bounds`.
 - Resize the window, if resizable mode is enabled, and confirm zones and child widgets recompute
   without overlap.
@@ -478,6 +532,7 @@ filters, or hidden-information visibility.
 ## Acceptance Criteria
 
 - [ ] A concrete schema exists for size, position, overflow, text, icon, and slot controls.
+- [ ] `StatusChip` supports round and square shapes with deterministic sizing and preview coverage.
 - [ ] Existing HUD YAML remains loadable or has a documented migration.
 - [ ] Runtime data still flows through Phase 20 view models before toolkit binding.
 - [ ] Selected-unit and workbench rows no longer have uncontrolled text overlap.
