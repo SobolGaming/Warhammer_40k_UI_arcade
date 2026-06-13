@@ -209,7 +209,15 @@ def test_movement_draft_panel_shows_measurements_and_ready_state() -> None:
     assert panel.unchanged_model_count == 2
     assert panel.total_path_inches == 3.0
     assert panel.remaining_budget_inches == 3.0
+    assert panel.synthetic_witness_model_ids == ("intercessor_1",)
+    assert panel.synthetic_witness_point_count == 1
+    assert panel.payload_witness_lines == (
+        "intercessor_1: 3 witness point(s), synthetic midpoint",
+        "intercessor_2: 2 witness point(s), no-op",
+        "intercessor_3: 2 witness point(s), no-op",
+    )
     assert panel.ready is True
+    assert any("synthetic midpoint witness evidence" in hint for hint in panel.hint_lines)
 
 
 def test_movement_draft_panel_reports_unsupported_parameterized_request() -> None:
@@ -285,6 +293,7 @@ def test_assignment_hud_shows_ready_movement_groups_and_refs() -> None:
     assert panel.assigned_ref_keys == ("model:intercessor_1",)
     assert panel.unassigned_ref_keys == ("model:intercessor_2", "model:intercessor_3")
     assert panel.readiness_state == "ready"
+    assert any("synthetic midpoint witness evidence" in line for line in panel.advisory_lines)
     assert [group.group_id for group in panel.groups] == [
         "assignment-group-000001",
         "unassigned-or-no-op",

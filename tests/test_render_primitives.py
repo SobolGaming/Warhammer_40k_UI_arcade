@@ -380,6 +380,8 @@ def test_hud_primitives_include_movement_draft_panel() -> None:
     assert "Mode: normal" in texts
     assert "Active models: intercessor_1" in texts
     assert "Assignments: 1/3 moved, 2 no-op" in texts
+    assert "Synthetic witness: 1 midpoint(s)" in texts
+    assert "Witness: intercessor_1: 3 witness point(s), synthetic midpoint" in texts
 
 
 def test_hud_primitives_include_assignment_review_panel() -> None:
@@ -422,6 +424,7 @@ def test_hud_primitives_include_assignment_review_panel() -> None:
     assert "Proposal: normal_move" in texts
     assert "> assignment-group-000001: 1 model(s)" in texts
     assert "- No-op ready: 2 model(s)" in texts
+    assert any("synthetic midpoint witness evidence" in text for text in texts)
     assert "Chain: movement_proposal_submitted" in texts
     assert "Chain: movement_proposal_accepted" in texts
     assert "UI prefs: default.yaml" in texts

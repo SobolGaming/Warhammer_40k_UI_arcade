@@ -913,8 +913,15 @@ def _movement_draft_panel_primitives(
         lines.append(f"Total: {panel.total_path_inches:.2f} in")
     if panel.remaining_budget_inches is not None:
         lines.append(f"Remaining: {panel.remaining_budget_inches:.2f} in")
+    if panel.synthetic_witness_model_ids:
+        lines.append(f"Synthetic witness: {panel.synthetic_witness_point_count} midpoint(s)")
+        synthetic_ref_keys = tuple(
+            f"model:{model_id}" for model_id in panel.synthetic_witness_model_ids
+        )
+        lines.append(f"Synthetic models: {_compact_ref_list(synthetic_ref_keys)}")
     if panel.ready:
         lines.append("Payload preview: ready")
+        lines.extend(f"Witness: {line}" for line in panel.payload_witness_lines)
     lines.extend(panel.hint_lines)
     lines.extend(f"Invalid: {line}" for line in panel.diagnostic_lines)
     clipped_lines = _clip_lines(tuple(lines), max_lines=max_lines)
