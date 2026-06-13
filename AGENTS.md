@@ -118,6 +118,7 @@ Build bottom-up:
 21. packaging, CI, regression fixtures, and import-boundary audits
 22. packaged runtime defaults and source model
 23. HUD toolkit customizability and overflow tuning
+24. dice tray and roll workbench
 
 Do not add shooting, fight, charge, AI, training, or private rule logic before the movement
 decision path is trustworthy end to end.
