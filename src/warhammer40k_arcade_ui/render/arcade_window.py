@@ -42,7 +42,6 @@ from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuView,
     build_assignment_hud_panel,
     build_context_menu,
-    build_debug_inspector,
     build_finite_decision_panel,
     build_movement_draft_panel,
     build_unit_panel,
@@ -331,14 +330,6 @@ class ArcadeWarhammerWindow(arcade.Window):
             debug_visible=self._selection_state.debug_inspector_visible,
             event_log_lines=self._finite_state.event_log_lines,
         )
-        debug_inspector = build_debug_inspector(
-            selection=self._selection_state,
-            pending_decision=self._pending_decision,
-            cursor_position=self._mouse_world_position,
-            action_summary_intensity=self._action_summary_intensity,
-            event_cursor=self._event_cursor,
-            preference_source_label=self._preference_source_label,
-        )
         action_summary = build_action_visual_summary(
             movement_draft=self._movement_draft,
             pending_decision=self._pending_decision,
@@ -376,16 +367,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             viewport_width_px=self.width,
             viewport_height_px=self.height,
             mouse_world_position=self._mouse_world_position,
-            unit_panel=None,
             context_menu=context_menu,
-            finite_decision_panel=None,
-            movement_draft_panel=None,
-            assignment_hud_panel=None,
-            debug_inspector=debug_inspector,
             hud_layout=hud_layout,
             include_layout_skeleton=not hud_zone_widgets_available,
             include_layout_labels=False,
-            include_status_text=False,
         )
         ergonomic_primitives = build_ergonomic_hud_primitives(
             ergonomics=ergonomic_hud,

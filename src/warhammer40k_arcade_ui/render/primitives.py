@@ -10,17 +10,10 @@ from warhammer40k_arcade_ui.hud.action_summary import (
     ActionVisualSummary,
     ActionVisualSummaryGroup,
 )
-from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, HudRegionView, ScreenRect
+from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, ScreenRect
 from warhammer40k_arcade_ui.hud.view_models import (
-    AssignmentHudGroupView,
-    AssignmentHudPanelView,
     ContextMenuAction,
     ContextMenuView,
-    DebugInspectorView,
-    FiniteDecisionOptionView,
-    FiniteDecisionPanelView,
-    MovementDraftPanelView,
-    UnitPanelView,
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
@@ -151,138 +144,24 @@ def build_hud_primitives(
     viewport_width_px: int,
     viewport_height_px: int,
     mouse_world_position: WorldPoint | None,
-    unit_panel: UnitPanelView | None = None,
     context_menu: ContextMenuView | None = None,
-    finite_decision_panel: FiniteDecisionPanelView | None = None,
-    movement_draft_panel: MovementDraftPanelView | None = None,
-    assignment_hud_panel: AssignmentHudPanelView | None = None,
-    debug_inspector: DebugInspectorView | None = None,
     hud_layout: HudLayoutView | None = None,
     include_layout_skeleton: bool = True,
     include_layout_labels: bool = True,
-    include_status_text: bool = True,
 ) -> tuple[RenderPrimitive, ...]:
-    """Build screen-space HUD primitives that remain fixed during camera movement."""
+    """Build non-panel screen-space primitives that remain fixed during camera movement.
+
+    Player-facing panel text is intentionally owned by the ergonomic HUD renderer. This helper
+    remains for layout skeletons, context menus, and narrow direct screen annotations.
+    """
 
     primitives: list[RenderPrimitive] = []
     if hud_layout is not None and include_layout_skeleton:
         primitives.extend(_hud_layout_primitives(hud_layout))
     elif hud_layout is not None and include_layout_labels:
         primitives.extend(_hud_layout_label_primitives(hud_layout))
-    top_origin, top_max_lines = _top_status_placement(
-        hud_layout=hud_layout,
-        viewport_height_px=viewport_height_px,
-    )
-    event_text = " | ".join(view.hud.event_log_lines)
-    lines = _clip_lines(
-        (
-            f"HUD layout: {_layout_label(hud_layout)}",
-            f"Phase: {view.hud.phase_label}",
-            f"Active: {view.hud.active_player_id}",
-            f"Pending: {view.hud.pending_decision_summary}",
-            f"Events: {event_text}",
-        ),
-        max_lines=top_max_lines,
-    )
-    if include_status_text:
-        primitives.extend(
-            TextPrimitive(
-                layer="hud",
-                text=line,
-                position=(top_origin[0], top_origin[1] - (index * 18.0)),
-                color=HUD_TEXT,
-                font_size=13.0,
-                coordinate_space="screen",
-            )
-            for index, line in enumerate(lines)
-        )
-    legacy_lines = (
-        f"Phase: {view.hud.phase_label}",
-        f"Active: {view.hud.active_player_id}",
-        f"Pending: {view.hud.pending_decision_summary}",
-        f"Events: {event_text}",
-    )
-    if hud_layout is None and include_status_text:
-        primitives = [
-            TextPrimitive(
-                layer="hud",
-                text=line,
-                position=(16.0, viewport_height_px - 24.0 - (index * 22.0)),
-                color=HUD_TEXT,
-                font_size=13.0,
-                coordinate_space="screen",
-            )
-            for index, line in enumerate(legacy_lines)
-        ]
-    if unit_panel is not None:
-        unit_origin, unit_max_lines = _unit_panel_placement(
-            hud_layout=hud_layout,
-            viewport_width_px=viewport_width_px,
-            viewport_height_px=viewport_height_px,
-        )
-        primitives.extend(
-            _unit_panel_primitives(
-                panel=unit_panel,
-                viewport_width_px=viewport_width_px,
-                viewport_height_px=viewport_height_px,
-                origin=unit_origin,
-                max_lines=unit_max_lines,
-            )
-        )
     if context_menu is not None:
         primitives.extend(_context_menu_primitives(context_menu))
-    if finite_decision_panel is not None:
-        finite_origin, finite_max_lines = _finite_panel_placement(
-            hud_layout=hud_layout,
-            viewport_height_px=viewport_height_px,
-        )
-        primitives.extend(
-            _finite_decision_panel_primitives(
-                panel=finite_decision_panel,
-                viewport_height_px=viewport_height_px,
-                origin=finite_origin,
-                max_lines=finite_max_lines,
-            )
-        )
-    if movement_draft_panel is not None:
-        movement_origin, movement_max_lines = _movement_panel_placement(
-            hud_layout=hud_layout,
-            viewport_height_px=viewport_height_px,
-        )
-        primitives.extend(
-            _movement_draft_panel_primitives(
-                panel=movement_draft_panel,
-                viewport_height_px=viewport_height_px,
-                origin=movement_origin,
-                max_lines=movement_max_lines,
-            )
-        )
-    if assignment_hud_panel is not None:
-        assignment_origin, assignment_max_lines = _assignment_panel_placement(
-            hud_layout=hud_layout,
-            viewport_height_px=viewport_height_px,
-        )
-        primitives.extend(
-            _assignment_hud_panel_primitives(
-                panel=assignment_hud_panel,
-                viewport_height_px=viewport_height_px,
-                origin=assignment_origin,
-                max_lines=assignment_max_lines,
-            )
-        )
-    if debug_inspector is not None:
-        debug_origin, debug_max_lines = _debug_panel_placement(
-            hud_layout=hud_layout,
-            viewport_width_px=viewport_width_px,
-        )
-        primitives.extend(
-            _debug_inspector_primitives(
-                inspector=debug_inspector,
-                viewport_width_px=viewport_width_px,
-                origin=debug_origin,
-                max_lines=debug_max_lines,
-            )
-        )
     if mouse_world_position is not None:
         primitives.append(
             TextPrimitive(
@@ -507,148 +386,6 @@ def _hud_layout_label_primitives(layout: HudLayoutView) -> tuple[TextPrimitive, 
     return tuple(primitives)
 
 
-def _top_status_placement(
-    *,
-    hud_layout: HudLayoutView | None,
-    viewport_height_px: int,
-) -> tuple[WorldPoint, int | None]:
-    if hud_layout is None:
-        return (16.0, viewport_height_px - 24.0), None
-    region = hud_layout.region("top_ribbon")
-    if region is None:
-        return (16.0, viewport_height_px - 24.0), None
-    return _text_origin(region.rect, top_padding_px=24.0), None
-
-
-def _unit_panel_placement(
-    *,
-    hud_layout: HudLayoutView | None,
-    viewport_width_px: int,
-    viewport_height_px: int,
-) -> tuple[WorldPoint | None, int | None]:
-    if hud_layout is None:
-        return None, None
-    region = _first_region(hud_layout, ("right_inspector", "right_opponent_bench"))
-    if region is None:
-        return (max(16.0, viewport_width_px - 340.0), viewport_height_px - 24.0), None
-    return _text_origin(region.rect, top_padding_px=38.0), region.rect.line_capacity(
-        line_height_px=20.0,
-        top_padding_px=42.0,
-    )
-
-
-def _finite_panel_placement(
-    *,
-    hud_layout: HudLayoutView | None,
-    viewport_height_px: int,
-) -> tuple[WorldPoint | None, int | None]:
-    if hud_layout is None:
-        return None, None
-    if hud_layout.preset_id == "command_bench":
-        region = hud_layout.region("bottom_command_bench")
-        if region is not None:
-            return _column_origin(region.rect, 0, 3), _column_line_capacity(region.rect, 18.0)
-    region = hud_layout.region("left_rail")
-    if region is None:
-        return (16.0, viewport_height_px - 126.0), None
-    return _text_origin(region.rect, top_padding_px=38.0), min(
-        7,
-        region.rect.line_capacity(line_height_px=18.0, top_padding_px=42.0),
-    )
-
-
-def _movement_panel_placement(
-    *,
-    hud_layout: HudLayoutView | None,
-    viewport_height_px: int,
-) -> tuple[WorldPoint | None, int | None]:
-    if hud_layout is None:
-        return None, None
-    if hud_layout.preset_id == "command_bench":
-        region = hud_layout.region("bottom_command_bench")
-        if region is not None:
-            return _column_origin(region.rect, 1, 3), _column_line_capacity(region.rect, 17.0)
-    region = hud_layout.region("left_rail")
-    if region is None:
-        return (16.0, viewport_height_px - 330.0), None
-    origin = (region.rect.x + 12.0, max(region.rect.y + 24.0, region.rect.top - 190.0))
-    return origin, region.rect.line_capacity(line_height_px=17.0, top_padding_px=190.0)
-
-
-def _assignment_panel_placement(
-    *,
-    hud_layout: HudLayoutView | None,
-    viewport_height_px: int,
-) -> tuple[WorldPoint | None, int | None]:
-    if hud_layout is None:
-        return None, None
-    if hud_layout.preset_id == "command_bench":
-        region = hud_layout.region("bottom_command_bench")
-        if region is not None:
-            return _column_origin(region.rect, 2, 3), _column_line_capacity(region.rect, 15.5)
-    region = hud_layout.region("bottom_workbench")
-    if region is None:
-        return (16.0, viewport_height_px - 522.0), None
-    return _text_origin(region.rect, top_padding_px=34.0), region.rect.line_capacity(
-        line_height_px=15.5,
-        top_padding_px=38.0,
-    )
-
-
-def _debug_panel_placement(
-    *,
-    hud_layout: HudLayoutView | None,
-    viewport_width_px: int,
-) -> tuple[WorldPoint | None, int | None]:
-    if hud_layout is None:
-        return None, None
-    region = _first_region(hud_layout, ("right_inspector", "right_opponent_bench"))
-    if region is None:
-        return (max(16.0, viewport_width_px - 340.0), 142.0), None
-    return (region.rect.x + 12.0, region.rect.y + 138.0), min(
-        6,
-        region.rect.line_capacity(line_height_px=18.0, top_padding_px=18.0),
-    )
-
-
-def _unit_panel_primitives(
-    *,
-    panel: UnitPanelView,
-    viewport_width_px: int,
-    viewport_height_px: int,
-    origin: WorldPoint | None = None,
-    max_lines: int | None = None,
-) -> tuple[TextPrimitive, ...]:
-    x, y = origin or (max(16.0, viewport_width_px - 340.0), viewport_height_px - 24.0)
-    lines = [
-        f"Unit: {panel.unit_label}",
-        f"ID: {panel.unit_id}",
-        f"Models: {panel.model_count}",
-        panel.position_summary,
-    ]
-    if panel.selected_model_id is not None:
-        lines.append(f"Model: {panel.selected_model_id}")
-    if panel.pending_request_id is not None:
-        lines.append(f"Request: {panel.pending_request_id}")
-        lines.extend(
-            f"Action: {_context_action_text(action)}" for action in panel.available_actions
-        )
-    else:
-        lines.append("Actions: none for selected unit")
-    clipped_lines = _clip_lines(tuple(lines), max_lines=max_lines)
-    return tuple(
-        TextPrimitive(
-            layer="selected_unit_panel",
-            text=line,
-            position=(x, y - (index * 20.0)),
-            color=HUD_TEXT if index == 0 else HUD_MUTED,
-            font_size=12.0 if index else 13.0,
-            coordinate_space="screen",
-        )
-        for index, line in enumerate(clipped_lines)
-    )
-
-
 def _movement_draft_primitives(
     selection_state: SelectionState,
     movement_draft: MovementDraft,
@@ -837,244 +574,6 @@ def _context_menu_primitives(menu: ContextMenuView) -> tuple[TextPrimitive, ...]
     )
 
 
-def _finite_decision_panel_primitives(
-    *,
-    panel: FiniteDecisionPanelView,
-    viewport_height_px: int,
-    origin: WorldPoint | None = None,
-    max_lines: int | None = None,
-) -> tuple[TextPrimitive, ...]:
-    x, y = origin or (16.0, viewport_height_px - 126.0)
-    lines = [
-        "Decision",
-        f"Status: {panel.status_line}",
-    ]
-    if panel.request_id is not None:
-        lines.append(f"Request: {panel.request_id}")
-    if panel.decision_type is not None:
-        lines.append(f"Type: {panel.decision_type}")
-    if panel.actor_id is not None:
-        lines.append(f"Actor: {panel.actor_id}")
-    if panel.proposal_kind is not None:
-        lines.append(f"Proposal required: {panel.proposal_kind}")
-    lines.extend(_finite_option_line(option) for option in panel.options)
-    lines.extend(f"Invalid: {line}" for line in panel.diagnostic_lines)
-    clipped_lines = _clip_lines(tuple(lines), max_lines=max_lines)
-    return tuple(
-        TextPrimitive(
-            layer="finite_decision_panel",
-            text=line,
-            position=(x, y - (index * 18.0)),
-            color=HUD_ACCENT if index == 0 else HUD_TEXT,
-            font_size=12.0 if index else 13.0,
-            coordinate_space="screen",
-        )
-        for index, line in enumerate(clipped_lines)
-    )
-
-
-def _movement_draft_panel_primitives(
-    *,
-    panel: MovementDraftPanelView,
-    viewport_height_px: int,
-    origin: WorldPoint | None = None,
-    max_lines: int | None = None,
-) -> tuple[TextPrimitive, ...]:
-    x, y = origin or (16.0, viewport_height_px - 330.0)
-    lines = [
-        "Movement draft",
-        f"Status: {panel.status_line}",
-    ]
-    if panel.request_id is not None:
-        lines.append(f"Request: {panel.request_id}")
-    if panel.unit_id is not None:
-        lines.append(f"Unit: {panel.unit_id}")
-    if panel.proposal_kind is not None:
-        lines.append(f"Proposal: {panel.proposal_kind}")
-    if panel.movement_phase_action is not None:
-        lines.append(f"Action: {panel.movement_phase_action}")
-    if panel.movement_mode is not None:
-        lines.append(f"Mode: {panel.movement_mode}")
-    if panel.fall_back_mode is not None:
-        lines.append(f"Fall Back: {panel.fall_back_mode}")
-    if panel.active_layer is not None:
-        lines.append(f"Layer: {panel.active_layer}")
-    if panel.total_model_count:
-        active_models = ", ".join(panel.active_model_ids) if panel.active_model_ids else "none"
-        lines.append(f"Active models: {active_models}")
-        lines.append(
-            "Assignments: "
-            f"{panel.assigned_model_count}/{panel.total_model_count} moved, "
-            f"{panel.unchanged_model_count} no-op"
-        )
-    if panel.current_segment_inches is not None:
-        lines.append(f"Segment: {panel.current_segment_inches:.2f} in")
-    if panel.total_path_inches is not None:
-        lines.append(f"Total: {panel.total_path_inches:.2f} in")
-    if panel.remaining_budget_inches is not None:
-        lines.append(f"Remaining: {panel.remaining_budget_inches:.2f} in")
-    if panel.synthetic_witness_model_ids:
-        lines.append(f"Synthetic witness: {panel.synthetic_witness_point_count} midpoint(s)")
-        synthetic_ref_keys = tuple(
-            f"model:{model_id}" for model_id in panel.synthetic_witness_model_ids
-        )
-        lines.append(f"Synthetic models: {_compact_ref_list(synthetic_ref_keys)}")
-    if panel.ready:
-        lines.append("Payload preview: ready")
-        lines.extend(f"Witness: {line}" for line in panel.payload_witness_lines)
-    lines.extend(panel.hint_lines)
-    lines.extend(f"Invalid: {line}" for line in panel.diagnostic_lines)
-    clipped_lines = _clip_lines(tuple(lines), max_lines=max_lines)
-    return tuple(
-        TextPrimitive(
-            layer="movement_draft_panel",
-            text=line,
-            position=(x, y - (index * 17.0)),
-            color=HUD_ACCENT if index == 0 else HUD_TEXT,
-            font_size=12.0 if index else 13.0,
-            coordinate_space="screen",
-        )
-        for index, line in enumerate(clipped_lines)
-    )
-
-
-def _debug_inspector_primitives(
-    *,
-    inspector: DebugInspectorView,
-    viewport_width_px: int,
-    origin: WorldPoint | None = None,
-    max_lines: int | None = None,
-) -> tuple[TextPrimitive, ...]:
-    x, y = origin or (max(16.0, viewport_width_px - 340.0), 142.0)
-    lines = _clip_lines(("Debug inspector", *inspector.lines), max_lines=max_lines)
-    return tuple(
-        TextPrimitive(
-            layer="debug_inspector",
-            text=line,
-            position=(x, y - (index * 18.0)),
-            color=HUD_ACCENT,
-            font_size=11.0,
-            coordinate_space="screen",
-        )
-        for index, line in enumerate(lines)
-    )
-
-
-def _assignment_hud_panel_primitives(
-    *,
-    panel: AssignmentHudPanelView,
-    viewport_height_px: int,
-    origin: WorldPoint | None = None,
-    max_lines: int | None = None,
-) -> tuple[TextPrimitive, ...]:
-    x, y = origin or (16.0, viewport_height_px - 522.0)
-    lines = _clip_lines(_assignment_hud_lines(panel), max_lines=max_lines)
-    return tuple(
-        TextPrimitive(
-            layer="assignment_hud_panel",
-            text=line,
-            position=(x, y - (index * 15.5)),
-            color=_assignment_hud_line_color(line, panel),
-            font_size=11.0 if index else 12.0,
-            coordinate_space="screen",
-        )
-        for index, line in enumerate(lines)
-    )
-
-
-def _assignment_hud_lines(panel: AssignmentHudPanelView) -> tuple[str, ...]:
-    lines: list[str] = [
-        "Assignment review",
-        f"Operation: {panel.operation_kind}",
-        f"Ready: {panel.readiness_state}",
-    ]
-    if panel.request_id is not None:
-        lines.append(f"Request: {panel.request_id}")
-    if panel.decision_type is not None:
-        lines.append(f"Type: {panel.decision_type}")
-    if panel.actor_id is not None:
-        lines.append(f"Actor: {panel.actor_id}")
-    if panel.proposal_kind is not None:
-        lines.append(f"Proposal: {panel.proposal_kind}")
-    if panel.active_layer is not None:
-        lines.append(f"Layer: {panel.active_layer}")
-    if panel.active_selection_ref_keys:
-        lines.append(f"Selected: {_compact_ref_list(panel.active_selection_ref_keys)}")
-    if panel.assigned_ref_keys or panel.unassigned_ref_keys:
-        lines.append(
-            f"Refs: {len(panel.assigned_ref_keys)} assigned, "
-            f"{len(panel.unassigned_ref_keys)} unassigned"
-        )
-    group_limit = 4 if panel.display_mode == "compact" else len(panel.groups)
-    for group in panel.groups[:group_limit]:
-        lines.extend(_assignment_group_lines(group, detailed=panel.display_mode == "detailed"))
-    if group_limit < len(panel.groups):
-        lines.append(f"... {len(panel.groups) - group_limit} more group(s)")
-    advisory_limit = 2 if panel.display_mode == "compact" else len(panel.advisory_lines)
-    for line in panel.advisory_lines[:advisory_limit]:
-        prefix = "! " if panel.warning_markers_visible and "warning" in line.lower() else ""
-        lines.append(f"Hint: {prefix}{line}")
-    for line in panel.diagnostic_lines:
-        lines.append(f"Invalid: {line}")
-    if panel.chain_breadcrumbs_visible:
-        lines.extend(f"Chain: {line}" for line in panel.chain_lines)
-    if panel.preference_source_label is not None:
-        lines.append(f"UI prefs: {panel.preference_source_label}")
-        chain_state = "visible" if panel.chain_breadcrumbs_visible else "hidden"
-        lines.append(f"Chain breadcrumbs: {chain_state}")
-    return tuple(lines)
-
-
-def _assignment_group_lines(
-    group: AssignmentHudGroupView,
-    *,
-    detailed: bool,
-) -> tuple[str, ...]:
-    state_marker = {
-        "active": ">",
-        "assigned": "+",
-        "unassigned": "-",
-        "warning": "!",
-        "invalid": "x",
-    }[group.state]
-    lines = [f"{state_marker} {group.label}"]
-    if detailed:
-        if group.source_ref_keys:
-            lines.append(f"  Source: {_compact_ref_list(group.source_ref_keys)}")
-        if group.target_ref_keys:
-            lines.append(f"  Target: {_compact_ref_list(group.target_ref_keys)}")
-        lines.extend(f"  {summary}" for summary in group.summary_lines)
-    return tuple(lines)
-
-
-def _assignment_hud_line_color(line: str, panel: AssignmentHudPanelView) -> Color:
-    if line == "Assignment review":
-        return HUD_ACCENT
-    if line.startswith(("Invalid:", "x ")):
-        return MOVEMENT_WARNING
-    if panel.warning_markers_visible and line.startswith(("! ", "Hint: !")):
-        return MOVEMENT_WARNING
-    if line.startswith("> "):
-        return MOVEMENT_ACTIVE
-    if line.startswith("+ "):
-        return MOVEMENT_ASSIGNED
-    if line.startswith("- "):
-        return MOVEMENT_UNASSIGNED
-    return HUD_TEXT
-
-
-def _compact_ref_list(ref_keys: tuple[str, ...]) -> str:
-    if len(ref_keys) <= 3:
-        return ", ".join(ref_keys)
-    return f"{', '.join(ref_keys[:3])}, +{len(ref_keys) - 3}"
-
-
-def _layout_label(hud_layout: HudLayoutView | None) -> str:
-    if hud_layout is None:
-        return "legacy"
-    return hud_layout.display_label
-
-
 def _rect_points(rect: ScreenRect) -> tuple[WorldPoint, ...]:
     return (
         (rect.x, rect.y),
@@ -1082,36 +581,6 @@ def _rect_points(rect: ScreenRect) -> tuple[WorldPoint, ...]:
         (rect.right, rect.top),
         (rect.x, rect.top),
     )
-
-
-def _text_origin(rect: ScreenRect, *, top_padding_px: float) -> WorldPoint:
-    return (rect.x + 12.0, rect.top - top_padding_px)
-
-
-def _column_origin(rect: ScreenRect, column_index: int, column_count: int) -> WorldPoint:
-    column_width = rect.width / float(column_count)
-    return (rect.x + 12.0 + (column_width * column_index), rect.top - 34.0)
-
-
-def _column_line_capacity(rect: ScreenRect, line_height_px: float) -> int:
-    return rect.line_capacity(line_height_px=line_height_px, top_padding_px=42.0)
-
-
-def _first_region(layout: HudLayoutView, zone_ids: tuple[str, ...]) -> HudRegionView | None:
-    for zone_id in zone_ids:
-        region = layout.region(zone_id)
-        if region is not None:
-            return region
-    return None
-
-
-def _clip_lines(lines: tuple[str, ...], *, max_lines: int | None) -> tuple[str, ...]:
-    if max_lines is None or len(lines) <= max_lines:
-        return lines
-    if max_lines <= 1:
-        return (f"... {len(lines)} more",)
-    hidden_count = len(lines) - max_lines + 1
-    return (*lines[: max_lines - 1], f"... {hidden_count} more")
 
 
 def _context_action_text(action: ContextMenuAction) -> str:
@@ -1123,12 +592,6 @@ def _context_action_text(action: ContextMenuAction) -> str:
     if action.highlighted:
         return f"> {label} <"
     return label
-
-
-def _finite_option_line(option: FiniteDecisionOptionView) -> str:
-    marker = ">" if option.highlighted else " "
-    suffix = "" if option.disabled_reason is None else f" ({option.disabled_reason})"
-    return f"{marker} {option.label} [{option.option_id}]{suffix}"
 
 
 def _movement_assignment_color(state: str) -> Color:
