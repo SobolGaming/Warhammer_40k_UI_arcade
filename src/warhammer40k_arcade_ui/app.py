@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from importlib import import_module
 from os import environ
 from pathlib import Path
@@ -87,6 +88,11 @@ def create_window(
     live_core_smoke: bool = False,
     event_trace_level: str | None = None,
     event_trace_file: Path | None = None,
+    event_trace_cfg_file: Path | None = None,
+    event_trace_include: Sequence[str] | None = None,
+    event_trace_exclude: Sequence[str] | None = None,
+    event_trace_include_categories: Sequence[str] | None = None,
+    event_trace_exclude_categories: Sequence[str] | None = None,
     trace_writer: ForensicTraceWriter | None = None,
     crash_report_context: CrashReportContext | None = None,
     crash_report_dir: Path | None = None,
@@ -97,6 +103,11 @@ def create_window(
     resolved_trace_writer = _resolve_trace_writer(
         event_trace_level=event_trace_level,
         event_trace_file=event_trace_file,
+        event_trace_cfg_file=event_trace_cfg_file,
+        event_trace_include=event_trace_include,
+        event_trace_exclude=event_trace_exclude,
+        event_trace_include_categories=event_trace_include_categories,
+        event_trace_exclude_categories=event_trace_exclude_categories,
         trace_writer=trace_writer,
     )
     resolved_crash_context = _resolve_crash_context(
@@ -203,6 +214,11 @@ def run_app(
     live_core_smoke: bool = False,
     event_trace_level: str | None = None,
     event_trace_file: Path | None = None,
+    event_trace_cfg_file: Path | None = None,
+    event_trace_include: Sequence[str] | None = None,
+    event_trace_exclude: Sequence[str] | None = None,
+    event_trace_include_categories: Sequence[str] | None = None,
+    event_trace_exclude_categories: Sequence[str] | None = None,
     trace_writer: ForensicTraceWriter | None = None,
     crash_report_context: CrashReportContext | None = None,
     crash_report_dir: Path | None = None,
@@ -216,6 +232,11 @@ def run_app(
             live_core_smoke=live_core_smoke,
             event_trace_level=event_trace_level,
             event_trace_file=event_trace_file,
+            event_trace_cfg_file=event_trace_cfg_file,
+            event_trace_include=event_trace_include,
+            event_trace_exclude=event_trace_exclude,
+            event_trace_include_categories=event_trace_include_categories,
+            event_trace_exclude_categories=event_trace_exclude_categories,
             trace_writer=trace_writer,
             crash_report_context=crash_report_context,
             crash_report_dir=crash_report_dir,
@@ -231,6 +252,11 @@ def run_app(
         live_core_smoke=live_core_smoke,
         event_trace_level=event_trace_level,
         event_trace_file=event_trace_file,
+        event_trace_cfg_file=event_trace_cfg_file,
+        event_trace_include=event_trace_include,
+        event_trace_exclude=event_trace_exclude,
+        event_trace_include_categories=event_trace_include_categories,
+        event_trace_exclude_categories=event_trace_exclude_categories,
         trace_writer=trace_writer,
         crash_report_context=crash_report_context,
         crash_report_dir=crash_report_dir,
@@ -248,6 +274,11 @@ def _resolve_trace_writer(
     *,
     event_trace_level: str | None,
     event_trace_file: Path | None,
+    event_trace_cfg_file: Path | None,
+    event_trace_include: Sequence[str] | None,
+    event_trace_exclude: Sequence[str] | None,
+    event_trace_include_categories: Sequence[str] | None,
+    event_trace_exclude_categories: Sequence[str] | None,
     trace_writer: ForensicTraceWriter | None,
 ) -> ForensicTraceWriter:
     if trace_writer is not None:
@@ -256,6 +287,11 @@ def _resolve_trace_writer(
         ForensicTraceConfig.from_runtime(
             event_trace_level=event_trace_level,
             event_trace_file=event_trace_file,
+            event_trace_cfg_file=event_trace_cfg_file,
+            event_trace_include=event_trace_include,
+            event_trace_exclude=event_trace_exclude,
+            event_trace_include_categories=event_trace_include_categories,
+            event_trace_exclude_categories=event_trace_exclude_categories,
             env=environ,
         )
     )

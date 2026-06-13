@@ -1,0 +1,9 @@
+{
+  "event_trace_cfg": {
+    "level": "summary",
+    "exclude": [
+      "ui.mouse_motion"
+    ],
+    "exclude_categories": []
+  }
+}

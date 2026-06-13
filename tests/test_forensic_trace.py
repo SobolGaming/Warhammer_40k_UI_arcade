@@ -15,6 +15,7 @@ from warhammer40k_arcade_ui.debug_fixtures import phase6_debug_core_client
 from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
     ForensicTraceConfig,
     JsonLinesTraceWriter,
+    TraceConfigurationError,
     TracePayloadError,
     build_trace_writer,
     trace_core_client,
@@ -131,6 +132,101 @@ def test_trace_writer_rotates_when_size_limit_is_reached(tmp_path: Path) -> None
 
     assert trace_path.exists()
     assert (tmp_path / "rotating-trace.1.jsonl").exists()
+
+
+def test_trace_exclude_filter_suppresses_named_events(tmp_path: Path) -> None:
+    trace_path = tmp_path / "filtered-trace.jsonl"
+    writer = JsonLinesTraceWriter(
+        ForensicTraceConfig(
+            level="summary",
+            trace_path=trace_path,
+            excluded_event_names=frozenset({"ui.mouse_motion"}),
+        )
+    )
+
+    writer.write_event(category="ui_input", event_name="ui.mouse_motion")
+    writer.write_event(category="ui_input", event_name="ui.key_press")
+
+    event_names = {_required_trace_string(row, "event_name") for row in _trace_rows(trace_path)}
+    assert event_names == {"ui.key_press"}
+
+
+def test_trace_include_filter_allows_only_named_events(tmp_path: Path) -> None:
+    trace_path = tmp_path / "included-trace.jsonl"
+    writer = JsonLinesTraceWriter(
+        ForensicTraceConfig(
+            level="summary",
+            trace_path=trace_path,
+            included_event_names=frozenset({"ui.key_press"}),
+        )
+    )
+
+    writer.write_event(category="ui_input", event_name="ui.mouse_motion")
+    writer.write_event(category="ui_input", event_name="ui.key_press")
+
+    event_names = {_required_trace_string(row, "event_name") for row in _trace_rows(trace_path)}
+    assert event_names == {"ui.key_press"}
+
+
+def test_trace_category_filters_apply_after_event_include(tmp_path: Path) -> None:
+    trace_path = tmp_path / "category-trace.jsonl"
+    writer = JsonLinesTraceWriter(
+        ForensicTraceConfig(
+            level="summary",
+            trace_path=trace_path,
+            included_categories=frozenset({"core_client"}),
+            excluded_event_names=frozenset({"core.get_view.request"}),
+        )
+    )
+
+    writer.write_event(category="ui_input", event_name="ui.key_press")
+    writer.write_event(category="core_client", event_name="core.get_view.request")
+    writer.write_event(category="core_client", event_name="core.get_view.response")
+
+    event_names = {_required_trace_string(row, "event_name") for row in _trace_rows(trace_path)}
+    assert event_names == {"core.get_view.response"}
+
+
+def test_trace_config_file_supplies_filters_and_output_options(tmp_path: Path) -> None:
+    trace_path = tmp_path / "cfg-trace.jsonl"
+    config_path = tmp_path / "event-trace-cfg.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "event_trace_cfg": {
+                    "level": "summary",
+                    "file": str(trace_path),
+                    "max_bytes": 1234,
+                    "include": ["ui.key_press", "ui.key_release"],
+                    "exclude": ["ui.key_release"],
+                    "include_categories": ["core_client"],
+                    "exclude_categories": ["render"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = ForensicTraceConfig.from_runtime(event_trace_cfg_file=config_path, env={})
+
+    assert config.level == "summary"
+    assert config.trace_path == trace_path
+    assert config.max_bytes == 1234
+    assert config.included_event_names == frozenset({"ui.key_press", "ui.key_release"})
+    assert config.excluded_event_names == frozenset({"ui.key_release"})
+    assert config.included_categories == frozenset({"core_client"})
+    assert config.excluded_categories == frozenset({"render"})
+
+
+def test_trace_config_file_rejects_non_string_filter_values(tmp_path: Path) -> None:
+    config_path = tmp_path / "event-trace-cfg.json"
+    config_path.write_text(
+        json.dumps({"event_trace_cfg": {"level": "summary", "include": ["ui.key_press", 3]}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TraceConfigurationError):
+        ForensicTraceConfig.from_runtime(event_trace_cfg_file=config_path, env={})
 
 
 def test_window_and_core_events_are_traced_through_gui_driver(tmp_path: Path) -> None:
