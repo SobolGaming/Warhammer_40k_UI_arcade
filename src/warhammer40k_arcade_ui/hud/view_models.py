@@ -10,6 +10,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiDecision,
     UiFiniteOption,
     UiInvalidDiagnostic,
+    UiMovementProposalRequest,
 )
 from warhammer40k_arcade_ui.hud.action_summary import ActionSummaryIntensity
 from warhammer40k_arcade_ui.preferences.schema import AssignmentHudMode, UiPreferences
@@ -36,6 +37,7 @@ type AssignmentReadinessState = Literal[
     "unsupported",
     "finite",
 ]
+_PROPOSAL_UNIT_MISSING_CODE = "proposal_unit_missing_from_projection"
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,6 +288,7 @@ def build_movement_draft_panel(
     *,
     movement_draft: MovementDraft | None,
     pending_decision: UiDecision | None,
+    view: BattlefieldView | None = None,
     status_message: str | None = None,
     diagnostics: tuple[UiInvalidDiagnostic, ...] = (),
 ) -> MovementDraftPanelView | None:
@@ -379,6 +382,40 @@ def build_movement_draft_panel(
         if diagnostics and status_message is not None
         else "Movement proposal pending"
     )
+    missing_unit_diagnostic = _missing_proposal_unit_diagnostic_line(
+        view=view,
+        proposal=movement_proposal,
+    )
+    if missing_unit_diagnostic is not None:
+        return MovementDraftPanelView(
+            status_line="Movement proposal projection mismatch" if not diagnostics else status_line,
+            request_id=movement_proposal.request_id,
+            unit_id=movement_proposal.unit_instance_id,
+            proposal_kind=movement_proposal.proposal_kind,
+            movement_phase_action=movement_proposal.movement_phase_action,
+            movement_mode=None,
+            fall_back_mode=None,
+            active_layer=None,
+            active_model_ids=(),
+            assigned_model_count=0,
+            total_model_count=0,
+            unchanged_model_count=0,
+            current_segment_inches=None,
+            total_path_inches=None,
+            remaining_budget_inches=None,
+            synthetic_witness_model_ids=(),
+            synthetic_witness_point_count=0,
+            payload_witness_lines=(),
+            ready=False,
+            hint_lines=(
+                "Proposal unit is absent from the current viewer projection.",
+                "Projection/request drift; movement cannot be drafted locally.",
+            ),
+            diagnostic_lines=_append_unique_line(
+                _diagnostic_lines(diagnostics),
+                missing_unit_diagnostic,
+            ),
+        )
     return MovementDraftPanelView(
         status_line=status_line,
         request_id=movement_proposal.request_id,
@@ -408,6 +445,7 @@ def build_assignment_hud_panel(
     *,
     movement_draft: MovementDraft | None,
     pending_decision: UiDecision | None,
+    view: BattlefieldView | None = None,
     highlighted_option_index: int,
     diagnostics: tuple[UiInvalidDiagnostic, ...],
     preferences: UiPreferences,
@@ -434,6 +472,19 @@ def build_assignment_hud_panel(
         return _unsupported_assignment_hud_panel(
             pending_decision=pending_decision,
             unsupported_label=unsupported_label,
+            diagnostic_lines=diagnostic_lines,
+            preferences=preferences,
+            preference_source_label=preference_source_label if debug_visible else None,
+            chain_lines=_chain_lines(preferences, event_log_lines),
+        )
+    missing_unit_diagnostic = _missing_movement_proposal_unit_diagnostic_line(
+        view=view,
+        pending_decision=pending_decision,
+    )
+    if missing_unit_diagnostic is not None:
+        return _missing_movement_proposal_unit_assignment_hud_panel(
+            pending_decision=pending_decision,
+            diagnostic_line=missing_unit_diagnostic,
             diagnostic_lines=diagnostic_lines,
             preferences=preferences,
             preference_source_label=preference_source_label if debug_visible else None,
@@ -653,6 +704,55 @@ def _finite_assignment_hud_panel(
     )
 
 
+def _missing_movement_proposal_unit_assignment_hud_panel(
+    *,
+    pending_decision: UiDecision | None,
+    diagnostic_line: str,
+    diagnostic_lines: tuple[str, ...],
+    preferences: UiPreferences,
+    preference_source_label: str | None,
+    chain_lines: tuple[str, ...],
+) -> AssignmentHudPanelView:
+    if pending_decision is None or pending_decision.movement_proposal is None:
+        raise AssertionError("Missing proposal-unit assignment HUD requires a movement proposal.")
+    proposal = pending_decision.movement_proposal
+    unit_ref_key = f"unit:{proposal.unit_instance_id}"
+    return AssignmentHudPanelView(
+        request_id=proposal.request_id,
+        decision_type=proposal.decision_type,
+        actor_id=proposal.actor_id,
+        operation_kind="movement",
+        proposal_kind=proposal.proposal_kind,
+        active_layer=None,
+        active_selection_ref_keys=(),
+        assigned_ref_keys=(),
+        unassigned_ref_keys=(),
+        readiness_state="invalid",
+        groups=(
+            AssignmentHudGroupView(
+                group_id=f"missing-proposal-unit:{proposal.unit_instance_id}",
+                label="Proposal unit missing from projection",
+                state="invalid",
+                source_ref_keys=(unit_ref_key,),
+                target_ref_keys=(),
+                summary_lines=(
+                    f"Requested unit: {proposal.unit_instance_id}",
+                    "Projection/request drift; movement cannot be drafted locally.",
+                ),
+            ),
+        ),
+        advisory_lines=(
+            "Engine movement request names a unit missing from this viewer projection.",
+        ),
+        diagnostic_lines=_append_unique_line(diagnostic_lines, diagnostic_line),
+        display_mode=preferences.hud.assignment_hud_mode,
+        warning_markers_visible=preferences.hud.show_assignment_warning_markers,
+        chain_breadcrumbs_visible=preferences.hud.show_chain_breadcrumbs,
+        chain_lines=chain_lines,
+        preference_source_label=preference_source_label,
+    )
+
+
 def _movement_assignment_groups(
     movement_draft: MovementDraft,
 ) -> tuple[AssignmentHudGroupView, ...]:
@@ -776,6 +876,44 @@ def _movement_readiness_state(
     if movement_draft.has_assignments:
         return "incomplete"
     return "empty"
+
+
+def _missing_movement_proposal_unit_diagnostic_line(
+    *,
+    view: BattlefieldView | None,
+    pending_decision: UiDecision | None,
+) -> str | None:
+    proposal = None if pending_decision is None else pending_decision.movement_proposal
+    if proposal is None:
+        return None
+    return _missing_proposal_unit_diagnostic_line(view=view, proposal=proposal)
+
+
+def _missing_proposal_unit_diagnostic_line(
+    *,
+    view: BattlefieldView | None,
+    proposal: UiMovementProposalRequest,
+) -> str | None:
+    if view is None or _unit_by_id(view, proposal.unit_instance_id) is not None:
+        return None
+    return (
+        f"{_PROPOSAL_UNIT_MISSING_CODE} [unit_instance_id]: "
+        "Movement proposal unit is not available in the current viewer projection: "
+        f"{proposal.unit_instance_id}."
+    )
+
+
+def _unit_by_id(view: BattlefieldView, unit_id: str) -> UnitView | None:
+    for unit in view.units:
+        if unit.unit_id == unit_id:
+            return unit
+    return None
+
+
+def _append_unique_line(lines: tuple[str, ...], line: str) -> tuple[str, ...]:
+    if line in lines:
+        return lines
+    return (*lines, line)
 
 
 def _is_fight_order_decision(pending_decision: UiDecision | None) -> bool:

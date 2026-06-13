@@ -262,6 +262,49 @@ def test_movement_draft_panel_surfaces_authoritative_diagnostics() -> None:
     )
 
 
+def test_missing_movement_proposal_unit_is_loud_projection_diagnostic() -> None:
+    view = default_battlefield_view()
+    decision = _movement_proposal_decision(unit_id="missing_intercessor_squad")
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+
+    movement_panel = build_movement_draft_panel(
+        movement_draft=draft,
+        pending_decision=decision,
+        view=view,
+    )
+    assignment_panel = build_assignment_hud_panel(
+        movement_draft=draft,
+        pending_decision=decision,
+        view=view,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=default_preferences(),
+        preference_source_label="default.yaml",
+        debug_visible=False,
+    )
+
+    assert draft is None
+    assert movement_panel is not None
+    assert movement_panel.status_line == "Movement proposal projection mismatch"
+    assert movement_panel.unit_id == "missing_intercessor_squad"
+    assert "Requested unit is not selected." not in movement_panel.hint_lines
+    assert movement_panel.diagnostic_lines == (
+        "proposal_unit_missing_from_projection [unit_instance_id]: "
+        "Movement proposal unit is not available in the current viewer projection: "
+        "missing_intercessor_squad.",
+    )
+    assert assignment_panel is not None
+    assert assignment_panel.readiness_state == "invalid"
+    assert assignment_panel.groups[0].state == "invalid"
+    assert assignment_panel.groups[0].label == "Proposal unit missing from projection"
+    assert assignment_panel.groups[0].source_ref_keys == ("unit:missing_intercessor_squad",)
+    assert assignment_panel.diagnostic_lines == movement_panel.diagnostic_lines
+
+
 def test_assignment_hud_shows_ready_movement_groups_and_refs() -> None:
     view = default_battlefield_view()
     preferences = default_preferences()
@@ -459,7 +502,7 @@ def _finite_decision_for(unit_id: str) -> UiDecision:
     )
 
 
-def _movement_proposal_decision() -> UiDecision:
+def _movement_proposal_decision(unit_id: str = "intercessor_squad") -> UiDecision:
     return UiDecision.from_payload(
         {
             "request_id": "decision-request-000005",
@@ -473,7 +516,7 @@ def _movement_proposal_decision() -> UiDecision:
                     "game_id": "phase7-game",
                     "battle_round": 1,
                     "phase": "movement",
-                    "unit_instance_id": "intercessor_squad",
+                    "unit_instance_id": unit_id,
                     "proposal_kind": "normal_move",
                     "source_decision_request_id": "decision-request-000004",
                     "source_decision_result_id": "ui-result-000001",

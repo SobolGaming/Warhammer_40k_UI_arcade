@@ -348,12 +348,14 @@ class ArcadeWarhammerWindow(arcade.Window):
         movement_draft_panel = build_movement_draft_panel(
             movement_draft=self._movement_draft,
             pending_decision=self._pending_decision,
+            view=self._battlefield_view,
             status_message=self._finite_state.status_message,
             diagnostics=self._finite_state.diagnostics,
         )
         assignment_hud_panel = build_assignment_hud_panel(
             movement_draft=self._movement_draft,
             pending_decision=self._pending_decision,
+            view=self._battlefield_view,
             highlighted_option_index=self._finite_state.highlighted_option_index,
             diagnostics=self._finite_state.diagnostics,
             preferences=self._preferences,

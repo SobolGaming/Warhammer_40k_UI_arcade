@@ -292,13 +292,22 @@ def _prioritized_assignment_advisories(lines: tuple[str, ...]) -> tuple[str, ...
 def _is_warning_assignment_advisory(line: str) -> bool:
     lower_line = line.lower()
     return (
-        "synthetic midpoint" in lower_line or "invalid" in lower_line or "unsupported" in lower_line
+        "synthetic midpoint" in lower_line
+        or "invalid" in lower_line
+        or "unsupported" in lower_line
+        or "projection/request drift" in lower_line
+        or "missing from this viewer projection" in lower_line
     )
 
 
 def _assignment_notice_label(line: str) -> str:
     if "synthetic midpoint" in line.lower():
         return "Synthetic witness"
+    if (
+        "projection/request drift" in line.lower()
+        or "missing from this viewer projection" in line.lower()
+    ):
+        return "Projection drift"
     return "Advisory"
 
 
