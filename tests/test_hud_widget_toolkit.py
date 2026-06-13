@@ -200,6 +200,30 @@ def test_preferences_composition_reference_loads_and_missing_path_is_diagnostic(
     assert "composition_file_error" in _codes(missing_result)
 
 
+def test_platform_default_preferences_without_composition_profile_fail_loudly(
+    tmp_path: Path,
+) -> None:
+    preferences = default_preferences()
+    preferences = replace(
+        preferences,
+        hud=replace(preferences.hud, composition_profile=None),
+    )
+    preference_path = tmp_path / "ui-preferences.yaml"
+
+    result = load_hud_composition_for_preferences(
+        preferences,
+        source=ConfigSource(kind="user_default", name=str(preference_path), path=preference_path),
+    )
+
+    assert result.profile is None
+    assert len(result.diagnostics) == 1
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.severity == "error"
+    assert diagnostic.code == "platform_preferences_missing_hud_composition"
+    assert "Move that file out of the way or update it manually" in diagnostic.message
+    assert "warhammer40k-export-preferences --profile default --format yaml" in diagnostic.message
+
+
 def test_builtin_and_explicit_hud_composition_references_load() -> None:
     builtin = load_hud_composition_reference("default-hud")
     explicit = load_hud_composition(Path("docs/hud/default-hud.yaml"))

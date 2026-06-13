@@ -129,12 +129,22 @@ uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml --headl
 ```
 
 Runtime defaults are packaged under `warhammer40k_arcade_ui.resources`, so installed Git/wheel
-launches can run without depending on top-level `docs/`. The documented `docs/preferences` and
-`docs/hud` files remain editable examples. HUD composition can be loaded by built-in profile name
-such as `default-hud`, by a path relative to the preferences YAML file that references it, or by an
-explicit YAML path. Preview examples under `docs/hud/examples/` use the same YAML dialect plus
-placeholder `sample_data`. For a user-level guide to zones, widgets, bindings, sizing, overflow, and
-shape customization, see [docs/hud-customization.md](docs/hud-customization.md).
+launches can run without depending on top-level `docs/`. If `--ui-prefs` is omitted, the game first
+checks the platform default preferences file and then falls back to the packaged default preferences
+resource. A stale platform default file that predates HUD composition profiles will produce a loud
+HUD compatibility diagnostic instead of silently rendering no HUD. Generate a fresh default profile
+with:
+
+```bash
+warhammer40k-export-preferences --profile default --format yaml --output ~/.config/warhammer40k-arcade-ui/ui-preferences.yaml
+```
+
+The documented `docs/preferences` and `docs/hud` files remain editable examples. HUD composition can
+be loaded by built-in profile name such as `default-hud`, by a path relative to the preferences YAML
+file that references it, or by an explicit YAML path. Preview examples under `docs/hud/examples/`
+use the same YAML dialect plus placeholder `sample_data`. For a user-level guide to zones, widgets,
+bindings, sizing, overflow, and shape customization, see
+[docs/hud-customization.md](docs/hud-customization.md).
 
 ## Forensic event traces
 

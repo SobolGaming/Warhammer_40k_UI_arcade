@@ -32,7 +32,7 @@ def test_compass_ring_layout_reserves_four_edge_zones_and_center_viewport() -> N
         "bottom_workbench",
     }
     assert layout.center_viewport.width == 780.0
-    assert layout.center_viewport.height == 576.0
+    assert layout.center_viewport.height == 560.0
     assert layout.region("left_rail") is not None
     assert layout.region("right_inspector") is not None
 
@@ -54,7 +54,7 @@ def test_command_bench_layout_reserves_player_opponent_and_command_bench_zones()
     }
     assert layout.region("bottom_command_bench") is not None
     assert layout.center_viewport.width == 800.0
-    assert layout.center_viewport.height == 512.0
+    assert layout.center_viewport.height == 496.0
 
 
 def test_layout_scales_oversized_zones_to_preserve_center_viewport() -> None:

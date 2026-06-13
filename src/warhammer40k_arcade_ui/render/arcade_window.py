@@ -7,6 +7,7 @@ import time
 from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
+from textwrap import wrap
 
 import arcade
 
@@ -1251,12 +1252,12 @@ def _hud_composition_diagnostic_primitives(
         return ()
     rect = ScreenRect(
         x=24.0,
-        y=max(24.0, viewport_height_px - 132.0),
+        y=max(24.0, viewport_height_px - 196.0),
         width=min(720.0, max(260.0, viewport_width_px - 48.0)),
-        height=92.0,
+        height=156.0,
     )
     diagnostic = diagnostics[0]
-    return (
+    primitives: list[RenderPrimitive] = [
         PolygonPrimitive(
             layer="hud_composition_error",
             points=(
@@ -1280,17 +1281,27 @@ def _hud_composition_diagnostic_primitives(
             anchor_y="top",
             clip_rect=rect,
         ),
-        TextPrimitive(
-            layer="hud_composition_error_text",
-            text=f"{diagnostic.code}: {diagnostic.message}",
-            position=(rect.x + 12.0, rect.top - 38.0),
-            color=(248, 190, 190, 255),
-            font_size=12.0,
-            coordinate_space="screen",
-            anchor_y="top",
-            clip_rect=rect,
-        ),
-    )
+    ]
+    for index, line in enumerate(
+        _wrapped_diagnostic_lines(f"{diagnostic.code}: {diagnostic.message}")
+    ):
+        primitives.append(
+            TextPrimitive(
+                layer="hud_composition_error_text",
+                text=line,
+                position=(rect.x + 12.0, rect.top - 38.0 - (index * 18.0)),
+                color=(248, 190, 190, 255),
+                font_size=12.0,
+                coordinate_space="screen",
+                anchor_y="top",
+                clip_rect=rect,
+            )
+        )
+    return tuple(primitives)
+
+
+def _wrapped_diagnostic_lines(message: str) -> tuple[str, ...]:
+    return tuple(wrap(message, width=92, max_lines=6, placeholder="..."))
 
 
 def _preference_source_label(result: PreferencesLoadResult) -> str:
