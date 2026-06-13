@@ -68,21 +68,14 @@ class LocalSessionClient:
     ) -> UiClientStatus:
         """Submit a finite option using explicit UI-supplied request and result IDs."""
 
-        pending_request = self._pending_request()
-        if pending_request is None:
-            return self._invalid_submission_status(
-                violation_code="no_pending_decision",
-                message="Finite submission requires a pending DecisionRequest.",
-                field="request_id",
-            )
+        pending_or_status = self._pending_request_for_submission(
+            request_id=request_id,
+            no_pending_message="Finite submission requires a pending DecisionRequest.",
+        )
+        if isinstance(pending_or_status, UiClientStatus):
+            return pending_or_status
+        pending_request = pending_or_status
         pending_decision = _decision_from_request(pending_request)
-        if pending_request.request_id != request_id:
-            return self._invalid_submission_status(
-                violation_code="stale_request_id",
-                message="Finite submission request_id does not match the pending request.",
-                field="request_id",
-                decision=pending_decision,
-            )
         if pending_request.is_parameterized_submission_request():
             return self._invalid_submission_status(
                 violation_code="finite_submission_for_parameterized_request",
@@ -115,21 +108,14 @@ class LocalSessionClient:
     ) -> UiClientStatus:
         """Submit a movement payload using explicit UI-supplied request and result IDs."""
 
-        pending_request = self._pending_request()
-        if pending_request is None:
-            return self._invalid_submission_status(
-                violation_code="no_pending_decision",
-                message="Movement payload submission requires a pending DecisionRequest.",
-                field="request_id",
-            )
+        pending_or_status = self._pending_request_for_submission(
+            request_id=request_id,
+            no_pending_message=("Movement payload submission requires a pending DecisionRequest."),
+        )
+        if isinstance(pending_or_status, UiClientStatus):
+            return pending_or_status
+        pending_request = pending_or_status
         pending_decision = _decision_from_request(pending_request)
-        if pending_request.request_id != request_id:
-            return self._invalid_submission_status(
-                violation_code="stale_request_id",
-                message="Movement payload request_id does not match the pending request.",
-                field="request_id",
-                decision=pending_decision,
-            )
         if not pending_request.is_parameterized_submission_request():
             return self._invalid_submission_status(
                 violation_code="movement_payload_for_finite_request",
@@ -153,11 +139,51 @@ class LocalSessionClient:
             self.session.lifecycle.submit_decision(submission.to_result(pending_request))
         )
 
-    def _pending_request(self) -> DecisionRequest | None:
+    def _pending_request_for_submission(
+        self,
+        *,
+        request_id: str,
+        no_pending_message: str,
+    ) -> DecisionRequest | UiClientStatus:
         pending_requests = self.session.lifecycle.decision_controller.queue.pending_requests
         if not pending_requests:
-            return None
-        return pending_requests[0]
+            return self._invalid_submission_status(
+                violation_code="no_pending_decision",
+                message=no_pending_message,
+                field="request_id",
+            )
+        queue_head = pending_requests[0]
+        if queue_head.request_id == request_id:
+            return queue_head
+        queue_head_payload: JsonObject = {
+            "submitted_request_id": request_id,
+            "queue_head_request_id": queue_head.request_id,
+        }
+        queue_head_decision = _decision_from_request(queue_head)
+        if any(pending.request_id == request_id for pending in pending_requests[1:]):
+            return self._invalid_submission_status(
+                violation_code="non_head_pending_request",
+                message=(
+                    "Submission request_id matches a queued request that is not the "
+                    "queue head. "
+                    f"submitted_request_id={request_id!r}, "
+                    f"queue_head_request_id={queue_head.request_id!r}."
+                ),
+                field="request_id",
+                decision=queue_head_decision,
+                payload_fields=queue_head_payload,
+            )
+        return self._invalid_submission_status(
+            violation_code="stale_request_id",
+            message=(
+                "Submission request_id does not match any pending request. "
+                f"submitted_request_id={request_id!r}, "
+                f"queue_head_request_id={queue_head.request_id!r}."
+            ),
+            field="request_id",
+            decision=queue_head_decision,
+            payload_fields=queue_head_payload,
+        )
 
     def _invalid_submission_status(
         self,
@@ -166,16 +192,20 @@ class LocalSessionClient:
         message: str,
         field: str,
         decision: UiDecision | None = None,
+        payload_fields: JsonObject | None = None,
     ) -> UiClientStatus:
+        payload: JsonObject = {
+            "invalid_reason": violation_code,
+            "field": field,
+        }
+        if payload_fields is not None:
+            payload.update(payload_fields)
         return UiClientStatus.invalid(
             stage=self._current_stage(),
             violation_code=violation_code,
             message=message,
             field=field,
-            payload={
-                "invalid_reason": violation_code,
-                "field": field,
-            },
+            payload=payload,
             decision=decision,
         )
 
