@@ -75,6 +75,12 @@ class MovementModelPath:
         return any(math.dist(start, end) > 0.0 for start, end in pairwise(self.points))
 
     @property
+    def uses_synthetic_payload_midpoint(self) -> bool:
+        """Return whether payload serialization inserts midpoint witness evidence."""
+
+        return len(self.points) == 2 and math.dist(self.points[0], self.points[1]) > 0.0
+
+    @property
     def path_length_inches(self) -> float:
         """Return total path length in inches."""
 
@@ -85,7 +91,7 @@ class MovementModelPath:
 
         if len(self.points) == 1:
             return (self.points[0], self.points[0])
-        if len(self.points) == 2 and math.dist(self.points[0], self.points[1]) > 0.0:
+        if self.uses_synthetic_payload_midpoint:
             # The engine needs non-endpoint path evidence even for straight moved segments.
             start, end = self.points
             midpoint = ((start[0] + end[0]) / 2.0, (start[1] + end[1]) / 2.0)
@@ -360,6 +366,38 @@ class MovementDraft:
         """Return the number of models represented as no-op paths."""
 
         return self.total_model_count - self.assigned_model_count
+
+    @property
+    def synthetic_witness_model_ids(self) -> tuple[str, ...]:
+        """Return model IDs whose payload paths receive generated midpoint evidence."""
+
+        return tuple(
+            path.model_id for path in self.model_paths if path.uses_synthetic_payload_midpoint
+        )
+
+    @property
+    def synthetic_witness_point_count(self) -> int:
+        """Return the number of generated witness points in the payload preview."""
+
+        return len(self.synthetic_witness_model_ids)
+
+    @property
+    def payload_witness_summary_lines(self) -> tuple[str, ...]:
+        """Return ready-preview path witness point summaries for debug HUD display."""
+
+        if self.ready_payload is None:
+            return ()
+        lines: list[str] = []
+        for path in self.model_paths:
+            suffix = (
+                ", synthetic midpoint"
+                if path.uses_synthetic_payload_midpoint
+                else ", no-op"
+                if not path.has_movement
+                else ""
+            )
+            lines.append(f"{path.model_id}: {len(path.payload_points())} witness point(s){suffix}")
+        return tuple(lines)
 
     @property
     def selected_model_ids(self) -> tuple[str, ...]:
@@ -860,6 +898,13 @@ def _seed_entity_selection(
 
 def _local_hint_lines(*, view: BattlefieldView, draft: MovementDraft) -> tuple[str, ...]:
     hints: list[str] = ["Preview/advisory only; engine validates movement."]
+    if draft.synthetic_witness_model_ids:
+        hints.append(
+            "Preview note: "
+            "UI-generated synthetic midpoint witness evidence will be inserted for "
+            f"{draft.synthetic_witness_point_count} straight moved model path(s): "
+            f"{_compact_model_ids(draft.synthetic_witness_model_ids)}."
+        )
     selected_count = len(draft.selected_model_ids)
     hints.append(f"Active movement selection: {selected_count} model(s).")
     if draft.unchanged_model_count:
@@ -906,6 +951,13 @@ def _has_self_overlap(draft: MovementDraft) -> bool:
             ):
                 return True
     return False
+
+
+def _compact_model_ids(model_ids: tuple[str, ...], *, limit: int = 3) -> str:
+    if len(model_ids) <= limit:
+        return ", ".join(model_ids)
+    shown = ", ".join(model_ids[:limit])
+    return f"{shown}, +{len(model_ids) - limit} more"
 
 
 def _polyline_length(points: tuple[WorldPoint, ...]) -> float:

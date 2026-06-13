@@ -83,6 +83,10 @@ def test_ergonomic_hud_view_summarizes_selected_unit_movement_and_hotkeys() -> N
     assert any(row.primary_label == "Movement" for row in ergonomics.action_rows)
     assert ergonomics.assignment_rows
     assert ergonomics.assignment_rows[0].operation_kind == "movement"
+    assert any(
+        "Synthetic midpoint witness evidence" in row.secondary_label
+        for row in ergonomics.assignment_notice_rows
+    )
     assert ergonomics.assignment_subtitle == "Draft review: ENTER submits to engine"
     assert ergonomics.assignment_color_role == "active"
     assert "ENTER: Confirm local UI action" in ergonomics.hotkey_hints
@@ -352,6 +356,8 @@ def test_ergonomic_hud_primitives_use_toolkit_components_in_screen_space() -> No
     assert "Decision" in texts
     assert "Assignments" in texts
     assert "Draft review: ENTER submits to engine" in texts
+    assert "Synthetic witness" in texts
+    assert "Synthetic midpoint witness evidence: 1 straight path(s)." in texts
     assert "Review" in texts
     assert any(type(primitive) is PolygonPrimitive for primitive in primitives)
     assert all(primitive.coordinate_space == "screen" for primitive in primitives)

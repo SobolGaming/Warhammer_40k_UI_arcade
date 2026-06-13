@@ -143,6 +143,14 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     payload = draft.payload_preview
 
     assert payload is not None
+    assert draft.synthetic_witness_model_ids == ("intercessor_1",)
+    assert draft.synthetic_witness_point_count == 1
+    assert any("synthetic midpoint witness evidence" in hint for hint in draft.local_hint_lines)
+    assert draft.payload_witness_summary_lines == (
+        "intercessor_1: 3 witness point(s), synthetic midpoint",
+        "intercessor_2: 2 witness point(s), no-op",
+        "intercessor_3: 2 witness point(s), no-op",
+    )
     assert payload["proposal_request_id"] == "decision-request-000005"
     assert payload["proposal_kind"] == "normal_move"
     assert payload["unit_instance_id"] == "intercessor_squad"

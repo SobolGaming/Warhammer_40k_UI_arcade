@@ -37,6 +37,7 @@ class HudErgonomicsView:
     selected_unit_rows: tuple[IconTextBarView, ...]
     action_rows: tuple[IconTextBarView, ...]
     assignment_rows: tuple[ToolkitAssignmentGroupRowView, ...]
+    assignment_notice_rows: tuple[IconTextBarView, ...]
     assignment_subtitle: str
     assignment_color_role: HudColorRole
     diagnostic_lines: tuple[str, ...]
@@ -74,6 +75,7 @@ def build_hud_ergonomics_view(
             preferences=preferences,
         ),
         assignment_rows=_assignment_rows(assignment_hud_panel),
+        assignment_notice_rows=_assignment_notice_rows(assignment_hud_panel),
         assignment_subtitle=_assignment_subtitle(assignment_hud_panel),
         assignment_color_role=_assignment_color_role(assignment_hud_panel),
         diagnostic_lines=diagnostic_lines,
@@ -260,6 +262,56 @@ def _assignment_rows(
         )
         for index, group in enumerate(assignment_hud_panel.groups[:3])
     )
+
+
+def _assignment_notice_rows(
+    assignment_hud_panel: AssignmentHudPanelView | None,
+) -> tuple[IconTextBarView, ...]:
+    if assignment_hud_panel is None:
+        return ()
+    selected_lines = _prioritized_assignment_advisories(assignment_hud_panel.advisory_lines)
+    return tuple(
+        IconTextBarView(
+            component_id=f"assignment_notice_{index}",
+            icon_id="action.summary",
+            primary_label=_assignment_notice_label(line),
+            secondary_label=_assignment_notice_body(line),
+            state="warning" if _is_warning_assignment_advisory(line) else "active",
+            density="compact",
+        )
+        for index, line in enumerate(selected_lines)
+    )
+
+
+def _prioritized_assignment_advisories(lines: tuple[str, ...]) -> tuple[str, ...]:
+    important = tuple(line for line in lines if _is_warning_assignment_advisory(line))
+    remaining = tuple(line for line in lines if line not in important)
+    return (*important, *remaining)[:2]
+
+
+def _is_warning_assignment_advisory(line: str) -> bool:
+    lower_line = line.lower()
+    return (
+        "synthetic midpoint" in lower_line or "invalid" in lower_line or "unsupported" in lower_line
+    )
+
+
+def _assignment_notice_label(line: str) -> str:
+    if "synthetic midpoint" in line.lower():
+        return "Synthetic witness"
+    return "Advisory"
+
+
+def _assignment_notice_body(line: str) -> str:
+    synthetic_prefix = "UI-generated synthetic midpoint witness evidence will be inserted for "
+    if synthetic_prefix in line:
+        suffix = line.split(synthetic_prefix, maxsplit=1)[1]
+        count_summary = suffix.split(":", maxsplit=1)[0].replace(
+            "straight moved model path(s)",
+            "straight path(s)",
+        )
+        return f"Synthetic midpoint witness evidence: {count_summary}."
+    return line
 
 
 def _assignment_subtitle(assignment_hud_panel: AssignmentHudPanelView | None) -> str:
