@@ -43,7 +43,14 @@ If `--ui-prefs` is omitted, the app looks for the platform default preferences f
 ~/.config/warhammer40k-arcade-ui/ui-preferences.yaml
 ```
 
-If that file is not present, the app uses the built-in `default` profile.
+If that file is not present, the app uses the packaged built-in `default` profile. If the platform
+default file is present but predates the current HUD composition system, startup stops with a
+terminal error that names the incompatible file and tells you to move it out of the way or update it
+manually. Render a fresh known-good default with:
+
+```bash
+warhammer40k-export-preferences --profile default --format yaml --output ~/.config/warhammer40k-arcade-ui/ui-preferences.yaml
+```
 
 When the debug inspector is visible, it displays the active UI preferences file name, such as
 `default.yaml`, `keyboard-heavy.yaml`, or `built-in default` when no file was loaded.
@@ -109,7 +116,7 @@ hud:
   zones:
     top_ribbon:
       visible: true
-      size_px: 68
+      size_px: 84
       collapsed: false
     left_rail:
       visible: true

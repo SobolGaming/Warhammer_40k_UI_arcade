@@ -42,9 +42,13 @@ This phase is guided by `docs/guidance/ASSET_MGMT_AND_ADDRESSING.md`:
 - Add explicit source metadata:
   - `ConfigSource(kind="builtin" | "user_default" | "explicit_path")`;
   - `ResourceSource(kind="builtin" | "user_default" | "explicit_path")`.
-- Change no-file preference loading to parse packaged `preferences/default.yaml`.
+- Change no-file preference loading to parse packaged `preferences/default.yaml` only when no
+  platform default preference file exists.
 - Preserve existing explicit `--ui-prefs PATH` behavior.
 - Continue checking the platform default preference file before using packaged defaults.
+- Emit a loud terminal startup error when a platform default preference file is present but lacks
+  `hud.composition_profile`, including guidance to move it aside or regenerate it with
+  `warhammer40k-export-preferences --profile default --format yaml --output <platform path>`.
 - Change built-in preference profiles to reference named HUD profiles:
   - `default-hud`;
   - `command-bench-hud`.
@@ -73,6 +77,10 @@ This phase is guided by `docs/guidance/ASSET_MGMT_AND_ADDRESSING.md`:
 ## Acceptance Criteria
 
 - [x] `load_preferences()` with no user config file returns the packaged built-in default profile.
+- [x] Launching the game without `--ui-prefs` still honors the platform default preference file when
+  it exists.
+- [x] A stale platform default preference file without `hud.composition_profile` raises a loud
+  terminal startup error with regeneration guidance.
 - [x] `load_preferences(explicit_path)` still loads the exact requested file.
 - [x] Preference load results expose source metadata for built-in, platform default, and explicit
   path sources.
@@ -128,6 +136,10 @@ Future phases should continue the asset-management roadmap in this order:
 - Added `warhammer40k_arcade_ui.resources` with packaged preference and HUD YAML defaults.
 - Added `ConfigSource` and `ResourceSource` metadata plus safe built-in resource readers.
 - Changed no-file preference loading to parse packaged `preferences/default.yaml`.
+- Preserved the platform default preference lookup before packaged fallback.
+- Added a terminal startup error for platform default preference files that lack
+  `hud.composition_profile`, so stale user config fails loudly with copyable recovery commands
+  instead of rendering no HUD.
 - Preserved explicit path loading for `--ui-prefs PATH` and direct HUD YAML paths.
 - Changed built-in preference profiles to reference named HUD profiles:
   - `default-hud`;

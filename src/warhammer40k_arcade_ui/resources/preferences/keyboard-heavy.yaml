@@ -84,7 +84,7 @@ hud:
   zones:
     top_ribbon:
       visible: true
-      size_px: 68
+      size_px: 84
       collapsed: false
     left_rail:
       visible: true

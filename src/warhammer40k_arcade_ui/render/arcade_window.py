@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import shlex
 import time
 from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
+from textwrap import wrap
 
 import arcade
 
@@ -103,6 +105,10 @@ type FatalGameEngineException = (
 )
 
 
+class HudPreferencesConfigurationError(RuntimeError):
+    """Terminal-facing startup error for incompatible HUD preference configuration."""
+
+
 class ArcadeWarhammerWindow(arcade.Window):
     """Arcade window that renders a read-only battlefield projection."""
 
@@ -123,6 +129,23 @@ class ArcadeWarhammerWindow(arcade.Window):
         crash_report_dir: Path | None = None,
     ) -> None:
         resolved_config = config or AppConfig()
+        resolved_battlefield_view = battlefield_view or default_battlefield_view()
+        preference_source = None
+        if preferences is None:
+            loaded_preferences = load_preferences(preferences_path)
+            resolved_preferences = loaded_preferences.preferences or default_preferences()
+            preference_diagnostics = loaded_preferences.diagnostics
+            preference_source_label = _preference_source_label(loaded_preferences)
+            preference_source = loaded_preferences.source
+        else:
+            resolved_preferences = preferences
+            preference_diagnostics = ()
+            preference_source_label = "injected preferences"
+        hud_composition_result = load_hud_composition_for_preferences(
+            resolved_preferences,
+            source=preference_source,
+        )
+        _raise_terminal_hud_configuration_error(hud_composition_result.diagnostics)
         super().__init__(
             width=resolved_config.window_width,
             height=resolved_config.window_height,
@@ -130,22 +153,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             resizable=resolved_config.resizable,
         )
         self.background_color = arcade.color.DARK_SLATE_GRAY
-        self._battlefield_view = battlefield_view or default_battlefield_view()
-        preference_source = None
-        if preferences is None:
-            loaded_preferences = load_preferences(preferences_path)
-            self._preferences = loaded_preferences.preferences or default_preferences()
-            self._preference_diagnostics = loaded_preferences.diagnostics
-            self._preference_source_label = _preference_source_label(loaded_preferences)
-            preference_source = loaded_preferences.source
-        else:
-            self._preferences = preferences
-            self._preference_diagnostics = ()
-            self._preference_source_label = "injected preferences"
-        hud_composition_result = load_hud_composition_for_preferences(
-            self._preferences,
-            source=preference_source,
-        )
+        self._battlefield_view = resolved_battlefield_view
+        self._preferences = resolved_preferences
+        self._preference_diagnostics = preference_diagnostics
+        self._preference_source_label = preference_source_label
         self._hud_composition_profile: HudCompositionProfile | None = hud_composition_result.profile
         self._hud_composition_diagnostics: tuple[HudCompositionDiagnostic, ...] = (
             hud_composition_result.diagnostics
@@ -1251,12 +1262,12 @@ def _hud_composition_diagnostic_primitives(
         return ()
     rect = ScreenRect(
         x=24.0,
-        y=max(24.0, viewport_height_px - 132.0),
+        y=max(24.0, viewport_height_px - 196.0),
         width=min(720.0, max(260.0, viewport_width_px - 48.0)),
-        height=92.0,
+        height=156.0,
     )
     diagnostic = diagnostics[0]
-    return (
+    primitives: list[RenderPrimitive] = [
         PolygonPrimitive(
             layer="hud_composition_error",
             points=(
@@ -1280,17 +1291,54 @@ def _hud_composition_diagnostic_primitives(
             anchor_y="top",
             clip_rect=rect,
         ),
-        TextPrimitive(
-            layer="hud_composition_error_text",
-            text=f"{diagnostic.code}: {diagnostic.message}",
-            position=(rect.x + 12.0, rect.top - 38.0),
-            color=(248, 190, 190, 255),
-            font_size=12.0,
-            coordinate_space="screen",
-            anchor_y="top",
-            clip_rect=rect,
-        ),
-    )
+    ]
+    for index, line in enumerate(
+        _wrapped_diagnostic_lines(f"{diagnostic.code}: {diagnostic.message}")
+    ):
+        primitives.append(
+            TextPrimitive(
+                layer="hud_composition_error_text",
+                text=line,
+                position=(rect.x + 12.0, rect.top - 38.0 - (index * 18.0)),
+                color=(248, 190, 190, 255),
+                font_size=12.0,
+                coordinate_space="screen",
+                anchor_y="top",
+                clip_rect=rect,
+            )
+        )
+    return tuple(primitives)
+
+
+def _wrapped_diagnostic_lines(message: str) -> tuple[str, ...]:
+    return tuple(wrap(message, width=92, max_lines=6, placeholder="..."))
+
+
+def _raise_terminal_hud_configuration_error(
+    diagnostics: tuple[HudCompositionDiagnostic, ...],
+) -> None:
+    for diagnostic in diagnostics:
+        if diagnostic.code == "platform_preferences_missing_hud_composition":
+            preference_path = diagnostic.value or "platform default preferences file"
+            quoted_preference_path = shlex.quote(preference_path)
+            raise HudPreferencesConfigurationError(
+                "\n".join(
+                    (
+                        "Platform default UI preferences are incompatible with the current HUD.",
+                        f"File: {preference_path}",
+                        "The file is missing hud.composition_profile, so the game cannot start "
+                        "with a usable HUD.",
+                        "Move that file out of the way or update it manually.",
+                        "",
+                        "Generate a fresh known-good default:",
+                        "  warhammer40k-export-preferences --profile default --format yaml "
+                        f"--output {quoted_preference_path}",
+                        "",
+                        "Or move the stale file aside so packaged defaults can be used:",
+                        f"  mv {quoted_preference_path} {shlex.quote(preference_path + '.bak')}",
+                    )
+                )
+            )
 
 
 def _preference_source_label(result: PreferencesLoadResult) -> str:

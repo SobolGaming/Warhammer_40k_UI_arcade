@@ -614,7 +614,7 @@ def default_hud_zone_preferences() -> tuple[HudZonePreference, ...]:
     """Return deterministic default zone preferences for all known HUD zones."""
 
     return (
-        HudZonePreference("top_ribbon", True, 68, False),
+        HudZonePreference("top_ribbon", True, 84, False),
         HudZonePreference("left_rail", True, 224, False),
         HudZonePreference("right_inspector", True, 276, False),
         HudZonePreference("bottom_workbench", True, 156, False),

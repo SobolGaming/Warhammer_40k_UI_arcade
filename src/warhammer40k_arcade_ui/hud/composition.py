@@ -222,6 +222,11 @@ def load_hud_composition_for_preferences(
 
     profile_path = preferences.hud.composition_profile
     if profile_path is None:
+        if source is not None and source.kind in ("user_default", "explicit_path"):
+            return HudCompositionValidationResult(
+                profile=None,
+                diagnostics=(_missing_composition_profile_diagnostic(source),),
+            )
         return HudCompositionValidationResult(profile=None, diagnostics=())
     return load_hud_composition_reference(profile_path, relative_to=source, preview=preview)
 
@@ -320,6 +325,34 @@ def _load_builtin_hud_composition(
             ),
         )
     return parse_hud_composition_payload(payload, source=source, preview=preview)
+
+
+def _missing_composition_profile_diagnostic(source: GenericSource) -> HudCompositionDiagnostic:
+    if source.kind == "user_default":
+        return _diagnostic(
+            severity="error",
+            code="platform_preferences_missing_hud_composition",
+            field="hud.composition_profile",
+            message=(
+                f"Platform default preferences at {source.display_name} are missing "
+                "hud.composition_profile, so the current HUD cannot render. Move that file out "
+                "of the way or update it manually. Generate a fresh default with: "
+                "warhammer40k-export-preferences --profile default --format yaml --output "
+                f"{source.display_name}"
+            ),
+            value=source.display_name,
+        )
+    return _diagnostic(
+        severity="error",
+        code="preferences_missing_hud_composition",
+        field="hud.composition_profile",
+        message=(
+            f"Preferences at {source.display_name} are missing hud.composition_profile, so the "
+            "current HUD cannot render. Update the file manually or export a fresh default with: "
+            "warhammer40k-export-preferences --profile default --format yaml --output <path>"
+        ),
+        value=source.display_name,
+    )
 
 
 def find_component(
