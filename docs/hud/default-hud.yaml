@@ -50,8 +50,12 @@ regions:
       children:
       - type: DatasheetPanel
         id: selected_unit_datasheet
+        stat_cell_height: 42
+        stat_cell_min_width: 34
+        stat_cell_gap: 4
         data_ref: selected_unit
-        density: compact
+        density: detailed
+        height: fit-content
         title: Selected Unit
       - type: AssignmentGroupRow
         id: current_assignment_row

@@ -554,5 +554,9 @@ filters, or hidden-information visibility.
 - Added round and square status-chip rendering while keeping chip semantics in the Phase 20 view
   models.
 - Added `docs/hud/examples/overflow-stress-preview.yaml` for long-label and shaped-chip review.
+- Switched the live Arcade game HUD to load `hud.composition_profile` and render it through the same
+  composition renderer used by `warhammer40k-hud-preview`. Phase 20 ergonomic view models now feed
+  JSON-safe runtime bindings into that renderer instead of using a separate hard-coded ergonomic HUD
+  primitive path in the game window.
 - `scroll` overflow remains schema-recognized but non-interactive; it renders as clipped content
   until a future scroll-container phase adds input handling.

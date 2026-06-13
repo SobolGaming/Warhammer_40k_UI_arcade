@@ -24,6 +24,11 @@ Runtime game state is adapted into safe presentation view models by Python befor
 it. YAML can choose placement and styling for known data, but it cannot query raw engine state or
 express gameplay logic.
 
+The live game UI and `warhammer40k-hud-preview` use the same composition renderer. Preview files
+provide `sample_data`; the game provides runtime presentation data built from the Phase 20 HUD view
+models. The configured `composition_profile` is therefore the game HUD, not an alternate preview-only
+path.
+
 ## File Split
 
 Preferences and HUD composition are intentionally separate.
@@ -77,6 +82,9 @@ Launch examples:
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml
 ```
+
+Changing `hud.composition_profile` changes the live HUD composition used by those commands. Changing
+the referenced HUD YAML changes the same widget tree that the preview command renders.
 
 ## Layout Presets And Zones
 

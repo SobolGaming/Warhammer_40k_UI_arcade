@@ -5,8 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 
 from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
+from warhammer40k_arcade_ui.hud.composition import load_hud_composition_reference
 from warhammer40k_arcade_ui.hud.ergonomics import build_hud_ergonomics_view
 from warhammer40k_arcade_ui.hud.layouts import build_hud_layout
+from warhammer40k_arcade_ui.hud.runtime_data import runtime_data_for_ergonomic_hud
+from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
 from warhammer40k_arcade_ui.hud.view_models import (
     build_assignment_hud_panel,
     build_finite_decision_panel,
@@ -364,6 +367,84 @@ def test_ergonomic_hud_primitives_use_toolkit_components_in_screen_space() -> No
     assert "Review" in texts
     assert any(type(primitive) is PolygonPrimitive for primitive in primitives)
     assert all(primitive.coordinate_space == "screen" for primitive in primitives)
+
+
+def test_ergonomic_hud_renders_through_configured_default_composition() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    layout = build_hud_layout(
+        preferences=preferences,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+    )
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    decision = _movement_proposal_decision()
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+    )
+    assert draft is not None
+    draft = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
+    finite_panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=0,
+        status_message="Movement draft ready",
+        diagnostics=(),
+    )
+    assignment_panel = build_assignment_hud_panel(
+        movement_draft=draft,
+        pending_decision=decision,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=preferences,
+        preference_source_label="docs/preferences/default.yaml",
+        debug_visible=False,
+    )
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=build_unit_panel(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+        ),
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=build_movement_draft_panel(
+            movement_draft=draft,
+            pending_decision=decision,
+        ),
+        assignment_hud_panel=assignment_panel,
+        event_log_lines=("movement_proposal_submitted: player_1",),
+    )
+    result = load_hud_composition_reference("default-hud")
+    assert result.profile is not None, result.diagnostics
+
+    primitives = render_composition_profile(
+        result.profile,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+        runtime_data=runtime_data_for_ergonomic_hud(ergonomics),
+        hud_layout=layout,
+        include_background=False,
+    )
+
+    texts = _text_lines(primitives)
+    polygon_layers = {
+        primitive.layer for primitive in primitives if type(primitive) is PolygonPrimitive
+    }
+    assert "hud_preview_background" not in polygon_layers
+    assert not any(layer.startswith("hud_zone_") for layer in polygon_layers)
+    assert "Selected Unit" in texts
+    assert "Intercessors" in texts
+    assert "Models" in texts
+    assert "Current Action" in texts
+    assert any("Movement draft ready" in text for text in texts)
+    assert "Current Assignment" in texts
 
 
 def _movement_proposal_decision() -> UiDecision:

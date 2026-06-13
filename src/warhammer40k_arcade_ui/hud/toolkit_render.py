@@ -9,7 +9,7 @@ from warhammer40k_arcade_ui.hud.composition import (
     HudCompositionProfile,
     find_component,
 )
-from warhammer40k_arcade_ui.hud.layouts import ScreenRect, build_hud_layout
+from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, ScreenRect, build_hud_layout
 from warhammer40k_arcade_ui.hud.toolkit import (
     HudComponentNode,
     HudTheme,
@@ -43,6 +43,9 @@ def render_composition_profile(
     viewport_height_px: int,
     component_id: str | None = None,
     theme: HudTheme | None = None,
+    runtime_data: JsonObject | None = None,
+    hud_layout: HudLayoutView | None = None,
+    include_background: bool = True,
 ) -> tuple[RenderPrimitive, ...]:
     """Render a composition profile or one component subtree to deterministic primitives."""
 
@@ -51,15 +54,19 @@ def render_composition_profile(
     if viewport_height_px <= 0:
         raise ValueError("viewport_height_px must be positive")
     render_theme = theme or default_hud_theme()
-    root_background = PolygonPrimitive(
-        layer="hud_preview_background",
-        points=_rect_points(ScreenRect(0.0, 0.0, viewport_width_px, viewport_height_px)),
-        fill_color=_PREVIEW_BACKGROUND,
-        outline_color=_PREVIEW_BACKGROUND,
-        line_width=0.0,
-        coordinate_space="screen",
-    )
-    primitives: list[RenderPrimitive] = [root_background]
+    active_data = profile.sample_data if runtime_data is None else runtime_data
+    primitives: list[RenderPrimitive] = []
+    if include_background:
+        primitives.append(
+            PolygonPrimitive(
+                layer="hud_preview_background",
+                points=_rect_points(ScreenRect(0.0, 0.0, viewport_width_px, viewport_height_px)),
+                fill_color=_PREVIEW_BACKGROUND,
+                outline_color=_PREVIEW_BACKGROUND,
+                line_width=0.0,
+                coordinate_space="screen",
+            )
+        )
     if component_id is not None:
         component = find_component(profile, component_id)
         if component is None:
@@ -70,18 +77,13 @@ def render_composition_profile(
                 component,
                 rect=root_rect,
                 theme=render_theme,
-                sample_data=profile.sample_data,
+                sample_data=active_data,
             )
         )
         return tuple(primitives)
 
-    preferences = default_preferences()
-    preferences = replace(
-        preferences,
-        hud=replace(preferences.hud, layout_preset=profile.layout_preset),
-    )
-    layout = build_hud_layout(
-        preferences=preferences,
+    layout = hud_layout or _default_layout_for_profile(
+        profile=profile,
         viewport_width_px=viewport_width_px,
         viewport_height_px=viewport_height_px,
     )
@@ -94,10 +96,28 @@ def render_composition_profile(
                 region.widget,
                 rect=resolved_region.rect.inset(8.0),
                 theme=render_theme,
-                sample_data=profile.sample_data,
+                sample_data=active_data,
             )
         )
     return tuple(primitives)
+
+
+def _default_layout_for_profile(
+    *,
+    profile: HudCompositionProfile,
+    viewport_width_px: int,
+    viewport_height_px: int,
+) -> HudLayoutView:
+    preferences = default_preferences()
+    preferences = replace(
+        preferences,
+        hud=replace(preferences.hud, layout_preset=profile.layout_preset),
+    )
+    return build_hud_layout(
+        preferences=preferences,
+        viewport_width_px=viewport_width_px,
+        viewport_height_px=viewport_height_px,
+    )
 
 
 def render_component_tree(
