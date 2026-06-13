@@ -19,7 +19,7 @@ class SubmittedFiniteDecision:
 
     request_id: str
     selected_option_id: str
-    result_id: str | None
+    result_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +28,7 @@ class SubmittedMovementPayload:
 
     request_id: str
     payload: JsonValue
-    result_id: str | None
+    result_id: str
 
 
 def _new_finite_submissions() -> list[SubmittedFiniteDecision]:
@@ -80,7 +80,7 @@ class FakeCoreClient:
         *,
         request_id: str,
         selected_option_id: str,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
         self.finite_submissions.append(
             SubmittedFiniteDecision(
@@ -96,7 +96,7 @@ class FakeCoreClient:
         *,
         request_id: str,
         payload: JsonValue,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
         self.movement_submissions.append(
             SubmittedMovementPayload(

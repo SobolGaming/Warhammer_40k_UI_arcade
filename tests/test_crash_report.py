@@ -197,7 +197,7 @@ class FailingCoreClient:
         *,
         request_id: str,
         selected_option_id: str,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
         del request_id, selected_option_id, result_id
         raise UiClientProtocolError("missing required request_id")
@@ -207,7 +207,7 @@ class FailingCoreClient:
         *,
         request_id: str,
         payload: JsonValue,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
         del request_id, payload, result_id
         raise AssertionError("submit_movement_payload should not be called.")

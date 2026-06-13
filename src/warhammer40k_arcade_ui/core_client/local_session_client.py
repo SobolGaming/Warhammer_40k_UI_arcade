@@ -31,7 +31,6 @@ class LocalSessionClient:
     """UI-facing facade over the core engine's local in-process session."""
 
     session: LocalGameSession = field(default_factory=LocalGameSession)
-    _next_result_index: int = 1
 
     def start_game(self, config: object) -> UiClientStatus:
         """Start a local game session."""
@@ -65,9 +64,9 @@ class LocalSessionClient:
         *,
         request_id: str,
         selected_option_id: str,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
-        """Submit a finite option using the explicit UI-supplied request ID."""
+        """Submit a finite option using explicit UI-supplied request and result IDs."""
 
         pending_request = self._pending_request()
         if pending_request is None:
@@ -101,7 +100,7 @@ class LocalSessionClient:
         submission = FiniteOptionSubmission(
             request_id=request_id,
             selected_option_id=selected_option_id,
-            result_id=result_id or self._next_result_id(),
+            result_id=result_id,
         )
         return status_from_lifecycle(
             self.session.lifecycle.submit_decision(submission.to_result(pending_request))
@@ -112,9 +111,9 @@ class LocalSessionClient:
         *,
         request_id: str,
         payload: JsonValue,
-        result_id: str | None = None,
+        result_id: str,
     ) -> UiClientStatus:
-        """Submit a parameterized movement payload using the explicit request ID."""
+        """Submit a movement payload using explicit UI-supplied request and result IDs."""
 
         pending_request = self._pending_request()
         if pending_request is None:
@@ -148,7 +147,7 @@ class LocalSessionClient:
         submission = ParameterizedSubmission(
             request_id=request_id,
             payload=validate_json_value(payload),
-            result_id=result_id or self._next_result_id(),
+            result_id=result_id,
         )
         return status_from_lifecycle(
             self.session.lifecycle.submit_decision(submission.to_result(pending_request))
@@ -159,11 +158,6 @@ class LocalSessionClient:
         if not pending_requests:
             return None
         return pending_requests[0]
-
-    def _next_result_id(self) -> str:
-        result_id = f"ui-result-{self._next_result_index:06d}"
-        self._next_result_index += 1
-        return result_id
 
     def _invalid_submission_status(
         self,
