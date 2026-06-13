@@ -27,6 +27,7 @@ _MIN_ROW_HEIGHT_PX = 38.0
 _MAX_INSPECTOR_ROWS = 5
 _MAX_ACTION_ROWS = 4
 _MAX_ASSIGNMENT_ROWS = 4
+_MAX_ASSIGNMENT_NOTICE_ROWS = 2
 _MAX_REVIEW_ROWS = 5
 
 
@@ -188,10 +189,7 @@ def _workbench_primitives(
             section_id="assignments",
             title="Assignments",
             subtitle=ergonomics.assignment_subtitle,
-            rows=tuple(
-                _assignment_row_node(row)
-                for row in ergonomics.assignment_rows[:_MAX_ASSIGNMENT_ROWS]
-            ),
+            rows=_assignment_section_rows(ergonomics),
             color_role=ergonomics.assignment_color_role,
         ),
         _WorkbenchSection(
@@ -288,6 +286,18 @@ def _review_rows(ergonomics: HudErgonomicsView) -> tuple[HudComponentNode, ...]:
             for index, hint in enumerate(ergonomics.hotkey_hints[:remaining])
         )
     return tuple(rows)
+
+
+def _assignment_section_rows(ergonomics: HudErgonomicsView) -> tuple[HudComponentNode, ...]:
+    notice_rows = tuple(
+        _icon_text_bar_node(row)
+        for row in ergonomics.assignment_notice_rows[:_MAX_ASSIGNMENT_NOTICE_ROWS]
+    )
+    remaining_assignment_rows = max(1, _MAX_ASSIGNMENT_ROWS - len(notice_rows))
+    group_rows = tuple(
+        _assignment_row_node(row) for row in ergonomics.assignment_rows[:remaining_assignment_rows]
+    )
+    return (*notice_rows, *group_rows)
 
 
 def _status_chip_node(chip: StatusChipView) -> HudComponentNode:
