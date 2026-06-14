@@ -62,13 +62,16 @@ def test_widget_registry_exposes_expected_phase19_inventory() -> None:
         "DonutGauge",
         "DatasheetPanel",
         "AssignmentGroupRow",
+        "DiceTray",
     }.issubset(known_widget_types())
     assert {"render_mode", "clip_children"}.issubset(component_allowed_attributes("HudContainer"))
     assert {"inner_diameter", "outer_diameter", "progress_fraction"}.issubset(
         component_allowed_attributes("DonutGauge")
     )
     assert "action.movement" in known_icon_ids()
+    assert "dice.aeldari.d6.face_6" in known_icon_ids()
     assert "selected_unit" in known_data_refs()
+    assert "dice_tray" in known_data_refs()
 
 
 def test_toolkit_view_models_preserve_tunable_widget_attributes() -> None:
@@ -418,6 +421,28 @@ def test_composition_renderer_builds_component_primitives() -> None:
     assert any(
         type(primitive) is TextPrimitive and primitive.text == "Move" for primitive in primitives
     )
+
+
+def test_workbench_preview_renders_dice_tray_in_right_two_thirds() -> None:
+    path = Path(__file__).parents[1] / "docs" / "hud" / "examples" / "workbench-preview.yaml"
+    result = load_hud_composition(path, preview=True)
+    assert result.profile is not None, result.diagnostics
+
+    primitives = render_composition_profile(
+        result.profile,
+        viewport_width_px=900,
+        viewport_height_px=360,
+        component_id="workbench_preview_root",
+    )
+
+    dice_tray_panel = _panel_for_text(primitives, "Dice Tray")
+    texts = [primitive.text for primitive in primitives if type(primitive) is TextPrimitive]
+
+    assert _polygon_left(dice_tray_panel) > 300.0
+    assert "Reroll" in texts
+    assert "x1" in texts
+    assert "sel 1" in texts
+    assert "decline" in texts
 
 
 def test_datasheet_preview_stat_labels_do_not_overlap_values() -> None:

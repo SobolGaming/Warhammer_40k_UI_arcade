@@ -420,6 +420,22 @@ def test_ergonomic_hud_renders_through_configured_default_composition() -> None:
         ),
         assignment_hud_panel=assignment_panel,
         event_log_lines=("movement_proposal_submitted: player_1",),
+        event_payloads=(
+            {
+                "event_type": "dice_rolled",
+                "payload": {
+                    "roll_id": "roll-advance-000001",
+                    "spec": {
+                        "roll_type": "advance",
+                        "reason": "CORE Intercessor-like Infantry",
+                        "expression": {"dice_count": 1, "sides": 6},
+                    },
+                    "values": [4],
+                    "total": 4,
+                    "source": "CORE",
+                },
+            },
+        ),
     )
     result = load_hud_composition_reference("default-hud")
     assert result.profile is not None, result.diagnostics
@@ -447,6 +463,8 @@ def test_ergonomic_hud_renders_through_configured_default_composition() -> None:
     assert any("Fixture: Command Phase" in text for text in texts)
     assert any("Movement draft ready" in text for text in texts)
     assert "Current Assignment" in texts
+    assert "Dice Tray" in texts
+    assert "x1" in texts
 
 
 def _movement_proposal_decision() -> UiDecision:

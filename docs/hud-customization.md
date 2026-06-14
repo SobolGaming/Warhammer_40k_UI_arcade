@@ -189,6 +189,7 @@ Current runtime/preview data references:
 - `current_action`
 - `current_assignment`
 - `debug_status`
+- `dice_tray`
 - `mission_summary`
 - `movement_budget`
 - `opponent_roster`
@@ -209,6 +210,7 @@ Phase 23 also reserves named HUD presentation groups for runtime view-model outp
 - `hud.workbench.actions`
 - `hud.workbench.assignments.groups`
 - `hud.workbench.assignments.notices`
+- `hud.dice_tray.active`
 - `hud.workbench.review.diagnostics`
 - `hud.workbench.review.events`
 - `hud.workbench.review.hotkeys`
@@ -238,6 +240,12 @@ Current known icon IDs:
 - `decision.melee`
 - `decision.stratagem`
 - `dice.damage`
+- `dice.aeldari.d6.face_1`
+- `dice.aeldari.d6.face_2`
+- `dice.aeldari.d6.face_3`
+- `dice.aeldari.d6.face_4`
+- `dice.aeldari.d6.face_5`
+- `dice.aeldari.d6.face_6`
 - `dice.hit`
 - `dice.save`
 - `dice.wound`
@@ -655,6 +663,53 @@ Important properties:
 - `modifier_chips`
 - `history_visible`
 
+### `DiceTray`
+
+Purpose: display recent engine-owned dice rolls and pending engine-emitted dice reroll requests.
+
+Important properties:
+
+- `title`
+- `data_ref`
+- `face_icon_size`
+- `dice_face_asset_ids`
+- `bucket_label`
+- `show_source`
+- `max_visible_dice_per_face`
+- `count_only_threshold`
+- `history_visible`
+- `compact`
+
+Use it with `data_ref: dice_tray` or `data_ref: hud.dice_tray.active`. The runtime binding includes
+the active roll title, roll type, values, total, source, D6 face counts, pending reroll request
+metadata, exact legal option summaries, and presentation diagnostics.
+
+The built-in default D6 skin is addressed through these presentation-only icon IDs:
+
+- `dice.aeldari.d6.face_1`
+- `dice.aeldari.d6.face_2`
+- `dice.aeldari.d6.face_3`
+- `dice.aeldari.d6.face_4`
+- `dice.aeldari.d6.face_5`
+- `dice.aeldari.d6.face_6`
+
+The current composition primitive renderer shows those face IDs as deterministic face placeholders.
+The SVG files are packaged under `warhammer40k_arcade_ui.resources.art.icons` for the future texture
+renderer, but Phase 24 does not yet draw the SVG art directly.
+
+Example:
+
+```yaml
+- type: DiceTray
+  id: bottom_dice_tray
+  data_ref: dice_tray
+  title: Dice Tray
+  width: fill
+  face_icon_size: 28
+  bucket_label: Reroll
+  show_source: true
+```
+
 ### `Tooltip`
 
 Purpose: bounded detail text or transient help.
@@ -701,6 +756,8 @@ Fix diagnostics in the YAML. Do not rely on permissive fallback.
 - `rounded_rect` and `pill` are schema-supported status-chip shapes, but current rendering is the
   standard labelled-box presentation.
 - Icon rendering still uses placeholders until the future asset/icon customization work lands.
+- Dice face SVG assets are packaged and addressable, but the current composition renderer still uses
+  face-number placeholders until texture-backed widget primitives land.
 
 These limits are intentional. The HUD can become more configurable without becoming a second rules
 engine.

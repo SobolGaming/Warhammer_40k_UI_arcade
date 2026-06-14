@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
+from warhammer40k_arcade_ui.hud.dice_tray import DiceTrayView, build_dice_tray_view
 from warhammer40k_arcade_ui.hud.toolkit import (
     AssignmentGroupRowView as ToolkitAssignmentGroupRowView,
 )
@@ -40,6 +42,7 @@ class HudErgonomicsView:
     assignment_notice_rows: tuple[IconTextBarView, ...]
     assignment_subtitle: str
     assignment_color_role: HudColorRole
+    dice_tray: DiceTrayView
     diagnostic_lines: tuple[str, ...]
     event_lines: tuple[str, ...]
     hotkey_hints: tuple[str, ...]
@@ -56,6 +59,8 @@ def build_hud_ergonomics_view(
     movement_draft_panel: MovementDraftPanelView | None,
     assignment_hud_panel: AssignmentHudPanelView | None,
     event_log_lines: tuple[str, ...],
+    event_payloads: tuple[JsonObject, ...] = (),
+    pending_decision: UiDecision | None = None,
 ) -> HudErgonomicsView:
     """Build a toolkit-backed HUD summary without adding rule semantics."""
 
@@ -78,6 +83,10 @@ def build_hud_ergonomics_view(
         assignment_notice_rows=_assignment_notice_rows(assignment_hud_panel),
         assignment_subtitle=_assignment_subtitle(assignment_hud_panel),
         assignment_color_role=_assignment_color_role(assignment_hud_panel),
+        dice_tray=build_dice_tray_view(
+            event_payloads=event_payloads,
+            pending_decision=pending_decision,
+        ),
         diagnostic_lines=diagnostic_lines,
         event_lines=_filtered_event_lines(
             event_log_lines=event_log_lines,

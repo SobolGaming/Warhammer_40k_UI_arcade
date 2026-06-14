@@ -63,20 +63,34 @@ regions:
       type: HudContainer
       id: command_bench_workbench_root
       render_mode: none
-      layout: {kind: grid, columns: 3, gap_px: 8, padding_px: 8}
+      layout: {kind: stack, orientation: horizontal, gap_px: 8, padding_px: 8}
       children:
-      - type: AssignmentGroupRow
-        id: command_bench_assignment_row
-        data_ref: current_assignment
-        group_label: Current Assignment
-      - type: IconTextBar
-        id: command_bench_action_title
-        data_ref: current_action
-        icon_id: action.movement
-        primary_label: Current Action
-      - type: DonutGauge
-        id: command_bench_resource_ring
-        data_ref: movement_budget
-        inner_diameter: 44
-        outer_diameter: 82
-        label_text: Ready
+      - type: HudContainer
+        id: command_bench_action_column
+        render_mode: none
+        width: 33%
+        layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 0}
+        children:
+        - type: AssignmentGroupRow
+          id: command_bench_assignment_row
+          data_ref: current_assignment
+          group_label: Current Assignment
+        - type: IconTextBar
+          id: command_bench_action_title
+          data_ref: current_action
+          icon_id: action.movement
+          primary_label: Current Action
+        - type: DonutGauge
+          id: command_bench_resource_ring
+          data_ref: movement_budget
+          inner_diameter: 44
+          outer_diameter: 82
+          label_text: Ready
+      - type: DiceTray
+        id: command_bench_dice_tray
+        data_ref: dice_tray
+        title: Dice Tray
+        width: fill
+        face_icon_size: 28
+        max_visible_dice_per_face: 6
+        show_source: true

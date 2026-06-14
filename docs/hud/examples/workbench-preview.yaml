@@ -13,26 +13,71 @@ sample_data:
   current_assignment:
     label: Alpha Squad Movement
     summary: 3 assigned, 0 no-op
+  dice_tray:
+    title: Dice Tray
+    subtitle: Advance roll total 4
+    roll_id: roll-advance-000001
+    roll_type: advance
+    values: [4]
+    total: 4
+    source: CORE
+    faces:
+    - {face: 1, asset_id: dice.aeldari.d6.face_1, count: 0, component_indices: [], selectable_count: 0}
+    - {face: 2, asset_id: dice.aeldari.d6.face_2, count: 0, component_indices: [], selectable_count: 0}
+    - {face: 3, asset_id: dice.aeldari.d6.face_3, count: 0, component_indices: [], selectable_count: 0}
+    - {face: 4, asset_id: dice.aeldari.d6.face_4, count: 1, component_indices: [0], selectable_count: 1}
+    - {face: 5, asset_id: dice.aeldari.d6.face_5, count: 0, component_indices: [], selectable_count: 0}
+    - {face: 6, asset_id: dice.aeldari.d6.face_6, count: 0, component_indices: [], selectable_count: 0}
+    reroll_request:
+      request_id: decision-request-reroll-000001
+      roll_id: roll-advance-000001
+      roll_type: advance
+      current_values: [4]
+      allowed_selections: [[0]]
+      options:
+      - option_id: decline
+        label: Decline
+        selected_indices: []
+        is_decline: true
+      - option_id: reroll:0
+        label: Reroll die
+        selected_indices: [0]
+        is_decline: false
+    diagnostics: []
 regions:
   bottom_workbench:
     widget:
       type: HudContainer
       id: workbench_preview_root
       render_mode: panel
-      layout: {kind: grid, columns: 3, gap_px: 10, padding_px: 10}
+      layout: {kind: stack, orientation: horizontal, gap_px: 10, padding_px: 10}
       children:
-      - type: IconTextBar
-        id: current_action_title
-        icon_id: action.movement
-        data_ref: current_action
-        primary_label: Current Action
-      - type: AssignmentGroupRow
-        id: movement_assignment_row
-        data_ref: current_assignment
-        group_label: Movement Assignments
-      - type: DonutGauge
-        id: movement_budget_ring
-        data_ref: movement_budget
-        inner_diameter: 44
-        outer_diameter: 84
-        label_text: Move
+      - type: HudContainer
+        id: workbench_preview_action_column
+        render_mode: none
+        width: 33%
+        layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 0}
+        children:
+        - type: IconTextBar
+          id: current_action_title
+          icon_id: action.movement
+          data_ref: current_action
+          primary_label: Current Action
+        - type: AssignmentGroupRow
+          id: movement_assignment_row
+          data_ref: current_assignment
+          group_label: Movement Assignments
+        - type: DonutGauge
+          id: movement_budget_ring
+          data_ref: movement_budget
+          inner_diameter: 44
+          outer_diameter: 84
+          label_text: Move
+      - type: DiceTray
+        id: workbench_preview_dice_tray
+        data_ref: dice_tray
+        title: Dice Tray
+        width: fill
+        face_icon_size: 32
+        bucket_label: Reroll
+        show_source: true

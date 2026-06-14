@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from warhammer40k_arcade_ui.hud.dice_tray import dice_tray_runtime_data
 from warhammer40k_arcade_ui.hud.ergonomics import HudErgonomicsView
 from warhammer40k_arcade_ui.hud.toolkit import (
     AssignmentGroupRowView,
@@ -47,6 +48,7 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
     )
     events = tuple(_line_data(line, title="Filtered event") for line in ergonomics.event_lines)
     hotkeys = tuple(_line_data(line, title="Hotkey") for line in ergonomics.hotkey_hints)
+    dice_tray = dice_tray_runtime_data(ergonomics.dice_tray)
     data: JsonObject = {
         "phase_state": status_chips.get("phase", _fallback_status("Phase", "")),
         "active_player": status_chips.get("active_player", _fallback_status("Active", "")),
@@ -70,6 +72,7 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
         "selection_status": _selection_status(selected_unit),
         "current_action": current_action,
         "movement_budget": _movement_budget_data(ergonomics.action_rows),
+        "dice_tray": dice_tray,
         "current_assignment": current_assignment,
         "assignment_groups": list(assignment_rows),
         "debug_status": _debug_status(diagnostics=diagnostics, events=events, hotkeys=hotkeys),
@@ -87,6 +90,7 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
         "hud.workbench.actions": list(action_rows),
         "hud.workbench.assignments.groups": list(assignment_rows),
         "hud.workbench.assignments.notices": list(assignment_notice_rows),
+        "hud.dice_tray.active": dice_tray,
         "hud.workbench.review.diagnostics": list(diagnostics),
         "hud.workbench.review.events": list(events),
         "hud.workbench.review.hotkeys": list(hotkeys),
