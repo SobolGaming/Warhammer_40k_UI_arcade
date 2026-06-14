@@ -32,6 +32,7 @@ Each phase owns its goal, tasks, acceptance criteria, and closeout milestone.
 | 21 | [Packaging, CI, and regression hardening](phase-21-packaging-ci-regression.md) | Development-Ready UI Repo |
 | 22 | [Packaged runtime defaults and source model](phase-22-packaged-runtime-defaults.md) | Packaged Runtime Defaults |
 | 23 | [HUD toolkit customizability](phase-23-hud-toolkit-customizability.md) | Tunable HUD Toolkit |
+| 24 | [Dice tray and roll workbench](phase-24-dice-tray-and-roll-workbench.md) | Engine-Owned Dice Workbench |
 
 ## Umbrella And Preliminary Plans
 
@@ -48,8 +49,8 @@ for a numbered phase.
   plan for Charge Move proposal requests after charge roll resolution.
 - [Fight order UI](preliminary-fight-order-ui.md) - preliminary future plan for richer finite
   Fight phase activation and interrupt presentation.
-- [Dice tray and roll workbench](preliminary-dice-tray-and-roll-workbench.md) - preliminary future
-  plan for engine-owned dice result display, legal reroll selection, and whole-game roll workflow.
+- [Dice tray and roll workbench preliminary](preliminary-dice-tray-and-roll-workbench.md) - promoted
+  to Phase 24 and retained as a link stub.
 - [Shooting declaration assignment tool](preliminary-shooting-declaration-assignment-tool.md) -
   preliminary future plan for model/weapon-to-target assignment.
 - [Stratagem target-binding assignment tool](preliminary-stratagem-target-binding-tool.md) -
