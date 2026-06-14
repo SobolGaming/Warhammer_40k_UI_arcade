@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+Initial implementation in progress in PR for Phase 24.
 
 This phase is presentation and decision-submission scaffolding only. It must not change core-client
 payloads, engine validation, dice generation, reroll permission rules, hidden-information visibility,
@@ -321,6 +321,59 @@ uv run pre-commit run --all-files
 
 Dice implementation slices should also run the GUI event harness and headless render evidence suites
 that cover dice tray layout, if those suites are available in the current environment.
+
+## Implementation Progress Notes
+
+Initial Phase 24 implementation adds the presentation and evidence foundation:
+
+- added immutable dice tray view models and a pure reducer over viewer-scoped event payloads;
+- retained a bounded recent event-payload tail in `FiniteDecisionUiState` so HUD code can display
+  recent roll evidence without adding another event pipeline;
+- recognized generic `dice_rolled`, `advance_roll_resolved`, `charge_roll_resolved`, and nested
+  roll-state-bearing payloads;
+- detected pending `select_dice_reroll` finite decisions and exposed request ID, current values,
+  allowed selections, decline option, and legal reroll option summaries;
+- added `dice.aeldari.d6.face_1` through `dice.aeldari.d6.face_6` as known presentation icon IDs;
+- added a `DiceTray` HUD widget and `dice_tray` / `hud.dice_tray.active` runtime bindings;
+- placed the tray in the right two-thirds of the bottom HUD workbench in both built-in HUD layouts;
+- added a workbench preview fixture with sample Aeldari D6 face columns and pending reroll metadata;
+- documented the `DiceTray` widget in `docs/hud-customization.md`;
+- added reducer, state retention, composition, and ergonomic HUD tests.
+
+The first implementation intentionally does not add a separate direct click-to-submit dice bucket
+path. Pending reroll decisions still submit through the existing finite decision path, preserving
+engine-provided request IDs and option IDs. Direct face-column/bucket interaction should be added
+only after the composition widget input model can route clicks and keyboard focus without creating a
+second decision-submission path.
+
+The first implementation also registers and carries the built-in Aeldari SVG face asset IDs, but the
+current composition renderer still emits deterministic shape/text primitives rather than texture
+primitives. Actual SVG rasterization and texture-backed widget rendering remains follow-on renderer
+work.
+
+Automated verification for the initial implementation:
+
+```bash
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests
+env UV_CACHE_DIR=/tmp/uv-cache uv run pyright
+env UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/
+env UV_CACHE_DIR=/tmp/uv-cache PRE_COMMIT_HOME=/tmp/pre-commit-cache uv run pre-commit run --all-files
+env UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/check_import_boundaries.py
+env UV_CACHE_DIR=/tmp/uv-cache uv build
+```
+
+Manual validation for the initial implementation:
+
+- Run `uv run warhammer40k-hud-preview docs/hud/examples/workbench-preview.yaml` and confirm the
+  dice tray occupies the right side of the bottom workbench with face columns, count text, selectable
+  count text, and a reroll bucket column.
+- Run `uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml`,
+  choose an Advance action, and confirm the bottom workbench updates to show the latest visible roll
+  once the engine emits roll events.
+- If the engine emits `select_dice_reroll`, confirm the tray labels the reroll state and the
+  existing finite option highlight/confirm flow still submits an engine-provided option ID.
 
 ## Forward-Looking Core Requests
 

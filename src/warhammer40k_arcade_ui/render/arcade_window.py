@@ -383,6 +383,8 @@ class ArcadeWarhammerWindow(arcade.Window):
             movement_draft_panel=movement_draft_panel,
             assignment_hud_panel=assignment_hud_panel,
             event_log_lines=self._finite_state.event_log_lines,
+            event_payloads=self._finite_state.event_payloads,
+            pending_decision=self._pending_decision,
         )
         world_primitives = build_world_primitives(
             self._battlefield_view,

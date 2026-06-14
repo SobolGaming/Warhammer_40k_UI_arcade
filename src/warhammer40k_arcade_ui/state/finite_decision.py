@@ -16,6 +16,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 )
 
 MAX_EVENT_LOG_LINES = 6
+MAX_RECENT_EVENT_PAYLOADS = 48
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +39,7 @@ class FiniteDecisionUiState:
     diagnostics: tuple[UiInvalidDiagnostic, ...] = ()
     event_cursor: int = 0
     event_log_lines: tuple[str, ...] = ()
+    event_payloads: tuple[JsonObject, ...] = ()
     next_result_index: int = 1
 
     @property
@@ -74,6 +76,7 @@ class FiniteDecisionUiState:
             diagnostics=status.invalid_diagnostics,
             event_cursor=event_cursor,
             event_log_lines=_trim_event_lines(event_log_lines),
+            event_payloads=(),
         )._normalized()
 
     def cycle_option(self) -> FiniteDecisionUiState:
@@ -246,6 +249,7 @@ class FiniteDecisionUiState:
             event_log_lines=_trim_event_lines(
                 (*self.event_log_lines, *(_event_line(event) for event in delta.events))
             ),
+            event_payloads=_trim_event_payloads((*self.event_payloads, *delta.events)),
         )
 
     def _normalized(self) -> FiniteDecisionUiState:
@@ -355,3 +359,9 @@ def _trim_event_lines(lines: tuple[str, ...]) -> tuple[str, ...]:
     if len(lines) <= MAX_EVENT_LOG_LINES:
         return lines
     return lines[-MAX_EVENT_LOG_LINES:]
+
+
+def _trim_event_payloads(events: tuple[JsonObject, ...]) -> tuple[JsonObject, ...]:
+    if len(events) <= MAX_RECENT_EVENT_PAYLOADS:
+        return events
+    return events[-MAX_RECENT_EVENT_PAYLOADS:]
