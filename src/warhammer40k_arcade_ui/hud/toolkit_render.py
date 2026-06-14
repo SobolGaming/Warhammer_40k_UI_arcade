@@ -184,6 +184,8 @@ def _component_shell(
         return _datasheet_panel(node, rect=rect, theme=theme, data_value=data_value)
     if node.widget_type == "StatusChip":
         return _status_chip(node, rect=rect, theme=theme, data_value=data_value)
+    if node.widget_type == "DiceTray":
+        return _dice_tray(node, rect=rect, theme=theme, data_value=data_value)
     if node.widget_type in (
         "HudPanel",
         "IconTextBar",
@@ -370,6 +372,347 @@ def _datasheet_panel(
                 stat_cell_height,
             )
             primitives.extend(_stat_cell(label=label, value=value, rect=cell_rect, theme=theme))
+    return tuple(primitives)
+
+
+def _dice_tray(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    data_value: JsonValue | None,
+) -> tuple[RenderPrimitive, ...]:
+    data = _data_object(data_value)
+    reroll_request = _data_object(data.get("reroll_request"))
+    diagnostics = _string_items(data.get("diagnostics"))
+    title = _attribute_text(
+        node, "title", default=json_text(data.get("title"), default="Dice Tray")
+    )
+    subtitle = json_text(data.get("subtitle"), default="No recent visible dice roll")
+    source = json_text(data.get("source"), default="")
+    total_text = json_text(data.get("total"), default="")
+    color_role = "warning" if reroll_request else "active" if total_text else "neutral"
+    accent = theme.color_for_role(color_role)
+    overflow = _overflow_policy(node)
+    primitives: list[RenderPrimitive] = [
+        _panel(rect, theme=theme, outline_color=_with_alpha(accent, 194))
+    ]
+    title_y = rect.top - theme.inner_padding_px - 2.0
+    text_width = max(theme.compact_font_size_px, rect.width - (theme.inner_padding_px * 2.0))
+    primitives.append(
+        TextPrimitive(
+            layer="hud_widget_text",
+            text=_overflow_text(
+                title,
+                width_px=text_width,
+                font_size_px=theme.title_font_size_px,
+                policy=overflow,
+            ),
+            position=(rect.x + theme.inner_padding_px, title_y),
+            color=theme.text,
+            font_size=_font_size_for_text(
+                title,
+                width_px=text_width,
+                font_size_px=theme.title_font_size_px,
+                policy=overflow,
+            ),
+            coordinate_space="screen",
+            anchor_y="top",
+        )
+    )
+    summary_parts = [subtitle]
+    if total_text:
+        summary_parts.append(f"total {total_text}")
+    if _attribute_bool(node, "show_source", default=True) and source:
+        summary_parts.append(source)
+    summary = " | ".join(part for part in summary_parts if part)
+    primitives.append(
+        TextPrimitive(
+            layer="hud_widget_text",
+            text=_overflow_text(
+                summary,
+                width_px=text_width,
+                font_size_px=theme.compact_font_size_px,
+                policy=overflow,
+            ),
+            position=(rect.x + theme.inner_padding_px, title_y - theme.line_height_px),
+            color=theme.muted_text,
+            font_size=_font_size_for_text(
+                summary,
+                width_px=text_width,
+                font_size_px=theme.compact_font_size_px,
+                policy=overflow,
+            ),
+            coordinate_space="screen",
+            anchor_y="top",
+        )
+    )
+    content_rect = ScreenRect(
+        rect.x + theme.inner_padding_px,
+        rect.y + theme.inner_padding_px,
+        max(0.0, rect.width - (theme.inner_padding_px * 2.0)),
+        max(0.0, rect.height - (theme.inner_padding_px * 2.0) - (theme.line_height_px * 2.25)),
+    )
+    if content_rect.height <= 0.0 or content_rect.width <= 0.0:
+        return tuple(primitives)
+    primitives.extend(
+        _dice_face_columns(
+            node,
+            rect=content_rect,
+            theme=theme,
+            data=data,
+            reroll_request=reroll_request,
+        )
+    )
+    if diagnostics:
+        primitives.append(
+            TextPrimitive(
+                layer="hud_widget_text",
+                text=_overflow_text(
+                    f"Diagnostic: {diagnostics[0]}",
+                    width_px=text_width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
+                position=(rect.x + theme.inner_padding_px, rect.y + theme.inner_padding_px),
+                color=theme.warning,
+                font_size=theme.compact_font_size_px,
+                coordinate_space="screen",
+                anchor_y="baseline",
+            )
+        )
+    return tuple(primitives)
+
+
+def _dice_face_columns(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    data: JsonObject,
+    reroll_request: JsonObject,
+) -> tuple[RenderPrimitive, ...]:
+    faces = _face_rows(data)
+    if not faces or (
+        not reroll_request and all(_int_value(face.get("count"), default=0) == 0 for face in faces)
+    ):
+        empty_text = json_text(data.get("summary"), default="No recent visible dice roll")
+        return (
+            TextPrimitive(
+                layer="hud_widget_text",
+                text=_truncate(
+                    empty_text, max_chars=_max_chars(rect.width, theme.base_font_size_px)
+                ),
+                position=(rect.x, rect.top - 4.0),
+                color=theme.muted_text,
+                font_size=theme.base_font_size_px,
+                coordinate_space="screen",
+                anchor_y="top",
+            ),
+        )
+    gap = 6.0
+    column_count = 7
+    column_width = max(0.0, (rect.width - (gap * (column_count - 1))) / column_count)
+    column_height = rect.height
+    primitives: list[RenderPrimitive] = []
+    face_icon_size = max(14.0, _attribute_float(node, "face_icon_size", default=28.0))
+    icon_size = min(face_icon_size, max(0.0, column_width - 8.0), max(0.0, column_height * 0.45))
+    for index, face in enumerate(faces):
+        column_rect = ScreenRect(
+            rect.x + (index * (column_width + gap)),
+            rect.y,
+            column_width,
+            column_height,
+        )
+        primitives.extend(
+            _dice_face_column(
+                face,
+                rect=column_rect,
+                theme=theme,
+                icon_size=icon_size,
+            )
+        )
+    bucket_rect = ScreenRect(
+        rect.x + (6 * (column_width + gap)),
+        rect.y,
+        column_width,
+        column_height,
+    )
+    primitives.extend(
+        _dice_bucket_column(
+            node,
+            rect=bucket_rect,
+            theme=theme,
+            reroll_request=reroll_request,
+            icon_size=icon_size,
+        )
+    )
+    return tuple(primitives)
+
+
+def _dice_face_column(
+    face: JsonObject,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    icon_size: float,
+) -> tuple[RenderPrimitive, ...]:
+    face_value = _int_value(face.get("face"), default=0)
+    count = _int_value(face.get("count"), default=0)
+    selectable_count = _int_value(face.get("selectable_count"), default=0)
+    asset_id = json_text(face.get("asset_id"), default=f"dice.aeldari.d6.face_{face_value}")
+    accent = theme.selected if selectable_count > 0 else theme.panel_border
+    icon_rect = ScreenRect(
+        rect.x + ((rect.width - icon_size) / 2.0),
+        rect.top - icon_size - 6.0,
+        icon_size,
+        icon_size,
+    )
+    label_y = max(rect.y + 16.0, icon_rect.y - theme.line_height_px - 2.0)
+    primitives: list[RenderPrimitive] = [
+        _panel(
+            rect, theme=theme, fill_color=(18, 24, 24, 118), outline_color=_with_alpha(accent, 172)
+        ),
+        *_dice_face_placeholder(icon_rect, theme=theme, asset_id=asset_id, face_value=face_value),
+        TextPrimitive(
+            layer="hud_widget_text",
+            text=f"x{count}",
+            position=(rect.x + (rect.width / 2.0), label_y),
+            color=theme.text if count > 0 else theme.muted_text,
+            font_size=theme.compact_font_size_px,
+            coordinate_space="screen",
+            anchor_x="center",
+            anchor_y="top",
+        ),
+    ]
+    if selectable_count > 0:
+        primitives.append(
+            TextPrimitive(
+                layer="hud_widget_text",
+                text=f"sel {selectable_count}",
+                position=(rect.x + (rect.width / 2.0), rect.y + 6.0),
+                color=theme.selected,
+                font_size=max(8.0, theme.compact_font_size_px - 1.0),
+                coordinate_space="screen",
+                anchor_x="center",
+                anchor_y="baseline",
+            )
+        )
+    return tuple(primitives)
+
+
+def _dice_face_placeholder(
+    rect: ScreenRect,
+    *,
+    theme: HudTheme,
+    asset_id: str,
+    face_value: int,
+) -> tuple[RenderPrimitive, ...]:
+    label = str(face_value) if 1 <= face_value <= 6 else _icon_label(asset_id)
+    center = (rect.x + (rect.width / 2.0), rect.y + (rect.height / 2.0))
+    return (
+        _panel(rect, theme=theme, fill_color=(32, 42, 44, 220), outline_color=theme.accent),
+        TextPrimitive(
+            layer="hud_widget_icon_text",
+            text=label,
+            position=center,
+            color=theme.text,
+            font_size=max(10.0, min(theme.title_font_size_px, rect.width * 0.48)),
+            coordinate_space="screen",
+            anchor_x="center",
+            anchor_y="center",
+        ),
+    )
+
+
+def _dice_bucket_column(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    reroll_request: JsonObject,
+    icon_size: float,
+) -> tuple[RenderPrimitive, ...]:
+    has_reroll = bool(reroll_request)
+    options = _object_items(reroll_request.get("options")) if has_reroll else ()
+    decline_option = next(
+        (option for option in options if _bool_value(option.get("is_decline"), default=False)),
+        None,
+    )
+    reroll_option = next(
+        (option for option in options if not _bool_value(option.get("is_decline"), default=False)),
+        None,
+    )
+    title = _attribute_text(
+        node,
+        "bucket_label",
+        default="Reroll" if has_reroll else "Bucket",
+    )
+    subtitle = (
+        json_text(reroll_option.get("label"), default=json_text(reroll_option.get("option_id")))
+        if reroll_option is not None
+        else "No selectable dice"
+        if has_reroll
+        else "Read-only"
+    )
+    accent = theme.warning if has_reroll else theme.neutral
+    primitives: list[RenderPrimitive] = [
+        _panel(
+            rect, theme=theme, fill_color=(20, 22, 28, 132), outline_color=_with_alpha(accent, 188)
+        )
+    ]
+    center_x = rect.x + (rect.width / 2.0)
+    icon_rect = ScreenRect(
+        rect.x + ((rect.width - icon_size) / 2.0),
+        rect.top - icon_size - 6.0,
+        icon_size,
+        icon_size,
+    )
+    primitives.extend(_icon_placeholder(icon_rect, theme=theme, label="RR" if has_reroll else "RO"))
+    primitives.append(
+        TextPrimitive(
+            layer="hud_widget_text",
+            text=_truncate(
+                title, max_chars=max(1, _max_chars(rect.width - 6.0, theme.compact_font_size_px))
+            ),
+            position=(center_x, max(rect.y + 18.0, icon_rect.y - theme.line_height_px - 2.0)),
+            color=theme.text,
+            font_size=theme.compact_font_size_px,
+            coordinate_space="screen",
+            anchor_x="center",
+            anchor_y="top",
+        )
+    )
+    primitives.append(
+        TextPrimitive(
+            layer="hud_widget_text",
+            text=_truncate(
+                subtitle,
+                max_chars=max(
+                    1, _max_chars(rect.width - 6.0, max(8.0, theme.compact_font_size_px - 1.0))
+                ),
+            ),
+            position=(center_x, rect.y + 6.0),
+            color=theme.warning if has_reroll else theme.muted_text,
+            font_size=max(8.0, theme.compact_font_size_px - 1.0),
+            coordinate_space="screen",
+            anchor_x="center",
+            anchor_y="baseline",
+        )
+    )
+    if decline_option is not None:
+        primitives.append(
+            TextPrimitive(
+                layer="hud_widget_text",
+                text="decline",
+                position=(center_x, rect.y + theme.line_height_px + 3.0),
+                color=theme.muted_text,
+                font_size=max(8.0, theme.compact_font_size_px - 2.0),
+                coordinate_space="screen",
+                anchor_x="center",
+                anchor_y="baseline",
+            )
+        )
     return tuple(primitives)
 
 
@@ -856,6 +1199,45 @@ def _data_value(node: HudComponentNode, sample_data: JsonObject) -> JsonValue | 
     return sample_data.get(node.data_ref)
 
 
+def _data_object(value: JsonValue | None) -> JsonObject:
+    if type(value) is dict:
+        return value
+    return {}
+
+
+def _object_items(value: JsonValue | None) -> tuple[JsonObject, ...]:
+    if type(value) is not list:
+        return ()
+    items: list[JsonObject] = []
+    for item in value:
+        if type(item) is dict:
+            items.append(item)
+    return tuple(items)
+
+
+def _string_items(value: JsonValue | None) -> tuple[str, ...]:
+    if type(value) is not list:
+        return ()
+    return tuple(item for item in value if type(item) is str and item)
+
+
+def _face_rows(data: JsonObject) -> tuple[JsonObject, ...]:
+    faces = _object_items(data.get("faces"))
+    return tuple(face for face in faces if 1 <= _int_value(face.get("face"), default=0) <= 6)[:6]
+
+
+def _int_value(value: JsonValue | None, *, default: int) -> int:
+    if type(value) is int:
+        return value
+    return default
+
+
+def _bool_value(value: JsonValue | None, *, default: bool) -> bool:
+    if type(value) is bool:
+        return value
+    return default
+
+
 def _progress_from_data(data_value: JsonValue | None) -> float:
     if type(data_value) is dict:
         raw_progress = data_value.get("progress_fraction")
@@ -886,6 +1268,13 @@ def _attribute_float(node: HudComponentNode, key: str, *, default: float) -> flo
     value = node.attributes.get(key)
     if type(value) is int or type(value) is float:
         return float(value)
+    return default
+
+
+def _attribute_bool(node: HudComponentNode, key: str, *, default: bool) -> bool:
+    value = node.attributes.get(key)
+    if type(value) is bool:
+        return value
     return default
 
 

@@ -5,6 +5,15 @@ from warhammer40k_arcade_ui.hud.action_summary import (
     ActionVisualSummaryGroup,
     build_action_visual_summary,
 )
+from warhammer40k_arcade_ui.hud.dice_tray import (
+    DiceComponentView,
+    DiceFaceColumnView,
+    DiceRerollOptionView,
+    DiceRerollRequestView,
+    DiceRollView,
+    DiceTrayView,
+    build_dice_tray_view,
+)
 from warhammer40k_arcade_ui.hud.ergonomics import (
     HudErgonomicsView,
     build_hud_ergonomics_view,
@@ -71,7 +80,13 @@ __all__ = [
     "DatasheetHeaderView",
     "DatasheetPanelView",
     "DebugInspectorView",
+    "DiceComponentView",
+    "DiceFaceColumnView",
     "DicePipelineView",
+    "DiceRerollOptionView",
+    "DiceRerollRequestView",
+    "DiceRollView",
+    "DiceTrayView",
     "DonutGaugeView",
     "EntityChipView",
     "FiniteDecisionOptionView",
@@ -101,6 +116,7 @@ __all__ = [
     "build_action_visual_summary",
     "build_context_menu",
     "build_debug_inspector",
+    "build_dice_tray_view",
     "build_finite_decision_panel",
     "build_hud_ergonomics_view",
     "build_hud_layout",

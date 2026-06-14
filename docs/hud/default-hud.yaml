@@ -66,16 +66,30 @@ regions:
       type: HudContainer
       id: movement_workbench_root
       render_mode: none
-      layout: {kind: grid, columns: 2, gap_px: 8, padding_px: 8}
+      layout: {kind: stack, orientation: horizontal, gap_px: 8, padding_px: 8}
       children:
-      - type: IconTextBar
-        id: current_action_title
-        icon_id: action.movement
-        data_ref: current_action
-        primary_label: Current Action
-      - type: DonutGauge
-        id: movement_budget_ring
-        data_ref: movement_budget
-        inner_diameter: 48
-        outer_diameter: 86
-        label_text: Move
+      - type: HudContainer
+        id: movement_action_column
+        render_mode: none
+        width: 33%
+        layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 0}
+        children:
+        - type: IconTextBar
+          id: current_action_title
+          icon_id: action.movement
+          data_ref: current_action
+          primary_label: Current Action
+        - type: DonutGauge
+          id: movement_budget_ring
+          data_ref: movement_budget
+          inner_diameter: 48
+          outer_diameter: 86
+          label_text: Move
+      - type: DiceTray
+        id: bottom_dice_tray
+        data_ref: dice_tray
+        title: Dice Tray
+        width: fill
+        face_icon_size: 28
+        max_visible_dice_per_face: 6
+        show_source: true
