@@ -119,9 +119,15 @@ Build bottom-up:
 22. packaged runtime defaults and source model
 23. HUD toolkit customizability and overflow tuning
 24. dice tray and roll workbench
+25. legacy UI cleanup
+26. generic finite decision workbench polish
+27. generic placement proposal editor
+28. movement proposal family generalization
+29. generic assignment proposal editors for shooting, melee, and stratagem targets
 
-Do not add shooting, fight, charge, AI, training, or private rule logic before the movement
-decision path is trustworthy end to end.
+When adding shooting, fight, charge, AI, training, or other later-gameplay surfaces, keep them on
+the same trusted decision/proposal path as movement. Do not add private rule logic or local
+authoritative shortcuts.
 
 ## Non-negotiable invariants
 
