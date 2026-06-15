@@ -166,8 +166,6 @@ def _units_from_battlefield_state(battlefield_state: JsonObject) -> tuple[UnitVi
                     ),
                 )
             )
-    if not units:
-        raise CoreProjectionRenderError("battlefield_state must contain at least one unit.")
     return tuple(units)
 
 

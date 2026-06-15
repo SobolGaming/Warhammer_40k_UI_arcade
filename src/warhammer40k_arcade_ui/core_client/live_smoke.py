@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from warhammer40k_core.core.army_catalog import ArmyCatalog
 from warhammer40k_core.core.ruleset_descriptor import RulesetDescriptor
@@ -44,6 +45,7 @@ from warhammer40k_arcade_ui.render.view_models import BattlefieldView
 
 LIVE_CORE_SMOKE_VIEWER_PLAYER_ID = "player-a"
 LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID = "fixed:assassination:bring-it-down"
+type LiveCoreSmokeStopPhase = Literal["deployment", "movement"]
 
 
 class LiveCoreSmokeError(ValueError):
@@ -65,9 +67,11 @@ class LiveCoreSmokeStartup:
 def build_live_core_smoke_startup(
     *,
     viewer_player_id: str = LIVE_CORE_SMOKE_VIEWER_PLAYER_ID,
+    stop_at_phase: str | None = None,
 ) -> LiveCoreSmokeStartup:
-    """Start a real local core session and advance to the first movement-unit choice."""
+    """Start a real local core session and advance to the requested smoke stop point."""
 
+    stop_phase = _validated_stop_phase(stop_at_phase)
     client = LocalSessionClient()
     client.start_game(_live_core_smoke_config())
     status = client.advance_until_decision_or_terminal()
@@ -85,8 +89,13 @@ def build_live_core_smoke_startup(
         selected_option_id=LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID,
         result_id="ui-live-smoke-secondary-player-b",
     )
-    status = _submit_smoke_deployments(client=client, status=status)
-    _assert_expected_pending_decision(status, "select_movement_unit")
+    status = _submit_smoke_deployments(client=client, status=status, stop_at_phase=stop_phase)
+    expected_decision = (
+        SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE
+        if stop_phase == "deployment"
+        else "select_movement_unit"
+    )
+    _assert_expected_pending_decision(status, expected_decision)
     game_view = client.get_view(viewer_player_id)
     event_delta = client.get_events_since(0, viewer_player_id)
     try:
@@ -135,6 +144,7 @@ def _submit_smoke_deployments(
     *,
     client: LocalSessionClient,
     status: UiClientStatus,
+    stop_at_phase: LiveCoreSmokeStopPhase,
 ) -> UiClientStatus:
     current = status
     result_number = 1
@@ -152,6 +162,12 @@ def _submit_smoke_deployments(
                 selected_option_id=decision.options[0].option_id,
                 result_id=result_id,
             )
+            if (
+                stop_at_phase == "deployment"
+                and current.decision is not None
+                and current.decision.decision_type == SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE
+            ):
+                return current
         else:
             request = _pending_core_request(
                 client=client,
@@ -164,6 +180,16 @@ def _submit_smoke_deployments(
             )
         result_number += 1
     return current
+
+
+def _validated_stop_phase(stop_at_phase: str | None) -> LiveCoreSmokeStopPhase:
+    if stop_at_phase is None:
+        return "movement"
+    if stop_at_phase == "deployment":
+        return "deployment"
+    if stop_at_phase == "movement":
+        return "movement"
+    raise LiveCoreSmokeError(f"Unsupported live-core smoke stop phase: {stop_at_phase}.")
 
 
 def _pending_core_request(

@@ -21,6 +21,7 @@ uv run warhammer40k-arcade-ui
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase deployment --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --event-trace summary --event-trace-file /tmp/ui-trace.jsonl
 uv run warhammer40k-arcade-ui --crash-report-dir /tmp/ui-crashes
 uv run warhammer40k-hud-preview default-hud
@@ -145,6 +146,26 @@ file that references it, or by an explicit YAML path. Preview examples under `do
 use the same YAML dialect plus placeholder `sample_data`. For a user-level guide to zones, widgets,
 bindings, sizing, overflow, and shape customization, see
 [docs/hud-customization.md](docs/hud-customization.md).
+
+## Live core smoke stop points
+
+The normal live smoke path auto-answers setup and deployment decisions, then opens the UI at the
+first movement-unit decision:
+
+```bash
+uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
+```
+
+To manually test the generic placement editor against the real local core, stop the same smoke
+scenario at the first deployment placement proposal:
+
+```bash
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase deployment --ui-prefs docs/preferences/default.yaml
+```
+
+This path still uses the real core session. It only pauses before the smoke harness would otherwise
+auto-submit the deployment placement payload. The current smoke mission follows the core deployment
+order, so the first paused deployment placement is currently for `player-b`.
 
 ## Forensic event traces
 

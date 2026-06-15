@@ -46,6 +46,33 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     )
 
 
+def test_live_core_smoke_can_stop_at_deployment_placement_request() -> None:
+    startup = build_live_core_smoke_startup(stop_at_phase="deployment")
+    decision = startup.status.decision
+
+    assert decision is not None
+    assert decision.decision_type == "submit_deployment_placement"
+    assert decision.actor_id == "player-b"
+    assert decision.is_parameterized is True
+    assert decision.placement_proposal is not None
+    assert decision.placement_proposal.request_id == decision.request_id
+    assert decision.placement_proposal.decision_type == "submit_deployment_placement"
+    assert decision.placement_proposal.player_id == decision.actor_id
+    assert decision.placement_proposal.proposal_kind == "deployment_placement"
+    assert decision.placement_proposal.unit_instance_id == "army-beta:intercessor-unit-2"
+    assert decision.placement_proposal.required_model_ids == (
+        "army-beta:intercessor-unit-2:core-intercessor-like:001",
+        "army-beta:intercessor-unit-2:core-intercessor-like:002",
+        "army-beta:intercessor-unit-2:core-intercessor-like:003",
+        "army-beta:intercessor-unit-2:core-intercessor-like:004",
+        "army-beta:intercessor-unit-2:core-intercessor-like:005",
+    )
+    assert startup.viewer_player_id == "player-a"
+    assert startup.event_cursor > 0
+    assert startup.battlefield_view.table.width == 60.0
+    assert startup.battlefield_view.table.height == 44.0
+
+
 def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> None:
     startup, proposal_decision, payload_preview = _ready_live_core_normal_move_payload()
     witness = _required_object(payload_preview, "witness")

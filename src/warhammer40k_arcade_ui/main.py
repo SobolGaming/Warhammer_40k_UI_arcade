@@ -26,6 +26,7 @@ class CliArgs:
 
     ui_prefs_path: Path | None
     live_core_smoke: bool
+    stop_at_phase: str | None
     event_trace_level: str | None
     event_trace_file: Path | None
     event_trace_cfg_file: Path | None
@@ -65,6 +66,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     run_app(
         ui_prefs_path=args.ui_prefs_path,
         live_core_smoke=args.live_core_smoke,
+        live_core_stop_phase=args.stop_at_phase,
         event_trace_level=args.event_trace_level,
         event_trace_file=args.event_trace_file,
         event_trace_cfg_file=args.event_trace_cfg_file,
@@ -89,6 +91,14 @@ def parse_args(argv: Sequence[str] | None) -> CliArgs:
         "--live-core-smoke",
         action="store_true",
         help="Launch an opt-in real local core movement smoke session.",
+    )
+    parser.add_argument(
+        "--stop-at-phase",
+        choices=("deployment", "movement"),
+        help=(
+            "Live-core smoke pause point. Defaults to movement; use deployment to open the "
+            "Arcade window at the first deployment placement proposal."
+        ),
     )
     parser.add_argument(
         "--event-trace",
@@ -151,9 +161,12 @@ def parse_args(argv: Sequence[str] | None) -> CliArgs:
         help="Write crash diagnostic bundles under this directory.",
     )
     namespace = parser.parse_args(argv)
+    if namespace.stop_at_phase is not None and not namespace.live_core_smoke:
+        parser.error("--stop-at-phase requires --live-core-smoke.")
     return CliArgs(
         ui_prefs_path=namespace.ui_prefs,
         live_core_smoke=namespace.live_core_smoke,
+        stop_at_phase=namespace.stop_at_phase,
         event_trace_level=namespace.event_trace,
         event_trace_file=namespace.event_trace_file,
         event_trace_cfg_file=namespace.event_trace_cfg,

@@ -101,6 +101,23 @@ def test_core_projection_uses_structured_deployment_zone_shape() -> None:
     )
 
 
+def test_core_projection_allows_empty_unit_list_during_deployment() -> None:
+    view = battlefield_view_from_game_view(
+        _game_view(
+            _terrain_feature(
+                center=(10.0, 20.0),
+                size=(6.0, 4.0),
+                source_id="custom-terrain-source",
+            ),
+            placed_armies=[],
+        )
+    )
+
+    assert view.units == ()
+    assert view.table.width == 60.0
+    assert view.table.height == 44.0
+
+
 def test_core_projection_rejects_source_terrain_footprint_bound_mismatch() -> None:
     with pytest.raises(
         CoreProjectionRenderError,
@@ -124,6 +141,7 @@ def _game_view(
     terrain_feature: JsonObject,
     *,
     deployment_zones: list[JsonObject] | None = None,
+    placed_armies: list[JsonObject] | None = None,
 ) -> UiGameView:
     return UiGameView(
         viewer_player_id="player-a",
@@ -138,31 +156,9 @@ def _game_view(
             JsonObject,
             {
                 "battlefield_id": "projection-test-battlefield",
-                "placed_armies": [
-                    {
-                        "army_id": "army-alpha",
-                        "player_id": "player-a",
-                        "unit_placements": [
-                            {
-                                "army_id": "army-alpha",
-                                "player_id": "player-a",
-                                "unit_instance_id": "unit-alpha",
-                                "model_placements": [
-                                    {
-                                        "army_id": "army-alpha",
-                                        "player_id": "player-a",
-                                        "unit_instance_id": "unit-alpha",
-                                        "model_instance_id": "unit-alpha:model-001",
-                                        "pose": {
-                                            "position": {"x": 6.0, "y": 6.0, "z": 0.0},
-                                            "facing": {"degrees": 0.0},
-                                        },
-                                    }
-                                ],
-                            }
-                        ],
-                    }
-                ],
+                "placed_armies": _default_placed_armies()
+                if placed_armies is None
+                else placed_armies,
                 "removed_model_ids": [],
             },
         ),
@@ -186,6 +182,37 @@ def _game_view(
         pending_decision=None,
         pending_proposal=None,
         event_count=1,
+    )
+
+
+def _default_placed_armies() -> list[JsonObject]:
+    return cast(
+        list[JsonObject],
+        [
+            {
+                "army_id": "army-alpha",
+                "player_id": "player-a",
+                "unit_placements": [
+                    {
+                        "army_id": "army-alpha",
+                        "player_id": "player-a",
+                        "unit_instance_id": "unit-alpha",
+                        "model_placements": [
+                            {
+                                "army_id": "army-alpha",
+                                "player_id": "player-a",
+                                "unit_instance_id": "unit-alpha",
+                                "model_instance_id": "unit-alpha:model-001",
+                                "pose": {
+                                    "position": {"x": 6.0, "y": 6.0, "z": 0.0},
+                                    "facing": {"degrees": 0.0},
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
     )
 
 
