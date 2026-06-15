@@ -123,12 +123,14 @@ def test_movement_draft_builds_path_waypoint_ghost_and_budget_primitives() -> No
     circle_layers = [
         primitive.layer for primitive in primitives if type(primitive) is CirclePrimitive
     ]
+    text_layers = [primitive.layer for primitive in primitives if type(primitive) is TextPrimitive]
     assert line_layers.count("movement_path") == 1
     assert circle_layers.count("movement_active_model_overlay") == 1
     assert circle_layers.count("movement_unassigned_model_overlay") == 2
     assert circle_layers.count("movement_ghost_base") == 1
     assert "movement_waypoint" in circle_layers
     assert "movement_budget_ring" in circle_layers
+    assert "movement_waypoint_label" not in text_layers
 
 
 def test_action_visual_summary_builds_dim_path_and_ghost_primitives() -> None:

@@ -355,7 +355,7 @@ def _movement_draft_primitives(
                         line_width=1.0,
                     )
                 )
-                for index, point in enumerate(assignment.points[1:], start=1):
+                for point in assignment.points[1:]:
                     primitives.append(
                         CirclePrimitive(
                             layer="movement_waypoint",
@@ -364,18 +364,6 @@ def _movement_draft_primitives(
                             fill_color=line_color,
                             outline_color=(248, 250, 246, 255),
                             line_width=0.8,
-                        )
-                    )
-                    primitives.append(
-                        TextPrimitive(
-                            layer="movement_waypoint_label",
-                            text=f"{assignment.model_id}:{index}",
-                            position=(point[0], point[1] + 0.42),
-                            color=line_color,
-                            font_size=7.5,
-                            coordinate_space="world",
-                            anchor_x="center",
-                            anchor_y="center",
                         )
                     )
         if movement_draft.cursor_preview_point is not None:
