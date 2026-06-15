@@ -125,9 +125,10 @@ Build bottom-up:
 24. dice tray and roll workbench
 25. legacy UI cleanup
 26. generic finite decision workbench polish
-27. generic placement proposal editor
-28. movement proposal family generalization
-29. generic assignment proposal editors for shooting, melee, and stratagem targets
+27. current action view and clickable HUD buttons
+28. generic placement proposal editor
+29. movement proposal family generalization
+30. generic assignment proposal editors for shooting, melee, and stratagem targets
 
 When adding shooting, fight, charge, AI, training, or other later-gameplay surfaces, keep them on
 the same trusted decision/proposal path as movement. Do not add private rule logic or local
