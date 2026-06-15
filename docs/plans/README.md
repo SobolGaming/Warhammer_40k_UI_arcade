@@ -16,6 +16,7 @@ projection data, collects intent, submits engine requests, and displays diagnost
 4. [Phase 28: Generic Placement Proposal Editor](phase-28-generic-placement-proposal-editor.md)
 5. [Phase 29: Movement Proposal Family Generalization](phase-29-movement-proposal-family-generalization.md)
 6. [Phase 30: Generic Assignment Proposal Editors](phase-30-generic-assignment-proposal-editors.md)
+7. [Phase 31: Scrollable Player Units Roster](phase-31-scrollable-player-units-roster.md)
 
 ## Preliminary Setup-Flow Plans
 
