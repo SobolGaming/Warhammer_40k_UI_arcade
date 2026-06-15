@@ -74,17 +74,14 @@ regions:
         width: 33%
         layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 0}
         children:
-        - type: IconTextBar
-          id: current_action_title
-          icon_id: action.movement
+        - type: CurrentActionPanel
+          id: current_action_panel
           data_ref: current_action
-          primary_label: Current Action
-        - type: DonutGauge
-          id: movement_budget_ring
-          data_ref: movement_budget
-          inner_diameter: 48
-          outer_diameter: 86
-          label_text: Move
+          title: Current Action
+          button_shape: rect
+          button_height: 34
+          button_min_width: 98
+          button_gap: 6
       - type: DiceTray
         id: bottom_dice_tray
         data_ref: dice_tray

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import shlex
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from itertools import pairwise
 from pathlib import Path
 from textwrap import wrap
@@ -15,6 +15,7 @@ import arcade
 from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
+    JsonValue,
     UiClientProtocolError,
     UiClientStatus,
     UiCoreClient,
@@ -46,7 +47,8 @@ from warhammer40k_arcade_ui.hud.runtime_data import (
     runtime_data_for_ergonomic_hud,
     theme_for_ergonomic_hud,
 )
-from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
+from warhammer40k_arcade_ui.hud.toolkit import HudButtonHitRegion
+from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile_with_hit_regions
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
@@ -97,12 +99,46 @@ CONTEXT_MENU_ACTION_WIDTH_WORLD = 18.0
 CONTEXT_MENU_LINE_TOLERANCE_WORLD = 0.55
 RIGHT_CLICK_REMOVE_DRAG_TOLERANCE_PX = 3.0
 FATAL_ENGINE_EXIT_DELAY_SECONDS = 4.0
+OPTION_FOCUS_UNIT_ID_KEYS = (
+    "target_unit_instance_id",
+    "target_unit_id",
+    "target_unit_instance_ids",
+    "selected_unit_instance_id",
+    "selected_unit_id",
+    "moved_unit_instance_id",
+    "moved_unit_id",
+    "unit_instance_id",
+    "unit_id",
+    "source_unit_instance_id",
+    "source_unit_id",
+)
+OPTION_FOCUS_MODEL_ID_KEYS = (
+    "target_model_instance_id",
+    "target_model_id",
+    "target_model_instance_ids",
+    "selected_model_instance_id",
+    "selected_model_id",
+    "moved_model_instance_id",
+    "moved_model_id",
+    "model_instance_id",
+    "model_id",
+    "source_model_instance_id",
+    "source_model_id",
+)
 
 logger = logging.getLogger(__name__)
 
 type FatalGameEngineException = (
     UiClientProtocolError | RenderViewModelError | MovementSubmissionError | KeyError
 )
+
+
+@dataclass(frozen=True, slots=True)
+class OptionEntityFocusTarget:
+    """Projected entity focus target inferred from a finite option payload."""
+
+    unit_id: str
+    model_id: str | None = None
 
 
 class HudPreferencesConfigurationError(RuntimeError):
@@ -193,6 +229,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._right_mouse_press_screen: tuple[float, float] | None = None
         self._right_mouse_drag_distance_px = 0.0
         self._fatal_exit_deadline_monotonic: float | None = None
+        self._hud_button_hit_regions: tuple[HudButtonHitRegion, ...] = ()
+        self._hovered_hud_button_id: str | None = None
         self._trace_writer = trace_writer or NoOpTraceWriter()
         self._crash_report_context = crash_report_context or CrashReportContext(
             runtime_mode="arcade_window",
@@ -279,6 +317,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         """Current viewer event cursor."""
 
         return self._event_cursor
+
+    @property
+    def hud_button_hit_regions(self) -> tuple[HudButtonHitRegion, ...]:
+        """Frame-local HUD button hit regions from the most recent draw."""
+
+        return self._hud_button_hit_regions
 
     @property
     def context_menu(self) -> ContextMenuView | None:
@@ -380,6 +424,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_log_lines=self._finite_state.event_log_lines,
             event_payloads=self._finite_state.event_payloads,
             pending_decision=self._pending_decision,
+            hovered_hud_button_id=self._hovered_hud_button_id,
         )
         world_primitives = build_world_primitives(
             self._battlefield_view,
@@ -416,12 +461,13 @@ class ArcadeWarhammerWindow(arcade.Window):
         hud_layout: HudLayoutView,
     ) -> tuple[RenderPrimitive, ...]:
         if self._hud_composition_profile is None:
+            self._hud_button_hit_regions = ()
             return _hud_composition_diagnostic_primitives(
                 diagnostics=self._hud_composition_diagnostics,
                 viewport_width_px=self.width,
                 viewport_height_px=self.height,
             )
-        return render_composition_profile(
+        result = render_composition_profile_with_hit_regions(
             self._hud_composition_profile,
             viewport_width_px=self.width,
             viewport_height_px=self.height,
@@ -430,6 +476,8 @@ class ArcadeWarhammerWindow(arcade.Window):
             hud_layout=hud_layout,
             include_background=False,
         )
+        self._hud_button_hit_regions = result.hit_regions
+        return result.primitives
 
     def on_resize(self, width: int, height: int) -> None:
         """Keep camera viewport dimensions aligned with the Arcade window."""
@@ -469,6 +517,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "movement_draft_active": self._movement_draft is not None,
             },
         )
+        self._update_hud_button_hover(float(x), float(y))
         if self._movement_draft is not None:
             self._movement_draft = self._movement_draft.with_cursor_preview(
                 view=self._battlefield_view,
@@ -496,6 +545,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._right_mouse_drag_distance_px = 0.0
             return
         if _mouse_button_name(button) != self._preferences.selection.default_mouse_button:
+            return
+        hud_button = self._hud_button_at(float(x), float(y))
+        if hud_button is not None:
+            self._handle_hud_button_press(hud_button)
             return
         selected_action = self._context_menu_action_at(self._mouse_world_position)
         if selected_action is not None:
@@ -674,7 +727,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
         elif invocation.command_id == "cycle_selection":
             if self._finite_state.finite_options:
-                self._set_finite_state(self._finite_state.cycle_option())
+                self._set_finite_state(
+                    self._finite_state.cycle_option(),
+                    focus_source="cycle_selection",
+                )
             elif self._movement_draft is not None:
                 self._movement_draft = self._movement_draft.cycle_entity_focus(
                     view=self._battlefield_view
@@ -767,6 +823,95 @@ class ArcadeWarhammerWindow(arcade.Window):
             },
         )
 
+    def _update_hud_button_hover(self, screen_x: float, screen_y: float) -> None:
+        hit_region = self._hud_button_at(screen_x, screen_y)
+        next_button_id = None if hit_region is None else hit_region.button_id
+        if next_button_id == self._hovered_hud_button_id:
+            return
+        self._hovered_hud_button_id = next_button_id
+        self._trace_event(
+            category="ui",
+            event_name="ui.hud_button_hover",
+            summary=_hud_button_summary(hit_region),
+        )
+
+    def _hud_button_at(self, screen_x: float, screen_y: float) -> HudButtonHitRegion | None:
+        for region in reversed(self._hud_button_hit_regions):
+            if region.contains(screen_x, screen_y):
+                return region
+        return None
+
+    def _handle_hud_button_press(self, hit_region: HudButtonHitRegion) -> None:
+        self._trace_event(
+            category="ui",
+            event_name="ui.hud_button_selected",
+            summary=_hud_button_summary(hit_region),
+        )
+        if not hit_region.enabled:
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="disabled_hud_button",
+                    message=hit_region.disabled_reason or "HUD button is disabled.",
+                    field="hud_button",
+                )
+            )
+            return
+        if hit_region.action_kind == "finite_option" and hit_region.option_id is not None:
+            self._set_finite_state(
+                self._finite_state.highlight_option(hit_region.option_id),
+                focus_source="hud_button",
+            )
+            return
+        self._trace_event(
+            category="ui",
+            event_name="ui.hud_button_ignored",
+            summary={
+                "component_id": hit_region.component_id,
+                "button_id": hit_region.button_id,
+                "command_id": hit_region.command_id,
+                "action_kind": hit_region.action_kind,
+            },
+        )
+
+    def _focus_entity_for_highlighted_option(
+        self,
+        *,
+        source: str,
+        sync_movement_draft: bool,
+    ) -> bool:
+        option = self._finite_state.highlighted_option
+        if option is None:
+            return False
+        target = _option_entity_focus_target(
+            payload=option.payload,
+            view=self._battlefield_view,
+        )
+        if target is None:
+            return False
+        if (
+            self._selection_state.selected_unit_id == target.unit_id
+            and self._selection_state.selected_model_id == target.model_id
+        ):
+            return False
+        self._selection_state = self._selection_state.select_model_id(
+            unit_id=target.unit_id,
+            model_id=target.model_id,
+            preferences=self._preferences,
+        )
+        self._trace_event(
+            category="ui",
+            event_name="ui.finite_option_entity_focused",
+            summary={
+                "source": source,
+                "option_id": option.option_id,
+                "unit_id": target.unit_id,
+                "model_id": target.model_id,
+            },
+        )
+        if sync_movement_draft:
+            self._sync_movement_draft()
+        return True
+
     def _submit_finite_option(self, selected_option_id: str | None) -> None:
         self._trace_event(
             category="ui",
@@ -780,6 +925,20 @@ class ArcadeWarhammerWindow(arcade.Window):
                 summary={"reason": "no_pending_decision"},
             )
             return
+        highlighted_option = self._finite_state.highlighted_option
+        submitted_option_id = selected_option_id
+        if submitted_option_id is None and highlighted_option is not None:
+            submitted_option_id = highlighted_option.option_id
+        if submitted_option_id is not None:
+            self._trace_event(
+                category="ui",
+                event_name="ui.hud_button_submitted",
+                summary={
+                    "command_id": "confirm",
+                    "request_id": self._finite_state.pending_decision.request_id,
+                    "option_id": submitted_option_id,
+                },
+            )
         if self._core_client is None:
             self._set_finite_state(
                 self._finite_state.with_local_invalid(
@@ -910,7 +1069,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._last_crash_report_path = result.report_path
         return result.report_path
 
-    def _set_finite_state(self, state: FiniteDecisionUiState) -> None:
+    def _set_finite_state(
+        self,
+        state: FiniteDecisionUiState,
+        *,
+        focus_source: str = "finite_state_transition",
+    ) -> None:
         self._finite_state = state
         self._pending_decision = state.pending_decision
         self._event_cursor = state.event_cursor
@@ -923,6 +1087,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             ),
         )
         self._battlefield_view = replace(self._battlefield_view, hud=hud)
+        self._focus_entity_for_highlighted_option(
+            source=focus_source,
+            sync_movement_draft=False,
+        )
         self._sync_movement_draft()
 
     def _sync_movement_draft(self) -> None:
@@ -1203,6 +1371,108 @@ def _context_menu_action_at(
     if action_index < 0 or action_index >= len(menu.actions):
         return None
     return menu.actions[action_index]
+
+
+def _hud_button_summary(hit_region: HudButtonHitRegion | None) -> JsonObject:
+    if hit_region is None:
+        return {"button_id": None}
+    return {
+        "component_id": hit_region.component_id,
+        "button_id": hit_region.button_id,
+        "action_kind": hit_region.action_kind,
+        "command_id": hit_region.command_id,
+        "enabled": hit_region.enabled,
+        "option_id": hit_region.option_id,
+        "request_id": hit_region.request_id,
+    }
+
+
+def _option_entity_focus_target(
+    *,
+    payload: JsonValue,
+    view: BattlefieldView,
+) -> OptionEntityFocusTarget | None:
+    unit_id = _first_unique_payload_string(payload, OPTION_FOCUS_UNIT_ID_KEYS)
+    model_id = _first_unique_payload_string(payload, OPTION_FOCUS_MODEL_ID_KEYS)
+    if model_id is not None:
+        resolved_unit_id = unit_id if _view_has_model(view, unit_id, model_id) else None
+        if resolved_unit_id is None:
+            resolved_unit_id = _unit_id_for_model(view, model_id)
+        if resolved_unit_id is not None:
+            return OptionEntityFocusTarget(unit_id=resolved_unit_id, model_id=model_id)
+    if unit_id is not None and _view_has_unit(view, unit_id):
+        return OptionEntityFocusTarget(unit_id=unit_id)
+    return None
+
+
+def _first_unique_payload_string(
+    payload: JsonValue,
+    keys: tuple[str, ...],
+) -> str | None:
+    for key in keys:
+        values = _payload_strings_for_key(payload, key)
+        if len(values) == 1:
+            return values[0]
+    return None
+
+
+def _payload_strings_for_key(payload: JsonValue, key: str) -> tuple[str, ...]:
+    values: list[str] = []
+    _collect_payload_strings_for_key(payload, key, values)
+    unique_values: list[str] = []
+    for value in values:
+        if value not in unique_values:
+            unique_values.append(value)
+    return tuple(unique_values)
+
+
+def _collect_payload_strings_for_key(
+    payload: JsonValue,
+    key: str,
+    values: list[str],
+) -> None:
+    if type(payload) is dict:
+        for payload_key, payload_value in payload.items():
+            if payload_key == key:
+                value = _single_payload_string(payload_value)
+                if value is not None:
+                    values.append(value)
+                continue
+            _collect_payload_strings_for_key(payload_value, key, values)
+    elif type(payload) is list:
+        for item in payload:
+            _collect_payload_strings_for_key(item, key, values)
+
+
+def _single_payload_string(value: JsonValue) -> str | None:
+    if type(value) is str and value:
+        return value
+    if type(value) is list:
+        strings = tuple(item for item in value if type(item) is str and item)
+        if len(strings) == 1:
+            return strings[0]
+    return None
+
+
+def _view_has_unit(view: BattlefieldView, unit_id: str) -> bool:
+    return any(unit.unit_id == unit_id for unit in view.units)
+
+
+def _view_has_model(view: BattlefieldView, unit_id: str | None, model_id: str) -> bool:
+    if unit_id is None:
+        return False
+    for unit in view.units:
+        if unit.unit_id != unit_id:
+            continue
+        return any(model.model_id == model_id for model in unit.models)
+    return False
+
+
+def _unit_id_for_model(view: BattlefieldView, model_id: str) -> str | None:
+    for unit in view.units:
+        if any(model.model_id == model_id for model in unit.models):
+            return unit.unit_id
+    return None
 
 
 def _pending_decision_summary(pending_decision: UiDecision | None) -> str:

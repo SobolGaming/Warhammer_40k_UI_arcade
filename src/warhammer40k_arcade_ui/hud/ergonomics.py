@@ -10,6 +10,8 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     AssignmentGroupRowView as ToolkitAssignmentGroupRowView,
 )
 from warhammer40k_arcade_ui.hud.toolkit import (
+    CurrentActionView,
+    HudButtonView,
     HudColorRole,
     HudState,
     IconTextBarView,
@@ -21,6 +23,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
     AssignmentHudPanelView,
     AssignmentReadinessState,
     ContextMenuAction,
+    FiniteDecisionOptionView,
     FiniteDecisionPanelView,
     MovementDraftPanelView,
     UnitPanelView,
@@ -37,6 +40,7 @@ class HudErgonomicsView:
     status_chips: tuple[StatusChipView, ...]
     selected_unit_card: UnitRailCardView | None
     selected_unit_rows: tuple[IconTextBarView, ...]
+    current_action: CurrentActionView
     action_rows: tuple[IconTextBarView, ...]
     assignment_rows: tuple[ToolkitAssignmentGroupRowView, ...]
     assignment_notice_rows: tuple[IconTextBarView, ...]
@@ -61,6 +65,7 @@ def build_hud_ergonomics_view(
     event_log_lines: tuple[str, ...],
     event_payloads: tuple[JsonObject, ...] = (),
     pending_decision: UiDecision | None = None,
+    hovered_hud_button_id: str | None = None,
 ) -> HudErgonomicsView:
     """Build a toolkit-backed HUD summary without adding rule semantics."""
 
@@ -74,6 +79,12 @@ def build_hud_ergonomics_view(
         ),
         selected_unit_card=selected_unit_card,
         selected_unit_rows=_selected_unit_rows(unit_panel),
+        current_action=_current_action_view(
+            finite_decision_panel=finite_decision_panel,
+            movement_draft_panel=movement_draft_panel,
+            preferences=preferences,
+            hovered_hud_button_id=hovered_hud_button_id,
+        ),
         action_rows=_action_rows(
             finite_decision_panel=finite_decision_panel,
             movement_draft_panel=movement_draft_panel,
@@ -203,6 +214,144 @@ def _selected_unit_rows(unit_panel: UnitPanelView | None) -> tuple[IconTextBarVi
             )
         )
     return tuple(rows)
+
+
+def _current_action_view(
+    *,
+    finite_decision_panel: FiniteDecisionPanelView,
+    movement_draft_panel: MovementDraftPanelView | None,
+    preferences: UiPreferences,
+    hovered_hud_button_id: str | None,
+) -> CurrentActionView:
+    request_summary = (
+        finite_decision_panel.decision_type or finite_decision_panel.proposal_kind or ""
+    )
+    title = _current_action_title(finite_decision_panel)
+    status = _current_action_status(
+        finite_decision_panel=finite_decision_panel,
+        movement_draft_panel=movement_draft_panel,
+    )
+    buttons = tuple(
+        _finite_option_button(
+            option=option,
+            index=index,
+            request_id=finite_decision_panel.request_id,
+            hovered_hud_button_id=hovered_hud_button_id,
+        )
+        for index, option in enumerate(finite_decision_panel.options)
+    )
+    selected_action_id = next((button.option_id for button in buttons if button.selected), None)
+    confirm_hint = _hotkey_for_command(preferences, "confirm")
+    cancel_hint = _hotkey_for_command(preferences, "cancel")
+    return CurrentActionView(
+        component_id="current_action_view",
+        title=title,
+        request_summary=request_summary,
+        actor_summary=finite_decision_panel.actor_id or "",
+        advisory_status=status,
+        selected_action_id=selected_action_id,
+        buttons=buttons,
+        confirm_hint=f"{confirm_hint}: submit selected option" if confirm_hint else "",
+        cancel_hint=f"{cancel_hint}: cancel/back" if cancel_hint else "",
+        source_kind="engine_parameterized"
+        if finite_decision_panel.proposal_kind is not None
+        else "engine_finite"
+        if finite_decision_panel.request_id is not None
+        else "none",
+    )
+
+
+def _current_action_title(finite_decision_panel: FiniteDecisionPanelView) -> str:
+    label = finite_decision_panel.proposal_kind or finite_decision_panel.decision_type
+    if not label:
+        return "Current Action"
+    lower_label = label.lower()
+    if "movement" in lower_label or "move" in lower_label:
+        return "Current Action: Movement"
+    if "shoot" in lower_label:
+        return "Current Action: Shooting"
+    if "melee" in lower_label or "fight" in lower_label:
+        return "Current Action: Melee"
+    if "stratagem" in lower_label:
+        return "Current Action: Stratagem"
+    if "deploy" in lower_label or "placement" in lower_label:
+        return "Current Action: Deployment"
+    return f"Current Action: {label.replace('_', ' ').title()}"
+
+
+def _current_action_status(
+    *,
+    finite_decision_panel: FiniteDecisionPanelView,
+    movement_draft_panel: MovementDraftPanelView | None,
+) -> str:
+    if movement_draft_panel is not None:
+        assignment_summary = (
+            f"{movement_draft_panel.assigned_model_count}/"
+            f"{movement_draft_panel.total_model_count} moved, "
+            f"{movement_draft_panel.unchanged_model_count} no-op"
+        )
+        distance_summary = _movement_distance_summary(movement_draft_panel)
+        parts = (movement_draft_panel.status_line, assignment_summary, distance_summary)
+        return " | ".join(part for part in parts if part)
+    return finite_decision_panel.status_line
+
+
+def _finite_option_button(
+    *,
+    option: FiniteDecisionOptionView,
+    index: int,
+    request_id: str | None,
+    hovered_hud_button_id: str | None,
+) -> HudButtonView:
+    enabled = option.disabled_reason is None
+    semantic_state = _finite_option_button_state(option)
+    button_id = f"finite_option_{index}_{option.option_id}"
+    if hovered_hud_button_id == button_id and enabled and not option.highlighted:
+        semantic_state = "hover"
+    return HudButtonView(
+        component_id=f"current_action_option_{index}",
+        button_id=button_id,
+        command_id="select_finite_option",
+        action_kind="finite_option",
+        option_id=option.option_id,
+        request_id=request_id,
+        label=option.label,
+        tooltip=option.disabled_reason or "",
+        state=semantic_state,
+        color_role=_finite_option_color_role(option),
+        selected=option.highlighted,
+        focused=option.highlighted,
+        enabled=enabled,
+        disabled_reason=option.disabled_reason or "",
+        visual_role=_finite_option_color_role(option),
+        metadata={"option_id": option.option_id},
+    )
+
+
+def _finite_option_button_state(option: FiniteDecisionOptionView) -> HudState:
+    if option.disabled_reason is not None:
+        return "disabled"
+    if option.highlighted:
+        return "selected"
+    label = option.label.lower()
+    option_id = option.option_id.lower()
+    if any(token in label or token in option_id for token in ("decline", "pass", "skip")):
+        return "warning"
+    if "invalid" in label or "invalid" in option_id:
+        return "invalid"
+    return "normal"
+
+
+def _finite_option_color_role(option: FiniteDecisionOptionView) -> HudColorRole:
+    if option.disabled_reason is not None:
+        return "disabled"
+    if option.highlighted:
+        return "selected"
+    label = option.label.lower()
+    option_id = option.option_id.lower()
+    if any(token in label or token in option_id for token in ("decline", "pass", "skip")):
+        return "warning"
+    return "neutral"
 
 
 def _action_rows(

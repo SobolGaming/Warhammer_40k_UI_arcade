@@ -34,7 +34,10 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     parse_size_spec,
     parse_status_chip_shape,
 )
-from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
+from warhammer40k_arcade_ui.hud.toolkit_render import (
+    render_composition_profile,
+    render_composition_profile_with_hit_regions,
+)
 from warhammer40k_arcade_ui.preferences import io as preferences_io
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.io import load_preferences, write_preferences
@@ -63,6 +66,7 @@ def test_widget_registry_exposes_expected_phase19_inventory() -> None:
         "DatasheetPanel",
         "AssignmentGroupRow",
         "DiceTray",
+        "CurrentActionPanel",
     }.issubset(known_widget_types())
     assert {"render_mode", "clip_children"}.issubset(component_allowed_attributes("HudContainer"))
     assert {"inner_diameter", "outer_diameter", "progress_fraction"}.issubset(
@@ -72,6 +76,82 @@ def test_widget_registry_exposes_expected_phase19_inventory() -> None:
     assert "dice.aeldari.d6.face_6" in known_icon_ids()
     assert "selected_unit" in known_data_refs()
     assert "dice_tray" in known_data_refs()
+
+
+def test_current_action_panel_renders_clickable_finite_option_buttons() -> None:
+    payload = {
+        "schema_version": 1,
+        "profile_id": "current_action_buttons",
+        "layout_preset": "compass_ring",
+        "theme": "default",
+        "sample_data": {
+            "current_action": {
+                "title": "Current Action: Movement",
+                "actor": "player-a",
+                "request": "select_movement_action",
+                "status": "Movement action pending",
+                "confirm_hint": "ENTER: submit selected option",
+                "buttons": [
+                    {
+                        "button_id": "finite_option_0_normal_move",
+                        "command_id": "select_finite_option",
+                        "action_kind": "finite_option",
+                        "request_id": "decision-request-1",
+                        "option_id": "normal_move",
+                        "label": "Normal Move",
+                        "state": "selected",
+                        "selected": True,
+                        "enabled": True,
+                    },
+                    {
+                        "button_id": "finite_option_1_advance",
+                        "command_id": "select_finite_option",
+                        "action_kind": "finite_option",
+                        "request_id": "decision-request-1",
+                        "option_id": "advance",
+                        "label": "Advance",
+                        "state": "normal",
+                        "selected": False,
+                        "enabled": True,
+                    },
+                ],
+            }
+        },
+        "regions": {
+            "bottom_workbench": {
+                "widget": {
+                    "type": "CurrentActionPanel",
+                    "id": "current_action_panel",
+                    "data_ref": "current_action",
+                    "button_height": 34,
+                    "button_min_width": 90,
+                }
+            }
+        },
+    }
+    result = parse_hud_composition_payload(payload, preview=True)
+    assert result.profile is not None, result.diagnostics
+
+    render_result = render_composition_profile_with_hit_regions(
+        result.profile,
+        viewport_width_px=640,
+        viewport_height_px=360,
+        component_id="current_action_panel",
+    )
+    texts = [
+        primitive.text for primitive in render_result.primitives if type(primitive) is TextPrimitive
+    ]
+
+    assert "Current Action: Movement" in texts
+    assert "Normal Move" in texts
+    assert "Advance" in texts
+    assert len(render_result.hit_regions) == 2
+    assert render_result.hit_regions[0].option_id == "normal_move"
+    assert render_result.hit_regions[0].request_id == "decision-request-1"
+    assert render_result.hit_regions[0].contains(
+        (render_result.hit_regions[0].bounds[0] + render_result.hit_regions[0].bounds[2]) / 2.0,
+        (render_result.hit_regions[0].bounds[1] + render_result.hit_regions[0].bounds[3]) / 2.0,
+    )
 
 
 def test_toolkit_view_models_preserve_tunable_widget_attributes() -> None:

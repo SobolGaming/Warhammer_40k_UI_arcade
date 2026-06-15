@@ -39,6 +39,15 @@ type HudSizeUnit = Literal["px", "percent", "fr", "fit_content", "fill", "auto"]
 type HudOverflowMode = Literal["clip", "ellipsis", "wrap", "shrink_to_fit", "scroll", "visible"]
 type HudRenderMode = Literal["none", "panel", "outline", "debug_bounds"]
 type HudStatusChipShape = Literal["round", "square", "rounded_rect", "pill"]
+type HudButtonActionKind = Literal["none", "finite_option", "local_command"]
+type HudButtonShape = Literal["rect", "rounded_rect", "pill", "square"]
+type HudButtonIconSide = Literal["left", "right", "both", "center", "none"]
+type CurrentActionSourceKind = Literal[
+    "engine_finite",
+    "engine_parameterized",
+    "local_gui",
+    "none",
+]
 type HudWidgetType = Literal[
     "HudContainer",
     "HudPanel",
@@ -54,6 +63,7 @@ type HudWidgetType = Literal[
     "StatCell",
     "MissionCard",
     "ActionButton",
+    "CurrentActionPanel",
     "StratagemButton",
     "AssignmentGroupRow",
     "DicePipeline",
@@ -376,6 +386,68 @@ class ActionButtonView:
 
 
 @dataclass(frozen=True, slots=True)
+class HudButtonView:
+    """Reusable presentation-only HUD button with optional engine selection metadata."""
+
+    component_id: str
+    button_id: str
+    command_id: str
+    label: str
+    action_kind: HudButtonActionKind = "none"
+    option_id: str | None = None
+    request_id: str | None = None
+    icon_id: str | None = None
+    text_icon: str = ""
+    tooltip: str = ""
+    hotkey_hint: str = ""
+    state: HudState = "normal"
+    color_role: HudColorRole = "neutral"
+    selected: bool = False
+    focused: bool = False
+    enabled: bool = True
+    disabled_reason: str = ""
+    visual_role: HudColorRole = "neutral"
+    metadata: JsonObject | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentActionView:
+    """Compact presentation model for the GUI user's current workflow surface."""
+
+    component_id: str
+    title: str = "Current Action"
+    request_summary: str = ""
+    actor_summary: str = ""
+    advisory_status: str = "No active action"
+    selected_action_id: str | None = None
+    buttons: tuple[HudButtonView, ...] = ()
+    confirm_hint: str = ""
+    cancel_hint: str = ""
+    source_kind: CurrentActionSourceKind = "none"
+
+
+@dataclass(frozen=True, slots=True)
+class HudButtonHitRegion:
+    """Frame-local hit-test metadata for a rendered HUD button."""
+
+    component_id: str
+    button_id: str
+    action_kind: HudButtonActionKind
+    command_id: str
+    enabled: bool
+    bounds: tuple[float, float, float, float]
+    option_id: str | None = None
+    request_id: str | None = None
+    disabled_reason: str = ""
+
+    def contains(self, screen_x: float, screen_y: float) -> bool:
+        """Return whether a screen-space point is inside this hit region."""
+
+        left, bottom, right, top = self.bounds
+        return left <= screen_x <= right and bottom <= screen_y <= top
+
+
+@dataclass(frozen=True, slots=True)
 class StratagemButtonView:
     """Specialized action button shape for Stratagem-like options."""
 
@@ -603,6 +675,20 @@ _WIDGET_ATTRIBUTES: dict[HudWidgetType, frozenset[str]] = {
             "hotkey_hint",
             "icon_side",
             "label",
+        )
+    ),
+    "CurrentActionPanel": frozenset(
+        (
+            "button_gap",
+            "button_height",
+            "button_min_width",
+            "button_shape",
+            "cancel_hint",
+            "confirm_hint",
+            "max_buttons",
+            "show_actor",
+            "show_request",
+            "title",
         )
     ),
     "StratagemButton": frozenset(

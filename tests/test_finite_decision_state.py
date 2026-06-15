@@ -163,6 +163,17 @@ def test_cycle_option_advances_highlight_without_changing_request() -> None:
     assert cycled.highlighted_option.option_id == "advance"
 
 
+def test_highlight_option_selects_engine_option_id_without_submission() -> None:
+    state = FiniteDecisionUiState(pending_decision=_finite_decision())
+
+    highlighted = state.highlight_option("advance")
+
+    assert highlighted.pending_decision is state.pending_decision
+    assert highlighted.highlighted_option is not None
+    assert highlighted.highlighted_option.option_id == "advance"
+    assert highlighted.next_result_index == 1
+
+
 def test_apply_status_resets_highlight_when_request_changes() -> None:
     state = FiniteDecisionUiState(
         pending_decision=_movement_unit_decision(),

@@ -75,17 +75,14 @@ regions:
           id: command_bench_assignment_row
           data_ref: current_assignment
           group_label: Current Assignment
-        - type: IconTextBar
-          id: command_bench_action_title
+        - type: CurrentActionPanel
+          id: command_bench_current_action_panel
           data_ref: current_action
-          icon_id: action.movement
-          primary_label: Current Action
-        - type: DonutGauge
-          id: command_bench_resource_ring
-          data_ref: movement_budget
-          inner_diameter: 44
-          outer_diameter: 82
-          label_text: Ready
+          title: Current Action
+          button_shape: rect
+          button_height: 34
+          button_min_width: 98
+          button_gap: 6
       - type: DiceTray
         id: command_bench_dice_tray
         data_ref: dice_tray

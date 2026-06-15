@@ -621,6 +621,31 @@ Important properties:
 
 Action buttons may reference known UI commands. They do not create engine actions.
 
+### `CurrentActionPanel`
+
+Purpose: compact workbench panel for the current GUI action or engine request.
+
+Important properties:
+
+- `title`
+- `show_actor`
+- `show_request`
+- `button_shape`
+- `button_height`
+- `button_min_width`
+- `button_gap`
+- `max_buttons`
+- `confirm_hint`
+- `cancel_hint`
+
+Runtime data normally comes from `current_action`. The binding supplies the current actor/request
+summary, advisory status text, and a `buttons` list. For finite engine decisions each button carries
+the exact engine `request_id` and `option_id`; clicking the button only changes the highlighted
+option, and `ENTER` still performs the actual submission through the engine decision path.
+
+Use `CurrentActionPanel` for the bottom workbench action surface. Use `ActionButton` for a single
+standalone local UI command.
+
 ### `StratagemButton`
 
 Purpose: future Stratagem-like command presentation.

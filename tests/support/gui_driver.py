@@ -22,6 +22,7 @@ from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
     ForensicTraceWriter,
     trace_core_client,
 )
+from warhammer40k_arcade_ui.hud.toolkit import HudButtonHitRegion
 from warhammer40k_arcade_ui.hud.view_models import ContextMenuAction
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.schema import UiPreferences
@@ -230,6 +231,12 @@ class GuiTestDriver:
         """Return currently active advisory overlay IDs."""
 
         return self.window.selection_state.active_overlay_ids
+
+    @property
+    def hud_button_hit_regions(self) -> tuple[HudButtonHitRegion, ...]:
+        """Return HUD button hit regions from the latest drawn frame."""
+
+        return self.window.hud_button_hit_regions
 
     @property
     def context_menu_visible(self) -> bool:

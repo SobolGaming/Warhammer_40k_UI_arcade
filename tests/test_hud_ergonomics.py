@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
 from warhammer40k_arcade_ui.hud.composition import load_hud_composition_reference
@@ -17,6 +18,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
     build_unit_panel,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.preferences.schema import JsonObject
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.render.primitives import (
     PolygonPrimitive,
@@ -181,6 +183,74 @@ def test_ergonomic_selected_unit_actions_mark_highlighted_option() -> None:
     )
     assert action_row.secondary_label == "Advance, > Normal Move <"
     assert action_row.state == "selected"
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    current_action = runtime["current_action"]
+    assert type(current_action) is dict
+    buttons = current_action["buttons"]
+    assert type(buttons) is list
+    selected_button = cast(JsonObject, buttons[1])
+    assert selected_button["option_id"] == "normal_move"
+    assert selected_button["selected"] is True
+
+
+def test_current_action_panel_renders_finite_options_as_buttons() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    layout = build_hud_layout(
+        preferences=preferences,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+    )
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    decision = UiDecision(
+        request_id="decision-request-000004",
+        decision_type="select_movement_action",
+        actor_id="player_1",
+        payload={"unit_instance_id": "intercessor_squad"},
+        options=(
+            UiFiniteOption(
+                option_id="advance",
+                label="Advance",
+                payload={"movement_phase_action": "advance"},
+            ),
+            UiFiniteOption(
+                option_id="normal_move",
+                label="Normal Move",
+                payload={"movement_phase_action": "normal_move"},
+            ),
+        ),
+        is_parameterized=False,
+    )
+    finite_panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=1,
+        status_message="Waiting: select_movement_action",
+        diagnostics=(),
+    )
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=build_unit_panel(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+            highlighted_option_id="normal_move",
+        ),
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+    )
+
+    texts = _composition_text_lines(ergonomics, layout)
+
+    assert "Current Action" in texts
+    assert "Advance" in texts
+    assert "Normal Move" in texts
 
 
 def test_ergonomic_assignment_subtitle_distinguishes_preview_from_ready_review() -> None:
