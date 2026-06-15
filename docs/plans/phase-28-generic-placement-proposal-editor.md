@@ -14,6 +14,10 @@ In scope:
 
 - visible handling for parameterized placement requests;
 - advisory model placement drafting on the battlefield;
+- integration with the Player Units panel for placement subject selection and placement progress
+  status;
+- integration with the Current Action panel for placement summary, current draft state, and submit
+  readiness;
 - per-model pose editing for all required models in the pending request;
 - proposal payload generation for supported placement proposal kinds;
 - invalid diagnostics and retry behavior from the engine;
@@ -49,14 +53,69 @@ Rule-invalid but well-formed placements return typed diagnostics and leave state
 When the engine asks for a placement proposal, the UI enters a placement draft mode:
 
 - the selected/requested unit is shown as the placement subject;
+- if the player must choose among multiple units or entities before placing, the Player Units panel
+  should be the primary selection surface for player-owned unit subjects;
 - required models are shown as draft tokens or ghost bases;
 - dragging or clicking places each model pose;
 - optional rotate controls adjust facing when facing is part of the pose;
-- the HUD shows draft completeness, placement kind, and "preview only until submitted";
+- the Current Action panel shows the placement family, current subject, draft completeness,
+  selected/current placement option if one exists, and "preview only until submitted";
 - submitting sends the exact current proposal request ID and generated placement payload.
 
 The editor should feel like the existing movement draft flow, but it is setup/arrival placement, not
 movement. It should not draw path witnesses for placement proposals.
+
+## Existing HUD Integration
+
+The implementation should build on the modern HUD surfaces instead of introducing another one-off
+debug panel.
+
+### Player Units Panel
+
+The Player Units panel should become the main roster-level selector for placement flows when the
+pending request allows the viewer to choose among player-owned units. This avoids duplicating unit
+selection controls inside the placement editor and keeps the roster as the shared, reciprocal
+selection surface.
+
+During a placement proposal, each relevant roster row may receive advisory placement status:
+
+- `unplaced`: the unit is required or eligible but has no complete draft placement yet;
+- `current`: the unit is the current placement subject or owns the currently selected draft model;
+- `placed`: all required models for that unit have draft poses;
+- `submitted` or `resolved`: optional future status when the engine projection confirms the unit is
+  no longer pending placement;
+- `unavailable`: optional future status for visible units that are not legal subjects for the
+  current request, when the core exposes that safely.
+
+These colors and labels are presentation only. They must be derived from the current pending request,
+local draft completeness, and authoritative projection. They must not infer placement legality or
+hidden information.
+
+Clicking a Player Units row during placement should:
+
+- select/focus that unit locally;
+- focus the matching placement subject if the pending request includes that unit;
+- optionally select the first unplaced model for that unit;
+- update matching Current Action focus through the existing reciprocal selection mechanism when
+  there is a corresponding finite option or action button;
+- never submit a decision by itself.
+
+### Current Action Panel
+
+The Current Action panel should remain the compact workbench for the active request. For placement
+flows it should show:
+
+- placement family or request title, such as `Deployment Placement`, `Deep Strike`, or
+  `Disembark`;
+- actor/player;
+- current subject unit, if one is selected or required;
+- draft completeness, such as `3/5 models placed`;
+- submit readiness and advisory text such as `preview only until submitted`;
+- action buttons for available local commands, such as `Submit`, `Clear`, `Next model`, or
+  request-provided finite choices when applicable.
+
+The Current Action panel may summarize placement state similar to movement, but it should not become
+the primary roster browser when the Player Units panel can do that job.
 
 ## Implementation Slices
 
@@ -80,19 +139,38 @@ movement. It should not draw path witnesses for placement proposals.
    - Support all required models explicitly; incomplete drafts remain not ready instead of omitting
      required models from the submitted payload.
 
-4. **Payload generation**
+4. **Player Units integration**
+   - Add placement-aware roster status derived from pending placement request and local draft state.
+   - Color-code roster rows for unplaced, current, and placed subjects.
+   - Route roster-row clicks to local placement subject focus when the row maps to a pending
+     placement subject.
+   - Keep roster reciprocal selection aligned with battlefield selection and Current Action focus.
+   - Ensure roster status is advisory and viewer-scoped; do not infer legality for units the engine
+     did not expose as eligible or required.
+
+5. **Current Action integration**
+   - Reuse `CurrentActionView` for placement summary instead of creating a new placement-only HUD
+     panel.
+   - Show placement family, actor, current subject, placed/required model counts, and submit
+     readiness.
+   - Expose local action buttons for submit, clear/cancel draft, next unplaced model, and any
+     request-driven finite options available in the current state.
+   - Keep button highlighting synchronized with roster and battlefield focus where a corresponding
+     entity exists.
+
+6. **Payload generation**
    - Generate JSON-safe placement proposal payloads with the pending request ID and proposal kind.
    - Include `attempted_placement.model_placements` for every required model.
    - Thread request-family fields such as transport, setup step, source rule, ruleset hash, and
      placement kind only from the pending request.
 
-5. **Submission and diagnostics**
+7. **Submission and diagnostics**
    - Submit through the shared `DecisionRequest -> DecisionResult -> engine validation` path.
    - Display typed invalid diagnostics in the HUD and Review zone.
    - Keep a failed well-formed draft visible when the engine returns a fresh retry request, while
      clearly showing that the authoritative request ID changed.
 
-6. **Placement HUD feedback**
+8. **Placement HUD feedback**
    - Show placement family, required model count, placed count, selected draft model, and submit
      readiness.
    - Surface placement-kind hints such as `deployment`, `redeploy`, `strategic_reserves`,
@@ -101,6 +179,12 @@ movement. It should not draw path witnesses for placement proposals.
 ## Acceptance Criteria
 
 - A visible placement proposal request opens the generic placement editor.
+- When player-owned unit selection is needed, the Player Units panel can focus an eligible or
+  required placement subject without submitting a decision.
+- The Player Units panel shows at least unplaced, current, and placed advisory states during a
+  multi-unit or multi-subject placement draft.
+- The Current Action panel summarizes placement state and submit readiness without duplicating a
+  separate roster browser.
 - The editor can produce a complete payload for at least one fixture-backed placement kind.
 - The payload includes the current request ID, proposal kind, unit ID, placement kind, and one model
   placement per required model.
@@ -116,6 +200,10 @@ Add or update tests for:
 - placement draft lifecycle keyed by request ID;
 - payload generation for deployment, redeploy, reserve/ingress, and disembark representative
   request shapes;
+- Player Units roster status mapping for unplaced/current/placed placement subjects;
+- reciprocal focus between Player Units rows, battlefield selection, placement draft selection, and
+  Current Action buttons;
+- Current Action placement summary state for incomplete, ready, submitted, and invalid drafts;
 - draft survival across mouse hover and unrelated HUD interaction;
 - invalid result display and retry-request handling.
 
@@ -133,9 +221,12 @@ uv run pre-commit run --all-files
 ## Manual Validation Checklist
 
 - Launch a core setup or smoke scenario that emits a placement proposal.
-- Select a placement subject if the core first emits a finite unit-selection request.
+- Select a placement subject from the Player Units panel if the core first emits a unit-selection or
+  placement-subject request.
+- Confirm the selected Player Units row and battlefield unit highlight stay synchronized.
 - Place each required model token.
-- Confirm the HUD shows placement draft completeness.
+- Confirm Player Units row colors distinguish unplaced, current, and fully placed subjects.
+- Confirm Current Action shows placement draft completeness and submit readiness.
 - Submit a valid-looking draft and verify the core either accepts it or returns an authoritative
   invalid diagnostic.
 - Intentionally place a model illegally and verify the UI displays the core diagnostic, not a local
