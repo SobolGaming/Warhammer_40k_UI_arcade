@@ -727,8 +727,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
         elif invocation.command_id == "cycle_selection":
             if self._finite_state.finite_options:
-                self._set_finite_state(self._finite_state.cycle_option())
-                self._focus_entity_for_highlighted_option(source="cycle_selection")
+                self._set_finite_state(
+                    self._finite_state.cycle_option(),
+                    focus_source="cycle_selection",
+                )
             elif self._movement_draft is not None:
                 self._movement_draft = self._movement_draft.cycle_entity_focus(
                     view=self._battlefield_view
@@ -855,8 +857,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
             return
         if hit_region.action_kind == "finite_option" and hit_region.option_id is not None:
-            self._set_finite_state(self._finite_state.highlight_option(hit_region.option_id))
-            self._focus_entity_for_highlighted_option(source="hud_button")
+            self._set_finite_state(
+                self._finite_state.highlight_option(hit_region.option_id),
+                focus_source="hud_button",
+            )
             return
         self._trace_event(
             category="ui",
@@ -869,21 +873,26 @@ class ArcadeWarhammerWindow(arcade.Window):
             },
         )
 
-    def _focus_entity_for_highlighted_option(self, *, source: str) -> None:
+    def _focus_entity_for_highlighted_option(
+        self,
+        *,
+        source: str,
+        sync_movement_draft: bool,
+    ) -> bool:
         option = self._finite_state.highlighted_option
         if option is None:
-            return
+            return False
         target = _option_entity_focus_target(
             payload=option.payload,
             view=self._battlefield_view,
         )
         if target is None:
-            return
+            return False
         if (
             self._selection_state.selected_unit_id == target.unit_id
             and self._selection_state.selected_model_id == target.model_id
         ):
-            return
+            return False
         self._selection_state = self._selection_state.select_model_id(
             unit_id=target.unit_id,
             model_id=target.model_id,
@@ -899,7 +908,9 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "model_id": target.model_id,
             },
         )
-        self._sync_movement_draft()
+        if sync_movement_draft:
+            self._sync_movement_draft()
+        return True
 
     def _submit_finite_option(self, selected_option_id: str | None) -> None:
         self._trace_event(
@@ -1058,7 +1069,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._last_crash_report_path = result.report_path
         return result.report_path
 
-    def _set_finite_state(self, state: FiniteDecisionUiState) -> None:
+    def _set_finite_state(
+        self,
+        state: FiniteDecisionUiState,
+        *,
+        focus_source: str = "finite_state_transition",
+    ) -> None:
         self._finite_state = state
         self._pending_decision = state.pending_decision
         self._event_cursor = state.event_cursor
@@ -1071,6 +1087,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             ),
         )
         self._battlefield_view = replace(self._battlefield_view, hud=hud)
+        self._focus_entity_for_highlighted_option(
+            source=focus_source,
+            sync_movement_draft=False,
+        )
         self._sync_movement_draft()
 
     def _sync_movement_draft(self) -> None:
