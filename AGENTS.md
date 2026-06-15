@@ -60,6 +60,10 @@ During implementation:
   `GH_TOKEN` or `gh auth login --with-token` as appropriate for the requested operation;
 - after any repository file changes, push the task branch and open or update the PR automatically as
   part of the same task closeout;
+- after opening or updating a PR, monitor the PR checks until they complete; inspect any failing
+  checks, fix actionable failures, push the fixes, and re-check before treating a code or
+  documentation update as complete. If checks are blocked, unavailable, or external to GitHub
+  Actions, report that explicitly with the remaining risk;
 - if the user explicitly requests local-only work, do not push or open a PR, and state that the
   task intentionally violates the default PR-mediated workflow at the user's request;
 - update the relevant phase plan, README, architecture docs, or ADR notes in the same work item when
@@ -119,9 +123,15 @@ Build bottom-up:
 22. packaged runtime defaults and source model
 23. HUD toolkit customizability and overflow tuning
 24. dice tray and roll workbench
+25. legacy UI cleanup
+26. generic finite decision workbench polish
+27. generic placement proposal editor
+28. movement proposal family generalization
+29. generic assignment proposal editors for shooting, melee, and stratagem targets
 
-Do not add shooting, fight, charge, AI, training, or private rule logic before the movement
-decision path is trustworthy end to end.
+When adding shooting, fight, charge, AI, training, or other later-gameplay surfaces, keep them on
+the same trusted decision/proposal path as movement. Do not add private rule logic or local
+authoritative shortcuts.
 
 ## Non-negotiable invariants
 
