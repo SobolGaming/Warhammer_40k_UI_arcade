@@ -1,6 +1,6 @@
 # Phase 26: Generic Finite Decision Workbench Polish
 
-Status: Proposed
+Status: Implemented
 
 ## Purpose
 
@@ -139,8 +139,10 @@ uv run pre-commit run --all-files
 ## Manual Validation Checklist
 
 - Launch `uv run warhammer40k-arcade-ui --live-core-smoke`.
-- At each visible finite request, confirm the workbench shows the actor, decision type, selected
-  option, and submit command.
+- At each visible finite request, confirm the bottom HUD workbench `Current Action` area shows the
+  selected option and submit command.
+- Confirm the adjacent `Actor` and `Option Details` rows in the same bottom workbench action column
+  show the actor/current decision type and selected option payload summary.
 - Cycle options and verify the emphasized row changes.
 - Select a battlefield unit, cycle a finite action option, and verify the battlefield selection does
   not jump to another unit.
@@ -150,3 +152,39 @@ uv run pre-commit run --all-files
 
 Review should focus on boundary discipline. This phase is UI polish, not a rule interpretation
 layer. Any label improvement must be derived from data the engine already exposed to the viewer.
+
+The reviewer-visible UX for this phase is in the ergonomic HUD bottom workbench:
+
+- default HUD profile: `bottom_workbench` -> `movement_action_column`;
+- command bench HUD profile: `bottom_command_bench` -> `command_bench_action_column`;
+- concrete widgets: `current_action_title`, `finite_actor_status`, and `finite_option_details`
+  in the default profile, with `command_bench_*` equivalents in the command-bench profile.
+
+## Implementation Notes
+
+- Added finite option presentation metadata for option style and shallow payload details.
+- Bound finite actor, selected option, and option detail rows into ergonomic HUD runtime data under
+  `hud.workbench.finite.*`.
+- Updated packaged and docs HUD composition profiles so the bottom workbench renders finite actor
+  and option-detail feedback next to the existing current-action card.
+- Added regression coverage for selected-option submit text, actor visibility, payload detail
+  visibility, and decline/pass-style visibility.
+
+## Verification
+
+Automated:
+
+- `env UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest tests/test_hud_ergonomics.py`
+- `env UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .`
+- `env UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .`
+- `env UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests`
+- `env UV_CACHE_DIR=/tmp/uv-cache uv run pyright`
+- `env UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest tests/`
+- `env UV_CACHE_DIR=/tmp/uv-cache PRE_COMMIT_HOME=/tmp/pre-commit-cache uv run pre-commit run --all-files`
+
+Manual:
+
+- Launch `uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml`.
+- During `select_movement_unit` or `select_movement_action`, inspect the bottom workbench action
+  column and verify the `Current Action`, `Actor`, and `Option Details` rows update as finite
+  options are cycled.

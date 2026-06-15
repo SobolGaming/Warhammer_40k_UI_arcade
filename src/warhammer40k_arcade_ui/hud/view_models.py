@@ -37,7 +37,10 @@ type AssignmentReadinessState = Literal[
     "unsupported",
     "finite",
 ]
+type FiniteOptionStyle = Literal["choose", "decline", "complete", "pass", "skip", "submit"]
 _PROPOSAL_UNIT_MISSING_CODE = "proposal_unit_missing_from_projection"
+_MAX_PAYLOAD_SUMMARY_ITEMS = 4
+_MAX_PAYLOAD_SUMMARY_CHARS = 140
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +67,8 @@ class FiniteDecisionOptionView:
     label: str
     highlighted: bool
     disabled_reason: str | None
+    option_style: FiniteOptionStyle
+    detail_summary: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,6 +248,8 @@ def build_finite_decision_panel(
                 label=option.label,
                 highlighted=index == highlighted_option_index,
                 disabled_reason=_disabled_reason(option.payload),
+                option_style=_finite_option_style(option),
+                detail_summary=_finite_option_detail_summary(option.payload),
             )
             for index, option in enumerate(pending_decision.options)
         ),
@@ -1046,6 +1053,73 @@ def _disabled_reason(payload: JsonValue) -> str | None:
     if type(unavailable_reason) is str and unavailable_reason:
         return unavailable_reason
     return None
+
+
+def _finite_option_style(option: UiFiniteOption) -> FiniteOptionStyle:
+    option_id = option.option_id.lower()
+    label = option.label.lower()
+    payload_kind = _payload_string(option.payload, "submission_kind")
+    style_text = " ".join(
+        value for value in (option_id, label, payload_kind.lower() if payload_kind else "") if value
+    )
+    if "decline" in style_text:
+        return "decline"
+    if "complete" in style_text:
+        return "complete"
+    if "pass" in style_text:
+        return "pass"
+    if "skip" in style_text:
+        return "skip"
+    if option_id == "submit_parameterized_payload" or payload_kind == "parameterized":
+        return "submit"
+    return "choose"
+
+
+def _payload_string(payload: JsonValue, key: str) -> str | None:
+    if type(payload) is not dict:
+        return None
+    value = payload.get(key)
+    return value if type(value) is str and value else None
+
+
+def _finite_option_detail_summary(payload: JsonValue) -> str:
+    if type(payload) is not dict or not payload:
+        return "No option payload details"
+    parts: list[str] = []
+    for key, value in payload.items():
+        text = _payload_value_summary(value)
+        if not text:
+            continue
+        parts.append(f"{key}: {text}")
+        if len(parts) >= _MAX_PAYLOAD_SUMMARY_ITEMS:
+            break
+    summary = " | ".join(parts) if parts else "No option payload details"
+    if len(summary) <= _MAX_PAYLOAD_SUMMARY_CHARS:
+        return summary
+    return f"{summary[: _MAX_PAYLOAD_SUMMARY_CHARS - 3]}..."
+
+
+def _payload_value_summary(value: JsonValue) -> str:
+    if value is None:
+        return "null"
+    if type(value) is str:
+        return value
+    if type(value) is bool:
+        return "true" if value else "false"
+    if type(value) is int or type(value) is float:
+        return str(value)
+    if type(value) is list:
+        primitive_items: list[str] = []
+        for item in value[:3]:
+            if type(item) in (str, bool, int, float) or item is None:
+                primitive_items.append(_payload_value_summary(item))
+            else:
+                primitive_items.append("...")
+        suffix = ", ..." if len(value) > 3 else ""
+        return f"[{', '.join(primitive_items)}{suffix}]"
+    if type(value) is dict:
+        return "{...}"
+    return ""
 
 
 def _payload_targets_unit(payload: JsonValue, unit_id: str) -> bool:

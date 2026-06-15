@@ -88,6 +88,25 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
             _icon_text_bar_data(row) for row in ergonomics.selected_unit_rows
         ],
         "hud.workbench.actions": list(action_rows),
+        "hud.workbench.finite.actor": _action_row_by_id(
+            action_rows,
+            "finite_actor_row",
+            fallback={"label": "Actor", "summary": "No finite decision", "value": ""},
+        ),
+        "hud.workbench.finite.option_details": _action_row_by_id(
+            action_rows,
+            "finite_option_details_row",
+            fallback={
+                "label": "Option details",
+                "summary": "No selected finite option",
+                "value": "",
+            },
+        ),
+        "hud.workbench.finite.selected_option": _action_row_by_id(
+            action_rows,
+            "highlighted_option_row",
+            fallback={"label": "Selected option", "summary": "No selected option", "value": ""},
+        ),
         "hud.workbench.assignments.groups": list(assignment_rows),
         "hud.workbench.assignments.notices": list(assignment_notice_rows),
         "hud.dice_tray.active": dice_tray,
@@ -222,6 +241,18 @@ def _current_action_data(action_rows: tuple[JsonObject, ...]) -> JsonObject:
     if action_rows:
         return action_rows[0]
     return {"label": "Current Action", "summary": "No active action", "value": ""}
+
+
+def _action_row_by_id(
+    action_rows: tuple[JsonObject, ...],
+    component_id: str,
+    *,
+    fallback: JsonObject,
+) -> JsonObject:
+    for row in action_rows:
+        if row.get("id") == component_id:
+            return row
+    return fallback
 
 
 def _movement_budget_data(action_rows: tuple[IconTextBarView, ...]) -> JsonObject:

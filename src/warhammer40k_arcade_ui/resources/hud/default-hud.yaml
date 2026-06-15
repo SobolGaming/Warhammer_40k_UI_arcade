@@ -79,6 +79,19 @@ regions:
           icon_id: action.movement
           data_ref: current_action
           primary_label: Current Action
+        - type: IconTextBar
+          id: finite_actor_status
+          icon_id: status.active
+          data_ref: hud.workbench.finite.actor
+          primary_label: Actor
+          density: compact
+        - type: IconTextBar
+          id: finite_option_details
+          icon_id: action.inspect
+          data_ref: hud.workbench.finite.option_details
+          primary_label: Option Details
+          density: compact
+          overflow: {mode: ellipsis, max_lines: 2}
         - type: DonutGauge
           id: movement_budget_ring
           data_ref: movement_budget

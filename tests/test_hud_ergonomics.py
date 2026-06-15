@@ -183,6 +183,128 @@ def test_ergonomic_selected_unit_actions_mark_highlighted_option() -> None:
     assert action_row.state == "selected"
 
 
+def test_ergonomic_hud_exposes_finite_workbench_actor_option_and_details() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    layout = build_hud_layout(
+        preferences=preferences,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+    )
+    decision = UiDecision(
+        request_id="decision-request-000004",
+        decision_type="select_movement_action",
+        actor_id="player_1",
+        payload={"unit_instance_id": "army-alpha:intercessor-unit-3"},
+        options=(
+            UiFiniteOption(
+                option_id="advance",
+                label="Advance",
+                payload={"movement_phase_action": "advance"},
+            ),
+            UiFiniteOption(
+                option_id="normal_move",
+                label="Normal Move",
+                payload={
+                    "movement_phase_action": "normal_move",
+                    "unit_instance_id": "army-alpha:intercessor-unit-3",
+                },
+            ),
+        ),
+        is_parameterized=False,
+    )
+    finite_panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=1,
+        status_message="Waiting: select_movement_action",
+        diagnostics=(),
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=None,
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+    )
+
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    current_action = runtime["current_action"]
+    actor = runtime["hud.workbench.finite.actor"]
+    option_details = runtime["hud.workbench.finite.option_details"]
+    selected_option = runtime["hud.workbench.finite.selected_option"]
+    assert type(current_action) is dict
+    assert type(actor) is dict
+    assert type(option_details) is dict
+    assert type(selected_option) is dict
+    assert current_action["label"] == "Option 2/2"
+    assert current_action["summary"] == "Normal Move | ENTER: submit option"
+    assert current_action["value"] == "normal_move"
+    assert actor["summary"] == "player_1"
+    assert actor["value"] == "select_movement_action"
+    assert option_details["value"] == "Choose"
+    assert "movement_phase_action: normal_move" in str(option_details["summary"])
+    assert selected_option == current_action
+
+    texts = _composition_text_lines(ergonomics, layout)
+    assert "Current Action" in texts
+    assert "Actor" in texts
+    assert "Option Details" in texts
+    assert "player_1" in texts
+    assert any("Normal Move" in text for text in texts)
+
+
+def test_ergonomic_hud_exposes_decline_visibility_for_selected_finite_option() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    decision = UiDecision(
+        request_id="decision-request-000010",
+        decision_type="stratagem_use_window",
+        actor_id="player_1",
+        payload={"window": "opponent_movement_phase"},
+        options=(
+            UiFiniteOption(
+                option_id="decline_stratagem_window",
+                label="Decline Stratagem Window",
+                payload={"submission_kind": "decline"},
+            ),
+            UiFiniteOption(
+                option_id="use_rapid_ingress",
+                label="Use Rapid Ingress",
+                payload={"stratagem_id": "rapid_ingress"},
+            ),
+        ),
+        is_parameterized=False,
+    )
+    finite_panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=0,
+        status_message="Waiting: stratagem_use_window",
+        diagnostics=(),
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=None,
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+    )
+
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    current_action = runtime["current_action"]
+    option_details = runtime["hud.workbench.finite.option_details"]
+    assert type(current_action) is dict
+    assert type(option_details) is dict
+    assert current_action["summary"] == "Decline Stratagem Window | ENTER: decline"
+    assert current_action["state"] == "warning"
+    assert option_details["value"] == "Decline"
+
+
 def test_ergonomic_assignment_subtitle_distinguishes_preview_from_ready_review() -> None:
     view = default_battlefield_view()
     preferences = default_preferences()

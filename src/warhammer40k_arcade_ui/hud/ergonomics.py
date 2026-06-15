@@ -21,7 +21,9 @@ from warhammer40k_arcade_ui.hud.view_models import (
     AssignmentHudPanelView,
     AssignmentReadinessState,
     ContextMenuAction,
+    FiniteDecisionOptionView,
     FiniteDecisionPanelView,
+    FiniteOptionStyle,
     MovementDraftPanelView,
     UnitPanelView,
 )
@@ -211,29 +213,57 @@ def _action_rows(
     movement_draft_panel: MovementDraftPanelView | None,
     preferences: UiPreferences,
 ) -> tuple[IconTextBarView, ...]:
+    confirm_hotkey = _hotkey_for_command(preferences, "confirm") or "Confirm"
     rows: list[IconTextBarView] = [
         IconTextBarView(
             component_id="current_decision_row",
             icon_id="action.confirm",
             primary_label="Decision",
             secondary_label=finite_decision_panel.status_line,
-            value_text=_hotkey_for_command(preferences, "confirm") or "",
+            value_text=confirm_hotkey,
             state="warning" if finite_decision_panel.diagnostic_lines else "active",
         )
     ]
     if finite_decision_panel.options:
-        highlighted = tuple(
-            option for option in finite_decision_panel.options if option.highlighted
+        selected_option_index, selected_option = _selected_finite_option(
+            finite_decision_panel.options
         )
-        selected_option = highlighted[0] if highlighted else finite_decision_panel.options[0]
+        option_position = f"{selected_option_index + 1}/{len(finite_decision_panel.options)}"
+        style_label = _finite_option_style_label(selected_option.option_style)
+        submit_text = _finite_submit_text(
+            option_style=selected_option.option_style,
+            confirm_hotkey=confirm_hotkey,
+        )
+        rows.append(
+            IconTextBarView(
+                component_id="finite_actor_row",
+                icon_id="status.active",
+                primary_label="Actor",
+                secondary_label=finite_decision_panel.actor_id or "No actor",
+                value_text=finite_decision_panel.decision_type or "",
+                state="active",
+                density="compact",
+            )
+        )
         rows.append(
             IconTextBarView(
                 component_id="highlighted_option_row",
-                icon_id="action.movement",
-                primary_label="Highlighted option",
-                secondary_label=selected_option.label,
+                icon_id=_finite_option_icon(selected_option.option_style),
+                primary_label=f"Option {option_position}",
+                secondary_label=f"{selected_option.label} | {submit_text}",
                 value_text=selected_option.option_id,
-                state="selected",
+                state=_finite_option_state(selected_option),
+            )
+        )
+        rows.append(
+            IconTextBarView(
+                component_id="finite_option_details_row",
+                icon_id=_finite_option_icon(selected_option.option_style),
+                primary_label="Option details",
+                secondary_label=_finite_option_details_summary(selected_option),
+                value_text=style_label,
+                state=_finite_option_state(selected_option),
+                density="compact",
             )
         )
     if movement_draft_panel is not None:
@@ -254,6 +284,56 @@ def _action_rows(
             )
         )
     return tuple(rows)
+
+
+def _selected_finite_option(
+    options: tuple[FiniteDecisionOptionView, ...],
+) -> tuple[int, FiniteDecisionOptionView]:
+    for index, option in enumerate(options):
+        if option.highlighted:
+            return index, option
+    return 0, options[0]
+
+
+def _finite_option_style_label(option_style: FiniteOptionStyle) -> str:
+    if option_style == "decline":
+        return "Decline"
+    if option_style == "complete":
+        return "Complete"
+    if option_style == "pass":
+        return "Pass"
+    if option_style == "skip":
+        return "Skip"
+    if option_style == "submit":
+        return "Submit"
+    return "Choose"
+
+
+def _finite_submit_text(*, option_style: FiniteOptionStyle, confirm_hotkey: str) -> str:
+    style_label = _finite_option_style_label(option_style).lower()
+    if option_style == "choose":
+        return f"{confirm_hotkey}: submit option"
+    return f"{confirm_hotkey}: {style_label}"
+
+
+def _finite_option_icon(option_style: FiniteOptionStyle) -> str:
+    if option_style in ("decline", "pass", "skip"):
+        return "status.warning"
+    return "action.confirm"
+
+
+def _finite_option_state(option: FiniteDecisionOptionView) -> HudState:
+    if option.disabled_reason:
+        return "disabled"
+    if option.option_style in ("decline", "pass", "skip"):
+        return "warning"
+    return "selected"
+
+
+def _finite_option_details_summary(option: FiniteDecisionOptionView) -> str:
+    if option.disabled_reason:
+        return f"Disabled: {option.disabled_reason}"
+    return option.detail_summary
 
 
 def _assignment_rows(
