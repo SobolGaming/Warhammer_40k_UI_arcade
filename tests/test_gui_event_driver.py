@@ -329,6 +329,48 @@ def test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_dra
         driver.close()
 
 
+def test_player_units_roster_button_selects_matching_battlefield_unit() -> None:
+    driver = GuiTestDriver.launch(core_mode="live_core_smoke")
+    try:
+        driver.window.on_draw()
+        roster_button = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == "select_unit"
+            and region.unit_id == "army-alpha:intercessor-unit-3"
+        )
+        center_x = round((roster_button.bounds[0] + roster_button.bounds[2]) / 2.0)
+        center_y = round((roster_button.bounds[1] + roster_button.bounds[3]) / 2.0)
+
+        driver.click_screen(center_x, center_y)
+
+        assert driver.selected_unit_id == "army-alpha:intercessor-unit-3"
+        assert driver.selected_model_id is None
+        assert driver.highlighted_finite_option_id == "army-alpha:intercessor-unit-3"
+    finally:
+        driver.close()
+
+
+def test_player_units_roster_scroll_region_consumes_wheel_without_zooming() -> None:
+    driver = GuiTestDriver.launch(core_mode="live_core_smoke")
+    try:
+        driver.window.on_draw()
+        roster_region = next(
+            region
+            for region in driver.hud_scroll_hit_regions
+            if region.component_id == "player_units_roster"
+        )
+        center_x = round((roster_region.bounds[0] + roster_region.bounds[2]) / 2.0)
+        center_y = round((roster_region.bounds[1] + roster_region.bounds[3]) / 2.0)
+        original_zoom = driver.window.camera.zoom
+
+        driver.scroll_screen(center_x, center_y, scroll_y=-1.0)
+
+        assert driver.window.camera.zoom == original_zoom
+    finally:
+        driver.close()
+
+
 def _pending_payload(driver: GuiTestDriver) -> JsonObject:
     decision = driver.window.pending_decision
     assert decision is not None

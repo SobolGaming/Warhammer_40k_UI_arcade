@@ -39,6 +39,7 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
         _icon_text_bar_data(row) for row in ergonomics.assignment_notice_rows
     )
     current_action = _current_action_view_data(ergonomics.current_action)
+    player_roster = _player_roster_data(ergonomics.player_unit_buttons)
     current_assignment = _current_assignment_data(
         assignment_rows=assignment_rows,
         notice_rows=assignment_notice_rows,
@@ -59,11 +60,7 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
             "title": "Missions",
             "summary": _mission_summary(status_chips),
         },
-        "player_roster": {
-            "unit_label": "Player roster",
-            "summary": _roster_summary(selected_unit),
-            "status": "viewer-scoped projection",
-        },
+        "player_roster": player_roster,
         "opponent_roster": {
             "unit_label": "Opponent roster",
             "summary": "Opponent projection",
@@ -90,6 +87,7 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
             _icon_text_bar_data(row) for row in ergonomics.selected_unit_rows
         ],
         "hud.workbench.actions": list(action_rows),
+        "hud.player_units.roster": player_roster,
         "hud.workbench.assignments.groups": list(assignment_rows),
         "hud.workbench.assignments.notices": list(assignment_notice_rows),
         "hud.dice_tray.active": dice_tray,
@@ -261,7 +259,29 @@ def _button_data(button: HudButtonView) -> JsonObject:
         "enabled": button.enabled,
         "disabled_reason": button.disabled_reason,
         "metadata": metadata,
+        "unit_id": button.unit_id or _metadata_text(metadata, "unit_id"),
     }
+
+
+def _player_roster_data(buttons: tuple[HudButtonView, ...]) -> JsonObject:
+    selected = tuple(button for button in buttons if button.selected)
+    selected_label = selected[0].label if selected else ""
+    return {
+        "title": "Player Units",
+        "label": "Player Units",
+        "unit_label": "Player Units",
+        "summary": f"{len(buttons)} projected unit(s)",
+        "status": f"Selected: {selected_label}" if selected_label else "Viewer-scoped projection",
+        "color_role": "player",
+        "buttons": [_button_data(button) for button in buttons],
+    }
+
+
+def _metadata_text(metadata: JsonObject, key: str) -> str:
+    value = metadata.get(key)
+    if type(value) is str:
+        return value
+    return ""
 
 
 def _movement_budget_data(action_rows: tuple[IconTextBarView, ...]) -> JsonObject:
@@ -334,13 +354,6 @@ def _mission_summary(status_chips: dict[str, JsonObject]) -> str:
     active = status_chips.get("active_player", {}).get("value")
     parts = tuple(str(part) for part in (phase, active) if part)
     return " | ".join(parts)
-
-
-def _roster_summary(selected_unit: JsonObject) -> str:
-    label = selected_unit.get("unit_label")
-    if type(label) is str and label and label != "No selected unit":
-        return f"Selected: {label}"
-    return "Select a unit to inspect"
 
 
 def _unknown_datasheet_stats() -> JsonObject:

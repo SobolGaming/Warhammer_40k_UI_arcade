@@ -47,7 +47,7 @@ from warhammer40k_arcade_ui.hud.runtime_data import (
     runtime_data_for_ergonomic_hud,
     theme_for_ergonomic_hud,
 )
-from warhammer40k_arcade_ui.hud.toolkit import HudButtonHitRegion
+from warhammer40k_arcade_ui.hud.toolkit import HudButtonHitRegion, HudScrollHitRegion
 from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile_with_hit_regions
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
@@ -230,6 +230,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._right_mouse_drag_distance_px = 0.0
         self._fatal_exit_deadline_monotonic: float | None = None
         self._hud_button_hit_regions: tuple[HudButtonHitRegion, ...] = ()
+        self._hud_scroll_hit_regions: tuple[HudScrollHitRegion, ...] = ()
+        self._hud_scroll_offsets: dict[str, tuple[float, float]] = {}
         self._hovered_hud_button_id: str | None = None
         self._trace_writer = trace_writer or NoOpTraceWriter()
         self._crash_report_context = crash_report_context or CrashReportContext(
@@ -323,6 +325,18 @@ class ArcadeWarhammerWindow(arcade.Window):
         """Frame-local HUD button hit regions from the most recent draw."""
 
         return self._hud_button_hit_regions
+
+    @property
+    def hud_scroll_hit_regions(self) -> tuple[HudScrollHitRegion, ...]:
+        """Frame-local HUD scroll hit regions from the most recent draw."""
+
+        return self._hud_scroll_hit_regions
+
+    @property
+    def hud_scroll_offsets(self) -> dict[str, tuple[float, float]]:
+        """Return a copy of current HUD scroll offsets keyed by component ID."""
+
+        return dict(self._hud_scroll_offsets)
 
     @property
     def context_menu(self) -> ContextMenuView | None:
@@ -425,6 +439,8 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_payloads=self._finite_state.event_payloads,
             pending_decision=self._pending_decision,
             hovered_hud_button_id=self._hovered_hud_button_id,
+            selected_unit_id=self._selection_state.selected_unit_id,
+            viewer_player_id=self._viewer_player_id,
         )
         world_primitives = build_world_primitives(
             self._battlefield_view,
@@ -462,6 +478,7 @@ class ArcadeWarhammerWindow(arcade.Window):
     ) -> tuple[RenderPrimitive, ...]:
         if self._hud_composition_profile is None:
             self._hud_button_hit_regions = ()
+            self._hud_scroll_hit_regions = ()
             return _hud_composition_diagnostic_primitives(
                 diagnostics=self._hud_composition_diagnostics,
                 viewport_width_px=self.width,
@@ -474,9 +491,12 @@ class ArcadeWarhammerWindow(arcade.Window):
             theme=theme_for_ergonomic_hud(ergonomic_hud),
             runtime_data=runtime_data_for_ergonomic_hud(ergonomic_hud),
             hud_layout=hud_layout,
+            scroll_offsets=self._hud_scroll_offsets,
             include_background=False,
         )
         self._hud_button_hit_regions = result.hit_regions
+        self._hud_scroll_hit_regions = result.scroll_regions
+        self._clamp_hud_scroll_offsets()
         return result.primitives
 
     def on_resize(self, width: int, height: int) -> None:
@@ -660,9 +680,31 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._right_mouse_drag_distance_px = 0.0
 
     def on_mouse_scroll(self, x: int, y: int, scroll_x: float, scroll_y: float) -> None:
-        """Zoom the camera around the mouse cursor."""
+        """Scroll HUD regions under the pointer, or zoom the camera."""
 
-        del scroll_x
+        scroll_region = self._hud_scroll_region_at(float(x), float(y))
+        if scroll_region is not None and (scroll_x != 0.0 or scroll_y != 0.0):
+            changed = self._apply_hud_scroll(
+                scroll_region=scroll_region,
+                scroll_x=scroll_x,
+                scroll_y=scroll_y,
+            )
+            self._trace_event(
+                category="ui_input",
+                event_name="ui.hud_scroll",
+                summary={
+                    "screen_x": x,
+                    "screen_y": y,
+                    "component_id": scroll_region.component_id,
+                    "scroll_x": scroll_x,
+                    "scroll_y": scroll_y,
+                    "changed": changed,
+                    "offset": list(
+                        self._hud_scroll_offsets.get(scroll_region.component_id, (0.0, 0.0))
+                    ),
+                },
+            )
+            return
         if scroll_y == 0.0:
             return
         self._camera = self._camera.zoom_at_screen_point(
@@ -841,6 +883,12 @@ class ArcadeWarhammerWindow(arcade.Window):
                 return region
         return None
 
+    def _hud_scroll_region_at(self, screen_x: float, screen_y: float) -> HudScrollHitRegion | None:
+        for region in reversed(self._hud_scroll_hit_regions):
+            if region.contains(screen_x, screen_y):
+                return region
+        return None
+
     def _handle_hud_button_press(self, hit_region: HudButtonHitRegion) -> None:
         self._trace_event(
             category="ui",
@@ -862,6 +910,9 @@ class ArcadeWarhammerWindow(arcade.Window):
                 focus_source="hud_button",
             )
             return
+        if hit_region.action_kind == "select_unit" and hit_region.unit_id is not None:
+            self._select_projected_unit_from_hud(hit_region.unit_id)
+            return
         self._trace_event(
             category="ui",
             event_name="ui.hud_button_ignored",
@@ -871,6 +922,89 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "command_id": hit_region.command_id,
                 "action_kind": hit_region.action_kind,
             },
+        )
+
+    def _apply_hud_scroll(
+        self,
+        *,
+        scroll_region: HudScrollHitRegion,
+        scroll_x: float,
+        scroll_y: float,
+    ) -> bool:
+        if scroll_x == 0.0 and scroll_y == 0.0:
+            return False
+        current_x, current_y = self._hud_scroll_offsets.get(
+            scroll_region.component_id,
+            (scroll_region.offset_x, scroll_region.offset_y),
+        )
+        delta_x = 0.0
+        delta_y = 0.0
+        if scroll_region.wheel_axis == "x":
+            delta_x = -scroll_y * scroll_region.wheel_step_px
+        elif scroll_region.wheel_axis == "auto":
+            if scroll_x != 0.0 and scroll_region.allows_x:
+                delta_x = -scroll_x * scroll_region.wheel_step_px
+            if scroll_y != 0.0 and scroll_region.allows_y:
+                delta_y = -scroll_y * scroll_region.wheel_step_px
+        else:
+            if scroll_y != 0.0 and scroll_region.allows_y:
+                delta_y = -scroll_y * scroll_region.wheel_step_px
+            elif scroll_x != 0.0 and scroll_region.allows_x:
+                delta_x = -scroll_x * scroll_region.wheel_step_px
+        next_x = current_x + delta_x
+        next_y = current_y + delta_y
+        if scroll_region.clamp_to_content:
+            next_x = min(max(0.0, next_x), scroll_region.max_offset_x)
+            next_y = min(max(0.0, next_y), scroll_region.max_offset_y)
+        if (next_x, next_y) == (current_x, current_y):
+            return False
+        self._hud_scroll_offsets[scroll_region.component_id] = (next_x, next_y)
+        return True
+
+    def _clamp_hud_scroll_offsets(self) -> None:
+        valid_ids = {region.component_id for region in self._hud_scroll_hit_regions}
+        stale_ids = tuple(
+            component_id
+            for component_id in self._hud_scroll_offsets
+            if component_id not in valid_ids
+        )
+        for component_id in stale_ids:
+            del self._hud_scroll_offsets[component_id]
+        for region in self._hud_scroll_hit_regions:
+            current_x, current_y = self._hud_scroll_offsets.get(
+                region.component_id,
+                (region.offset_x, region.offset_y),
+            )
+            if region.clamp_to_content:
+                next_x = min(max(0.0, current_x), region.max_offset_x)
+                next_y = min(max(0.0, current_y), region.max_offset_y)
+            else:
+                next_x = current_x
+                next_y = current_y
+            self._hud_scroll_offsets[region.component_id] = (next_x, next_y)
+
+    def _select_projected_unit_from_hud(self, unit_id: str) -> None:
+        if not _view_has_unit(self._battlefield_view, unit_id):
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="unknown_hud_unit",
+                    message="HUD roster selected a unit that is not in the current projection.",
+                    field="unit_id",
+                )
+            )
+            return
+        self._selection_state = self._selection_state.select_model_id(
+            unit_id=unit_id,
+            model_id=None,
+            preferences=self._preferences,
+        )
+        self._finite_state = self._finite_state.highlight_option_for_unit(unit_id)
+        self._pending_decision = self._finite_state.pending_decision
+        self._sync_movement_draft()
+        self._trace_event(
+            category="ui",
+            event_name="ui.roster_unit_selected",
+            summary={"unit_id": unit_id},
         )
 
     def _focus_entity_for_highlighted_option(
@@ -1384,6 +1518,7 @@ def _hud_button_summary(hit_region: HudButtonHitRegion | None) -> JsonObject:
         "enabled": hit_region.enabled,
         "option_id": hit_region.option_id,
         "request_id": hit_region.request_id,
+        "unit_id": hit_region.unit_id,
     }
 
 

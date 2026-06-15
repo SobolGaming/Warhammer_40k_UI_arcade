@@ -1,6 +1,6 @@
 # Phase 31: Scrollable Player Units Roster
 
-Status: Proposed
+Status: Implemented
 
 ## Purpose
 
@@ -281,3 +281,30 @@ uv run pre-commit run --all-files
 Review should focus on keeping scroll and roster selection local and presentation-only. Roster
 buttons are navigation and selection affordances, not gameplay decisions. They must not submit
 engine results, invent unit legality, or reveal units outside the viewer-scoped projection.
+
+## Implementation Notes
+
+- Added typed HUD scroll configuration (`scroll.enabled`, axes, wheel behavior, scrollbar
+  visibility, step size, and content clamping).
+- Added frame-local HUD scroll hit regions and routed mouse wheel input over scrollable HUD regions
+  before battlefield zoom.
+- Added `PlayerUnitsRoster` as a first-class HUD toolkit widget using existing HUD button
+  primitives and hit regions.
+- Replaced the default left-rail header/placeholder pair with one scroll-enabled Player Units
+  roster panel in both packaged and docs HUD profiles.
+- Added viewer-scoped player-unit roster runtime data under `hud.player_units.roster` while keeping
+  the legacy `player_roster` key mapped to the same data.
+- Added local roster-row click selection through the existing `SelectionState` and finite-option
+  highlight synchronization path.
+- Added a standalone overflowing roster preview in
+  `docs/hud/examples/player-units-roster-preview.yaml`.
+- Updated `docs/hud-customization.md` with scroll configuration and PlayerUnitsRoster guidance.
+
+## Verification Notes
+
+- Added toolkit tests for scroll config parsing, invalid scroll diagnostics, PlayerUnitsRoster
+  rendering, row hit regions, and scroll-region metadata.
+- Added ergonomic HUD tests proving the player roster filters to the viewer player and marks the
+  selected unit row.
+- Added GUI event-driver tests proving roster buttons select matching battlefield units and roster
+  wheel input does not zoom the battlefield.

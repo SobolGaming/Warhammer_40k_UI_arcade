@@ -17,6 +17,7 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     known_data_refs,
     known_icon_ids,
     parse_overflow_policy,
+    parse_scroll_config,
     parse_size_spec,
     parse_status_chip_shape,
     widget_type_from_string,
@@ -677,6 +678,19 @@ def _validate_attribute_value(
                 _diagnostic(
                     severity="error",
                     code="invalid_overflow_policy",
+                    field=field,
+                    message=str(exc),
+                    value=repr(value),
+                )
+            )
+    elif key == "scroll":
+        try:
+            parse_scroll_config(value)
+        except ValueError as exc:
+            diagnostics.append(
+                _diagnostic(
+                    severity="error",
+                    code="invalid_scroll_config",
                     field=field,
                     message=str(exc),
                     value=repr(value),

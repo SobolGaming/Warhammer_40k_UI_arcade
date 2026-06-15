@@ -38,6 +38,7 @@ class HudErgonomicsView:
     """Composed ergonomic HUD content for the current frame."""
 
     status_chips: tuple[StatusChipView, ...]
+    player_unit_buttons: tuple[HudButtonView, ...]
     selected_unit_card: UnitRailCardView | None
     selected_unit_rows: tuple[IconTextBarView, ...]
     current_action: CurrentActionView
@@ -66,6 +67,8 @@ def build_hud_ergonomics_view(
     event_payloads: tuple[JsonObject, ...] = (),
     pending_decision: UiDecision | None = None,
     hovered_hud_button_id: str | None = None,
+    selected_unit_id: str | None = None,
+    viewer_player_id: str | None = None,
 ) -> HudErgonomicsView:
     """Build a toolkit-backed HUD summary without adding rule semantics."""
 
@@ -76,6 +79,12 @@ def build_hud_ergonomics_view(
             view=view,
             finite_decision_panel=finite_decision_panel,
             preferences=preferences,
+        ),
+        player_unit_buttons=_player_unit_buttons(
+            view=view,
+            viewer_player_id=viewer_player_id,
+            selected_unit_id=selected_unit_id,
+            hovered_hud_button_id=hovered_hud_button_id,
         ),
         selected_unit_card=selected_unit_card,
         selected_unit_rows=_selected_unit_rows(unit_panel),
@@ -214,6 +223,51 @@ def _selected_unit_rows(unit_panel: UnitPanelView | None) -> tuple[IconTextBarVi
             )
         )
     return tuple(rows)
+
+
+def _player_unit_buttons(
+    *,
+    view: BattlefieldView,
+    viewer_player_id: str | None,
+    selected_unit_id: str | None,
+    hovered_hud_button_id: str | None,
+) -> tuple[HudButtonView, ...]:
+    buttons: list[HudButtonView] = []
+    for unit in view.units:
+        if viewer_player_id is not None and unit.player_id != viewer_player_id:
+            continue
+        selected = unit.unit_id == selected_unit_id
+        button_id = f"player_unit_{unit.unit_id}"
+        if selected:
+            state: HudState = "selected"
+        elif button_id == hovered_hud_button_id:
+            state = "hover"
+        else:
+            state = "normal"
+        buttons.append(
+            HudButtonView(
+                component_id=f"player_unit_row_{len(buttons)}",
+                button_id=button_id,
+                command_id="select_unit",
+                action_kind="select_unit",
+                label=unit.label,
+                icon_id="entity.unit",
+                text_icon="UN",
+                state=state,
+                color_role="player",
+                selected=selected,
+                focused=selected,
+                enabled=True,
+                visual_role="selected" if selected else "player",
+                unit_id=unit.unit_id,
+                metadata={
+                    "unit_id": unit.unit_id,
+                    "player_id": unit.player_id,
+                    "model_count": len(unit.models),
+                },
+            )
+        )
+    return tuple(buttons)
 
 
 def _current_action_view(

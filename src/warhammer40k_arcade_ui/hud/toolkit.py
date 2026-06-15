@@ -39,7 +39,10 @@ type HudSizeUnit = Literal["px", "percent", "fr", "fit_content", "fill", "auto"]
 type HudOverflowMode = Literal["clip", "ellipsis", "wrap", "shrink_to_fit", "scroll", "visible"]
 type HudRenderMode = Literal["none", "panel", "outline", "debug_bounds"]
 type HudStatusChipShape = Literal["round", "square", "rounded_rect", "pill"]
-type HudButtonActionKind = Literal["none", "finite_option", "local_command"]
+type HudScrollAxis = Literal["x", "y", "both"]
+type HudWheelAxis = Literal["x", "y", "auto"]
+type HudScrollbarVisibility = Literal["never", "auto", "always"]
+type HudButtonActionKind = Literal["none", "finite_option", "local_command", "select_unit"]
 type HudButtonShape = Literal["rect", "rounded_rect", "pill", "square"]
 type HudButtonIconSide = Literal["left", "right", "both", "center", "none"]
 type CurrentActionSourceKind = Literal[
@@ -68,6 +71,7 @@ type HudWidgetType = Literal[
     "AssignmentGroupRow",
     "DicePipeline",
     "DiceTray",
+    "PlayerUnitsRoster",
     "Tooltip",
     "Separator",
 ]
@@ -96,6 +100,31 @@ class OverflowPolicy:
     min_font_size_px: float = 10.0
     preserve_icon: bool = True
     debug_bounds: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ScrollConfig:
+    """Interactive child-content scroll behavior for a HUD component."""
+
+    enabled: bool = False
+    axes: HudScrollAxis = "y"
+    wheel_axis: HudWheelAxis = "y"
+    show_scrollbars: HudScrollbarVisibility = "auto"
+    wheel_step_px: float = 48.0
+    drag_scrollbars: bool = False
+    clamp_to_content: bool = True
+
+    @property
+    def allows_x(self) -> bool:
+        """Return whether horizontal scrolling is enabled."""
+
+        return self.enabled and self.axes in ("x", "both")
+
+    @property
+    def allows_y(self) -> bool:
+        """Return whether vertical scrolling is enabled."""
+
+        return self.enabled and self.axes in ("y", "both")
 
 
 @dataclass(frozen=True, slots=True)
@@ -407,6 +436,7 @@ class HudButtonView:
     enabled: bool = True
     disabled_reason: str = ""
     visual_role: HudColorRole = "neutral"
+    unit_id: str | None = None
     metadata: JsonObject | None = None
 
 
@@ -438,10 +468,71 @@ class HudButtonHitRegion:
     bounds: tuple[float, float, float, float]
     option_id: str | None = None
     request_id: str | None = None
+    unit_id: str | None = None
     disabled_reason: str = ""
 
     def contains(self, screen_x: float, screen_y: float) -> bool:
         """Return whether a screen-space point is inside this hit region."""
+
+        left, bottom, right, top = self.bounds
+        return left <= screen_x <= right and bottom <= screen_y <= top
+
+
+@dataclass(frozen=True, slots=True)
+class HudScrollHitRegion:
+    """Frame-local hit-test metadata for a scrollable HUD viewport."""
+
+    component_id: str
+    bounds: tuple[float, float, float, float]
+    content_width: float
+    content_height: float
+    offset_x: float
+    offset_y: float
+    axes: HudScrollAxis
+    wheel_axis: HudWheelAxis
+    wheel_step_px: float
+    clamp_to_content: bool = True
+
+    @property
+    def viewport_width(self) -> float:
+        """Return viewport width in screen pixels."""
+
+        left, _, right, _ = self.bounds
+        return max(0.0, right - left)
+
+    @property
+    def viewport_height(self) -> float:
+        """Return viewport height in screen pixels."""
+
+        _, bottom, _, top = self.bounds
+        return max(0.0, top - bottom)
+
+    @property
+    def max_offset_x(self) -> float:
+        """Return the largest horizontal scroll offset allowed by current content."""
+
+        return max(0.0, self.content_width - self.viewport_width)
+
+    @property
+    def max_offset_y(self) -> float:
+        """Return the largest vertical scroll offset allowed by current content."""
+
+        return max(0.0, self.content_height - self.viewport_height)
+
+    @property
+    def allows_x(self) -> bool:
+        """Return whether this scroll region accepts horizontal scroll input."""
+
+        return self.axes in ("x", "both")
+
+    @property
+    def allows_y(self) -> bool:
+        """Return whether this scroll region accepts vertical scroll input."""
+
+        return self.axes in ("y", "both")
+
+    def contains(self, screen_x: float, screen_y: float) -> bool:
+        """Return whether a screen-space point is inside this scroll region."""
 
         left, bottom, right, top = self.bounds
         return left <= screen_x <= right and bottom <= screen_y <= top
@@ -528,6 +619,7 @@ _COMMON_ATTRIBUTES = frozenset(
         "opacity",
         "overflow",
         "padding",
+        "scroll",
         "shape",
         "state",
         "slots",
@@ -735,6 +827,18 @@ _WIDGET_ATTRIBUTES: dict[HudWidgetType, frozenset[str]] = {
             "title",
         )
     ),
+    "PlayerUnitsRoster": frozenset(
+        (
+            "button_gap",
+            "button_height",
+            "button_min_width",
+            "button_shape",
+            "max_visible_rows",
+            "status_icon_text",
+            "subtitle",
+            "title",
+        )
+    ),
     "Tooltip": frozenset(("body", "title")),
     "Separator": frozenset(("orientation",)),
 }
@@ -872,6 +976,7 @@ def known_data_refs() -> frozenset[str]:
             "hud.workbench.review.diagnostics",
             "hud.workbench.review.events",
             "hud.workbench.review.hotkeys",
+            "hud.player_units.roster",
             "mission_summary",
             "movement_budget",
             "dice_tray",
@@ -952,6 +1057,58 @@ def parse_overflow_policy(value: JsonValue | None) -> OverflowPolicy:
         min_font_size_px=min_font_size_px,
         preserve_icon=preserve_icon,
         debug_bounds=debug_bounds,
+    )
+
+
+def parse_scroll_config(value: JsonValue | None) -> ScrollConfig:
+    """Parse a JSON-safe scroll config into typed scroll behavior."""
+
+    if value is None:
+        return ScrollConfig()
+    if type(value) is bool:
+        return ScrollConfig(enabled=value)
+    if type(value) is str:
+        return ScrollConfig(enabled=True, axes=_scroll_axis(value))
+    if type(value) is not dict:
+        raise ValueError("scroll must be a boolean, axis string, or object")
+    enabled = _bool_value(value.get("enabled"), default=False, label="scroll.enabled")
+    raw_axes = value.get("axes", "y")
+    axes = _scroll_axis(raw_axes) if type(raw_axes) is str else _invalid_scroll_axis()
+    raw_wheel_axis = value.get("wheel_axis", "y")
+    wheel_axis = (
+        _wheel_axis(raw_wheel_axis) if type(raw_wheel_axis) is str else _invalid_wheel_axis()
+    )
+    raw_scrollbars = value.get("show_scrollbars", "auto")
+    show_scrollbars = (
+        _scrollbar_visibility(raw_scrollbars)
+        if type(raw_scrollbars) is str
+        else _invalid_scrollbar_visibility()
+    )
+    wheel_step_px = _positive_float_value(
+        value.get("wheel_step_px"),
+        default=48.0,
+        label="scroll.wheel_step_px",
+    )
+    if wheel_step_px <= 0.0:
+        raise ValueError("scroll.wheel_step_px must be greater than zero")
+    drag_scrollbars = _bool_value(
+        value.get("drag_scrollbars"),
+        default=False,
+        label="scroll.drag_scrollbars",
+    )
+    clamp_to_content = _bool_value(
+        value.get("clamp_to_content"),
+        default=True,
+        label="scroll.clamp_to_content",
+    )
+    return ScrollConfig(
+        enabled=enabled,
+        axes=axes,
+        wheel_axis=wheel_axis,
+        show_scrollbars=show_scrollbars,
+        wheel_step_px=wheel_step_px,
+        drag_scrollbars=drag_scrollbars,
+        clamp_to_content=clamp_to_content,
     )
 
 
@@ -1046,6 +1203,48 @@ def _status_chip_shape(value: str) -> HudStatusChipShape:
 
 def _invalid_status_shape() -> HudStatusChipShape:
     raise ValueError("shape.shape must be a string")
+
+
+def _scroll_axis(value: str) -> HudScrollAxis:
+    if value == "x":
+        return "x"
+    if value == "y":
+        return "y"
+    if value == "both":
+        return "both"
+    raise ValueError("scroll.axes must be x, y, or both")
+
+
+def _invalid_scroll_axis() -> HudScrollAxis:
+    raise ValueError("scroll.axes must be a string")
+
+
+def _wheel_axis(value: str) -> HudWheelAxis:
+    if value == "x":
+        return "x"
+    if value == "y":
+        return "y"
+    if value == "auto":
+        return "auto"
+    raise ValueError("scroll.wheel_axis must be x, y, or auto")
+
+
+def _invalid_wheel_axis() -> HudWheelAxis:
+    raise ValueError("scroll.wheel_axis must be a string")
+
+
+def _scrollbar_visibility(value: str) -> HudScrollbarVisibility:
+    if value == "never":
+        return "never"
+    if value == "auto":
+        return "auto"
+    if value == "always":
+        return "always"
+    raise ValueError("scroll.show_scrollbars must be never, auto, or always")
+
+
+def _invalid_scrollbar_visibility() -> HudScrollbarVisibility:
+    raise ValueError("scroll.show_scrollbars must be a string")
 
 
 def _positive_float(text: str, label: str) -> float:

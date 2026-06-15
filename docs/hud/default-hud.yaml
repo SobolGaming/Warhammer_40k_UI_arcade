@@ -32,15 +32,23 @@ regions:
       render_mode: none
       layout: {kind: stack, orientation: vertical, gap_px: 8, padding_px: 8}
       children:
-      - type: IconTextBar
-        id: player_roster_header
-        icon_id: entity.unit
-        primary_label: Player Units
-      - type: UnitRailCard
-        id: player_roster_placeholder
-        data_ref: player_roster
-        unit_label: Player roster
-        activation_state: ready
+      - type: PlayerUnitsRoster
+        id: player_units_roster
+        data_ref: hud.player_units.roster
+        title: Player Units
+        height: fill
+        button_height: 34
+        button_min_width: 140
+        button_gap: 6
+        button_shape: rect
+        status_icon_text: UN
+        scroll:
+          enabled: true
+          axes: y
+          wheel_axis: y
+          show_scrollbars: auto
+          wheel_step_px: 48
+          clamp_to_content: true
   right_inspector:
     widget:
       type: HudContainer

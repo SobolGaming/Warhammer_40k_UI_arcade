@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from math import ceil
 
@@ -14,13 +15,16 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     HudButtonActionKind,
     HudButtonHitRegion,
     HudComponentNode,
+    HudScrollHitRegion,
     HudTheme,
     OverflowPolicy,
+    ScrollConfig,
     SizeSpec,
     StatusChipShapeSpec,
     default_hud_theme,
     json_text,
     parse_overflow_policy,
+    parse_scroll_config,
     parse_size_spec,
     parse_status_chip_shape,
 )
@@ -44,6 +48,7 @@ class HudCompositionRenderResult:
 
     primitives: tuple[RenderPrimitive, ...]
     hit_regions: tuple[HudButtonHitRegion, ...]
+    scroll_regions: tuple[HudScrollHitRegion, ...] = ()
 
 
 def render_composition_profile(
@@ -55,6 +60,7 @@ def render_composition_profile(
     theme: HudTheme | None = None,
     runtime_data: JsonObject | None = None,
     hud_layout: HudLayoutView | None = None,
+    scroll_offsets: Mapping[str, tuple[float, float]] | None = None,
     include_background: bool = True,
 ) -> tuple[RenderPrimitive, ...]:
     """Render a composition profile or one component subtree to deterministic primitives."""
@@ -67,6 +73,7 @@ def render_composition_profile(
         theme=theme,
         runtime_data=runtime_data,
         hud_layout=hud_layout,
+        scroll_offsets=scroll_offsets,
         include_background=include_background,
     ).primitives
 
@@ -80,6 +87,7 @@ def render_composition_profile_with_hit_regions(
     theme: HudTheme | None = None,
     runtime_data: JsonObject | None = None,
     hud_layout: HudLayoutView | None = None,
+    scroll_offsets: Mapping[str, tuple[float, float]] | None = None,
     include_background: bool = True,
 ) -> HudCompositionRenderResult:
     """Render deterministic primitives and collect clickable button hit regions."""
@@ -92,6 +100,7 @@ def render_composition_profile_with_hit_regions(
     active_data = profile.sample_data if runtime_data is None else runtime_data
     primitives: list[RenderPrimitive] = []
     hit_regions: list[HudButtonHitRegion] = []
+    scroll_regions: list[HudScrollHitRegion] = []
     if include_background:
         primitives.append(
             PolygonPrimitive(
@@ -113,10 +122,14 @@ def render_composition_profile_with_hit_regions(
             rect=root_rect,
             theme=render_theme,
             sample_data=active_data,
+            scroll_offsets=scroll_offsets,
         )
         primitives.extend(result.primitives)
         hit_regions.extend(result.hit_regions)
-        return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
+        scroll_regions.extend(result.scroll_regions)
+        return HudCompositionRenderResult(
+            tuple(primitives), tuple(hit_regions), tuple(scroll_regions)
+        )
 
     layout = hud_layout or _default_layout_for_profile(
         profile=profile,
@@ -132,10 +145,12 @@ def render_composition_profile_with_hit_regions(
             rect=resolved_region.rect.inset(8.0),
             theme=render_theme,
             sample_data=active_data,
+            scroll_offsets=scroll_offsets,
         )
         primitives.extend(result.primitives)
         hit_regions.extend(result.hit_regions)
-    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
+        scroll_regions.extend(result.scroll_regions)
+    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions), tuple(scroll_regions))
 
 
 def _default_layout_for_profile(
@@ -162,6 +177,7 @@ def render_component_tree(
     rect: ScreenRect,
     theme: HudTheme,
     sample_data: JsonObject,
+    scroll_offsets: Mapping[str, tuple[float, float]] | None = None,
 ) -> tuple[RenderPrimitive, ...]:
     """Render one component subtree inside a parent-relative rectangle."""
 
@@ -170,6 +186,7 @@ def render_component_tree(
         rect=rect,
         theme=theme,
         sample_data=sample_data,
+        scroll_offsets=scroll_offsets,
     ).primitives
 
 
@@ -179,31 +196,67 @@ def render_component_tree_with_hit_regions(
     rect: ScreenRect,
     theme: HudTheme,
     sample_data: JsonObject,
+    scroll_offsets: Mapping[str, tuple[float, float]] | None = None,
 ) -> HudCompositionRenderResult:
     """Render one component subtree and collect clickable hit regions."""
 
+    active_scroll_offsets = scroll_offsets or {}
     primitives: list[RenderPrimitive] = []
     hit_regions: list[HudButtonHitRegion] = []
-    node_clip = rect if _clip_enabled(node) else None
+    scroll_regions: list[HudScrollHitRegion] = []
+    scroll = _scroll_config(node)
+    node_clip = rect if _clip_enabled(node) or scroll.enabled else None
     result = _component_shell_with_hit_regions(
         node,
         rect=rect,
         theme=theme,
         sample_data=sample_data,
+        scroll_offsets=active_scroll_offsets,
     )
     primitives.extend(_with_clip(result.primitives, node_clip))
     hit_regions.extend(result.hit_regions)
-    child_rects = _child_rects(node, rect)
+    scroll_regions.extend(result.scroll_regions)
+    if scroll.enabled and node.children:
+        content_rect = _scroll_content_rect(node, rect)
+        offset_x, offset_y = _clamped_scroll_offset(
+            node.widget_id,
+            scroll=scroll,
+            viewport_rect=rect,
+            content_rect=content_rect,
+            scroll_offsets=active_scroll_offsets,
+        )
+        scroll_region = _scroll_hit_region(
+            node.widget_id,
+            viewport_rect=rect,
+            content_rect=content_rect,
+            scroll=scroll,
+            offset_x=offset_x,
+            offset_y=offset_y,
+        )
+        scroll_regions.append(scroll_region)
+        primitives.extend(_scrollbar_primitives(scroll_region, theme=theme, scroll=scroll))
+        child_rects = tuple(
+            _translate_rect(child_rect, dx=-offset_x, dy=-offset_y)
+            for child_rect in _child_rects(node, content_rect)
+        )
+    else:
+        child_rects = _child_rects(node, rect)
     for child, child_rect in zip(node.children, child_rects, strict=True):
         child_result = render_component_tree_with_hit_regions(
             child,
             rect=child_rect,
             theme=theme,
             sample_data=sample_data,
+            scroll_offsets=active_scroll_offsets,
         )
         primitives.extend(_with_clip(child_result.primitives, node_clip))
-        hit_regions.extend(child_result.hit_regions)
-    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
+        hit_regions.extend(
+            _clip_hud_button_hit_regions(child_result.hit_regions, node_clip)
+            if node_clip is not None
+            else child_result.hit_regions
+        )
+        scroll_regions.extend(child_result.scroll_regions)
+    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions), tuple(scroll_regions))
 
 
 def _component_shell_with_hit_regions(
@@ -212,12 +265,21 @@ def _component_shell_with_hit_regions(
     rect: ScreenRect,
     theme: HudTheme,
     sample_data: JsonObject,
+    scroll_offsets: Mapping[str, tuple[float, float]],
 ) -> HudCompositionRenderResult:
     data_value = _data_value(node, sample_data)
     if node.widget_type == "CurrentActionPanel":
         return _current_action_panel(node, rect=rect, theme=theme, data_value=data_value)
     if node.widget_type == "ActionButton":
         return _action_button(node, rect=rect, theme=theme, data_value=data_value)
+    if node.widget_type == "PlayerUnitsRoster":
+        return _player_units_roster(
+            node,
+            rect=rect,
+            theme=theme,
+            data_value=data_value,
+            scroll_offsets=scroll_offsets,
+        )
     return HudCompositionRenderResult(
         _component_shell(node, rect=rect, theme=theme, sample_data=sample_data),
         (),
@@ -534,6 +596,176 @@ def _action_button(
     return HudCompositionRenderResult(primitives, () if hit_region is None else (hit_region,))
 
 
+def _player_units_roster(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    data_value: JsonValue | None,
+    scroll_offsets: Mapping[str, tuple[float, float]],
+) -> HudCompositionRenderResult:
+    data = _data_object(data_value)
+    title = _attribute_text(
+        node,
+        "title",
+        default=json_text(data.get("title"), default="Player Units"),
+    )
+    subtitle = _attribute_text(
+        node,
+        "subtitle",
+        default=json_text(data.get("summary"), default=json_text(data.get("status"))),
+    )
+    buttons = _object_items(data.get("buttons"))
+    overflow = _overflow_policy(node)
+    scroll = _scroll_config(node)
+    color_role = json_text(data.get("color_role"), default="player")
+    accent = theme.color_for_role(color_role)
+    primitives: list[RenderPrimitive] = [
+        _panel(rect, theme=theme, outline_color=_with_alpha(accent, 184))
+    ]
+    text_width = max(theme.compact_font_size_px, rect.width - (theme.inner_padding_px * 2.0))
+    title_y = rect.top - theme.inner_padding_px - 2.0
+    primitives.append(
+        TextPrimitive(
+            layer="hud_widget_text",
+            text=_overflow_text(
+                title,
+                width_px=text_width,
+                font_size_px=theme.title_font_size_px,
+                policy=overflow,
+            ),
+            position=(rect.x + theme.inner_padding_px, title_y),
+            color=theme.text,
+            font_size=_font_size_for_text(
+                title,
+                width_px=text_width,
+                font_size_px=theme.title_font_size_px,
+                policy=overflow,
+            ),
+            coordinate_space="screen",
+            anchor_y="top",
+        )
+    )
+    subtitle_y = title_y - theme.line_height_px
+    header_height = theme.line_height_px + theme.inner_padding_px + 8.0
+    if subtitle:
+        primitives.append(
+            TextPrimitive(
+                layer="hud_widget_text",
+                text=_overflow_text(
+                    subtitle,
+                    width_px=text_width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
+                position=(rect.x + theme.inner_padding_px, subtitle_y),
+                color=theme.muted_text,
+                font_size=_font_size_for_text(
+                    subtitle,
+                    width_px=text_width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
+                coordinate_space="screen",
+                anchor_y="top",
+            )
+        )
+        header_height += theme.line_height_px
+    content_rect = ScreenRect(
+        rect.x + theme.inner_padding_px,
+        rect.y + theme.inner_padding_px,
+        max(0.0, rect.width - (theme.inner_padding_px * 2.0)),
+        max(0.0, rect.height - header_height - theme.inner_padding_px),
+    )
+    if content_rect.width <= 0.0 or content_rect.height <= 0.0:
+        return HudCompositionRenderResult(tuple(primitives), ())
+    button_gap = max(0.0, _attribute_float(node, "button_gap", default=6.0))
+    button_height = max(20.0, _attribute_float(node, "button_height", default=34.0))
+    button_min_width = max(48.0, _attribute_float(node, "button_min_width", default=120.0))
+    content_height = max(
+        content_rect.height,
+        (len(buttons) * button_height) + (max(0, len(buttons) - 1) * button_gap),
+    )
+    max_button_width = max(
+        (
+            button_min_width,
+            *(
+                _estimated_text_width(json_text(button.get("label")), theme.compact_font_size_px)
+                + 64.0
+                for button in buttons
+            ),
+        )
+    )
+    content_width = max(content_rect.width, max_button_width)
+    content_extent = ScreenRect(
+        content_rect.x,
+        content_rect.top - content_height,
+        content_width,
+        content_height,
+    )
+    offset_x, offset_y = _clamped_scroll_offset(
+        node.widget_id,
+        scroll=scroll,
+        viewport_rect=content_rect,
+        content_rect=content_extent,
+        scroll_offsets=scroll_offsets,
+    )
+    scroll_region = _scroll_hit_region(
+        node.widget_id,
+        viewport_rect=rect,
+        content_rect=ScreenRect(
+            rect.x,
+            rect.y,
+            max(rect.width, content_width + (theme.inner_padding_px * 2.0)),
+            rect.height + max(0.0, content_height - content_rect.height),
+        ),
+        scroll=scroll,
+        offset_x=offset_x,
+        offset_y=offset_y,
+    )
+    hit_regions: list[HudButtonHitRegion] = []
+    row_y_top = content_rect.top - offset_y
+    row_x = content_rect.x - offset_x
+    for button in buttons:
+        row_button = dict(button)
+        if not json_text(row_button.get("text_icon")):
+            row_button["text_icon"] = _attribute_text(node, "status_icon_text", default="UN")
+        if not json_text(row_button.get("icon_id")):
+            row_button["icon_id"] = "entity.unit"
+        row_rect = ScreenRect(row_x, row_y_top - button_height, content_width, button_height)
+        row_y_top -= button_height + button_gap
+        if not _rects_intersect(row_rect, content_rect):
+            continue
+        primitives.extend(
+            _with_clip(
+                _hud_button_primitives(row_button, rect=row_rect, theme=theme, node=node),
+                content_rect,
+            )
+        )
+        hit_region = _hit_region_for_button(node.widget_id, row_button, row_rect)
+        if hit_region is not None:
+            clipped = _clip_hud_button_hit_region(hit_region, content_rect)
+            if clipped is not None:
+                hit_regions.append(clipped)
+    if not buttons:
+        primitives.append(
+            TextPrimitive(
+                layer="hud_widget_text",
+                text="No projected player units",
+                position=(content_rect.x, content_rect.top - 4.0),
+                color=theme.muted_text,
+                font_size=theme.compact_font_size_px,
+                coordinate_space="screen",
+                anchor_y="top",
+                clip_rect=content_rect,
+            )
+        )
+    scroll_regions = (scroll_region,) if scroll.enabled else ()
+    if scroll.enabled:
+        primitives.extend(_scrollbar_primitives(scroll_region, theme=theme, scroll=scroll))
+    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions), scroll_regions)
+
+
 def _button_row(
     node: HudComponentNode,
     *,
@@ -721,6 +953,8 @@ def _hit_region_for_button(
     button_id = json_text(button.get("button_id"), default=json_text(button.get("id")))
     command_id = json_text(button.get("command_id"))
     action_kind = _button_action_kind(json_text(button.get("action_kind"), default="none"))
+    metadata = _data_object(button.get("metadata"))
+    unit_id = json_text(button.get("unit_id"), default=json_text(metadata.get("unit_id"))) or None
     if not button_id or not command_id:
         return None
     return HudButtonHitRegion(
@@ -732,6 +966,7 @@ def _hit_region_for_button(
         bounds=(rect.x, rect.y, rect.right, rect.top),
         option_id=json_text(button.get("option_id")) or None,
         request_id=json_text(button.get("request_id")) or None,
+        unit_id=unit_id,
         disabled_reason=json_text(button.get("disabled_reason")),
     )
 
@@ -741,6 +976,8 @@ def _button_action_kind(value: str) -> HudButtonActionKind:
         return "finite_option"
     if value == "local_command":
         return "local_command"
+    if value == "select_unit":
+        return "select_unit"
     return "none"
 
 
@@ -1445,6 +1682,228 @@ def _child_rects(node: HudComponentNode, rect: ScreenRect) -> tuple[ScreenRect, 
         )
         y_top -= height + gap
     return tuple(vertical_rects)
+
+
+def _scroll_content_rect(node: HudComponentNode, rect: ScreenRect) -> ScreenRect:
+    content_width, content_height = _scroll_content_size(node, rect)
+    return ScreenRect(
+        x=rect.x,
+        y=rect.top - content_height,
+        width=content_width,
+        height=content_height,
+    )
+
+
+def _scroll_content_size(node: HudComponentNode, rect: ScreenRect) -> tuple[float, float]:
+    if not node.children:
+        return (rect.width, rect.height)
+    padding = max(0.0, node.layout.padding_px)
+    gap = max(0.0, node.layout.gap_px)
+    inner_width = max(0.0, rect.width - (padding * 2.0))
+    inner_height = max(0.0, rect.height - (padding * 2.0))
+    child_sizes = tuple(_estimated_scroll_child_size(child, rect) for child in node.children)
+    if node.layout.kind == "grid":
+        columns = max(1, node.layout.columns)
+        rows = ceil(len(node.children) / columns)
+        cell_width = max((width for width, _ in child_sizes), default=inner_width)
+        cell_height = max((height for _, height in child_sizes), default=inner_height)
+        return (
+            max(rect.width, (columns * cell_width) + (gap * (columns - 1)) + (padding * 2.0)),
+            max(rect.height, (rows * cell_height) + (gap * (rows - 1)) + (padding * 2.0)),
+        )
+    if node.layout.orientation == "horizontal":
+        content_width = sum(width for width, _ in child_sizes) + (
+            gap * max(0, len(child_sizes) - 1)
+        )
+        content_height = max((height for _, height in child_sizes), default=inner_height)
+        return (
+            max(rect.width, content_width + (padding * 2.0)),
+            max(rect.height, content_height + (padding * 2.0)),
+        )
+    content_width = max((width for width, _ in child_sizes), default=inner_width)
+    content_height = sum(height for _, height in child_sizes) + (gap * max(0, len(child_sizes) - 1))
+    return (
+        max(rect.width, content_width + (padding * 2.0)),
+        max(rect.height, content_height + (padding * 2.0)),
+    )
+
+
+def _estimated_scroll_child_size(
+    child: HudComponentNode,
+    parent_rect: ScreenRect,
+) -> tuple[float, float]:
+    estimated_width, estimated_height = _estimated_component_size(child)
+    width = _axis_size(child, axis="width", parent_size=parent_rect.width) or estimated_width
+    height = _axis_size(child, axis="height", parent_size=parent_rect.height) or estimated_height
+    return (max(0.0, width), max(0.0, height))
+
+
+def _scroll_config(node: HudComponentNode) -> ScrollConfig:
+    try:
+        return parse_scroll_config(node.attributes.get("scroll"))
+    except ValueError:
+        return ScrollConfig()
+
+
+def _clamped_scroll_offset(
+    component_id: str,
+    *,
+    scroll: ScrollConfig,
+    viewport_rect: ScreenRect,
+    content_rect: ScreenRect,
+    scroll_offsets: Mapping[str, tuple[float, float]],
+) -> tuple[float, float]:
+    offset_x, offset_y = scroll_offsets.get(component_id, (0.0, 0.0))
+    max_x = max(0.0, content_rect.width - viewport_rect.width)
+    max_y = max(0.0, content_rect.height - viewport_rect.height)
+    if not scroll.allows_x:
+        offset_x = 0.0
+    if not scroll.allows_y:
+        offset_y = 0.0
+    if scroll.clamp_to_content:
+        offset_x = min(max(0.0, offset_x), max_x)
+        offset_y = min(max(0.0, offset_y), max_y)
+    return (offset_x, offset_y)
+
+
+def _scroll_hit_region(
+    component_id: str,
+    *,
+    viewport_rect: ScreenRect,
+    content_rect: ScreenRect,
+    scroll: ScrollConfig,
+    offset_x: float,
+    offset_y: float,
+) -> HudScrollHitRegion:
+    return HudScrollHitRegion(
+        component_id=component_id,
+        bounds=(viewport_rect.x, viewport_rect.y, viewport_rect.right, viewport_rect.top),
+        content_width=content_rect.width,
+        content_height=content_rect.height,
+        offset_x=offset_x,
+        offset_y=offset_y,
+        axes=scroll.axes,
+        wheel_axis=scroll.wheel_axis,
+        wheel_step_px=scroll.wheel_step_px,
+        clamp_to_content=scroll.clamp_to_content,
+    )
+
+
+def _scrollbar_primitives(
+    region: HudScrollHitRegion,
+    *,
+    theme: HudTheme,
+    scroll: ScrollConfig,
+) -> tuple[RenderPrimitive, ...]:
+    if not scroll.enabled or scroll.show_scrollbars == "never":
+        return ()
+    if (
+        scroll.show_scrollbars == "auto"
+        and region.max_offset_x <= 0.0
+        and region.max_offset_y <= 0.0
+    ):
+        return ()
+    rect = ScreenRect(
+        region.bounds[0],
+        region.bounds[1],
+        region.viewport_width,
+        region.viewport_height,
+    )
+    primitives: list[RenderPrimitive] = []
+    if region.allows_y and (scroll.show_scrollbars == "always" or region.max_offset_y > 0.0):
+        track = ScreenRect(rect.right - 5.0, rect.y + 4.0, 3.0, max(0.0, rect.height - 8.0))
+        thumb_height = (
+            track.height
+            if region.content_height <= 0.0
+            else max(16.0, track.height * min(1.0, rect.height / region.content_height))
+        )
+        travel = max(0.0, track.height - thumb_height)
+        fraction = 0.0 if region.max_offset_y <= 0.0 else region.offset_y / region.max_offset_y
+        thumb_y = track.top - thumb_height - (travel * fraction)
+        thumb = ScreenRect(track.x, thumb_y, track.width, thumb_height)
+        primitives.append(
+            _panel(track, theme=theme, fill_color=(20, 24, 24, 94), outline_color=_TRANSPARENT)
+        )
+        primitives.append(
+            _panel(
+                thumb,
+                theme=theme,
+                fill_color=_with_alpha(theme.selected, 132),
+                outline_color=_TRANSPARENT,
+            )
+        )
+    if region.allows_x and (scroll.show_scrollbars == "always" or region.max_offset_x > 0.0):
+        track = ScreenRect(rect.x + 4.0, rect.y + 2.0, max(0.0, rect.width - 8.0), 3.0)
+        thumb_width = (
+            track.width
+            if region.content_width <= 0.0
+            else max(16.0, track.width * min(1.0, rect.width / region.content_width))
+        )
+        travel = max(0.0, track.width - thumb_width)
+        fraction = 0.0 if region.max_offset_x <= 0.0 else region.offset_x / region.max_offset_x
+        thumb = ScreenRect(track.x + (travel * fraction), track.y, thumb_width, track.height)
+        primitives.append(
+            _panel(track, theme=theme, fill_color=(20, 24, 24, 94), outline_color=_TRANSPARENT)
+        )
+        primitives.append(
+            _panel(
+                thumb,
+                theme=theme,
+                fill_color=_with_alpha(theme.selected, 132),
+                outline_color=_TRANSPARENT,
+            )
+        )
+    return tuple(primitives)
+
+
+def _translate_rect(rect: ScreenRect, *, dx: float, dy: float) -> ScreenRect:
+    return ScreenRect(x=rect.x + dx, y=rect.y + dy, width=rect.width, height=rect.height)
+
+
+def _rects_intersect(first: ScreenRect, second: ScreenRect) -> bool:
+    return not (
+        first.right <= second.x
+        or second.right <= first.x
+        or first.top <= second.y
+        or second.top <= first.y
+    )
+
+
+def _rect_intersection(first: ScreenRect, second: ScreenRect) -> ScreenRect | None:
+    left = max(first.x, second.x)
+    right = min(first.right, second.right)
+    bottom = max(first.y, second.y)
+    top = min(first.top, second.top)
+    if left >= right or bottom >= top:
+        return None
+    return ScreenRect(left, bottom, right - left, top - bottom)
+
+
+def _clip_hud_button_hit_regions(
+    regions: tuple[HudButtonHitRegion, ...],
+    clip_rect: ScreenRect,
+) -> tuple[HudButtonHitRegion, ...]:
+    clipped: list[HudButtonHitRegion] = []
+    for region in regions:
+        next_region = _clip_hud_button_hit_region(region, clip_rect)
+        if next_region is not None:
+            clipped.append(next_region)
+    return tuple(clipped)
+
+
+def _clip_hud_button_hit_region(
+    region: HudButtonHitRegion,
+    clip_rect: ScreenRect,
+) -> HudButtonHitRegion | None:
+    left, bottom, right, top = region.bounds
+    region_rect = ScreenRect(left, bottom, right - left, top - bottom)
+    intersection = _rect_intersection(region_rect, clip_rect)
+    if intersection is None:
+        return None
+    return replace(
+        region,
+        bounds=(intersection.x, intersection.y, intersection.right, intersection.top),
+    )
 
 
 def _allocated_axis_sizes(
