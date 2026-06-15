@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import shlex
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from itertools import pairwise
 from pathlib import Path
 from textwrap import wrap
@@ -15,6 +15,7 @@ import arcade
 from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
+    JsonValue,
     UiClientProtocolError,
     UiClientStatus,
     UiCoreClient,
@@ -98,12 +99,46 @@ CONTEXT_MENU_ACTION_WIDTH_WORLD = 18.0
 CONTEXT_MENU_LINE_TOLERANCE_WORLD = 0.55
 RIGHT_CLICK_REMOVE_DRAG_TOLERANCE_PX = 3.0
 FATAL_ENGINE_EXIT_DELAY_SECONDS = 4.0
+OPTION_FOCUS_UNIT_ID_KEYS = (
+    "target_unit_instance_id",
+    "target_unit_id",
+    "target_unit_instance_ids",
+    "selected_unit_instance_id",
+    "selected_unit_id",
+    "moved_unit_instance_id",
+    "moved_unit_id",
+    "unit_instance_id",
+    "unit_id",
+    "source_unit_instance_id",
+    "source_unit_id",
+)
+OPTION_FOCUS_MODEL_ID_KEYS = (
+    "target_model_instance_id",
+    "target_model_id",
+    "target_model_instance_ids",
+    "selected_model_instance_id",
+    "selected_model_id",
+    "moved_model_instance_id",
+    "moved_model_id",
+    "model_instance_id",
+    "model_id",
+    "source_model_instance_id",
+    "source_model_id",
+)
 
 logger = logging.getLogger(__name__)
 
 type FatalGameEngineException = (
     UiClientProtocolError | RenderViewModelError | MovementSubmissionError | KeyError
 )
+
+
+@dataclass(frozen=True, slots=True)
+class OptionEntityFocusTarget:
+    """Projected entity focus target inferred from a finite option payload."""
+
+    unit_id: str
+    model_id: str | None = None
 
 
 class HudPreferencesConfigurationError(RuntimeError):
@@ -693,6 +728,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         elif invocation.command_id == "cycle_selection":
             if self._finite_state.finite_options:
                 self._set_finite_state(self._finite_state.cycle_option())
+                self._focus_entity_for_highlighted_option(source="cycle_selection")
             elif self._movement_draft is not None:
                 self._movement_draft = self._movement_draft.cycle_entity_focus(
                     view=self._battlefield_view
@@ -820,6 +856,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             return
         if hit_region.action_kind == "finite_option" and hit_region.option_id is not None:
             self._set_finite_state(self._finite_state.highlight_option(hit_region.option_id))
+            self._focus_entity_for_highlighted_option(source="hud_button")
             return
         self._trace_event(
             category="ui",
@@ -831,6 +868,38 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "action_kind": hit_region.action_kind,
             },
         )
+
+    def _focus_entity_for_highlighted_option(self, *, source: str) -> None:
+        option = self._finite_state.highlighted_option
+        if option is None:
+            return
+        target = _option_entity_focus_target(
+            payload=option.payload,
+            view=self._battlefield_view,
+        )
+        if target is None:
+            return
+        if (
+            self._selection_state.selected_unit_id == target.unit_id
+            and self._selection_state.selected_model_id == target.model_id
+        ):
+            return
+        self._selection_state = self._selection_state.select_model_id(
+            unit_id=target.unit_id,
+            model_id=target.model_id,
+            preferences=self._preferences,
+        )
+        self._trace_event(
+            category="ui",
+            event_name="ui.finite_option_entity_focused",
+            summary={
+                "source": source,
+                "option_id": option.option_id,
+                "unit_id": target.unit_id,
+                "model_id": target.model_id,
+            },
+        )
+        self._sync_movement_draft()
 
     def _submit_finite_option(self, selected_option_id: str | None) -> None:
         self._trace_event(
@@ -1296,6 +1365,94 @@ def _hud_button_summary(hit_region: HudButtonHitRegion | None) -> JsonObject:
         "option_id": hit_region.option_id,
         "request_id": hit_region.request_id,
     }
+
+
+def _option_entity_focus_target(
+    *,
+    payload: JsonValue,
+    view: BattlefieldView,
+) -> OptionEntityFocusTarget | None:
+    unit_id = _first_unique_payload_string(payload, OPTION_FOCUS_UNIT_ID_KEYS)
+    model_id = _first_unique_payload_string(payload, OPTION_FOCUS_MODEL_ID_KEYS)
+    if model_id is not None:
+        resolved_unit_id = unit_id if _view_has_model(view, unit_id, model_id) else None
+        if resolved_unit_id is None:
+            resolved_unit_id = _unit_id_for_model(view, model_id)
+        if resolved_unit_id is not None:
+            return OptionEntityFocusTarget(unit_id=resolved_unit_id, model_id=model_id)
+    if unit_id is not None and _view_has_unit(view, unit_id):
+        return OptionEntityFocusTarget(unit_id=unit_id)
+    return None
+
+
+def _first_unique_payload_string(
+    payload: JsonValue,
+    keys: tuple[str, ...],
+) -> str | None:
+    for key in keys:
+        values = _payload_strings_for_key(payload, key)
+        if len(values) == 1:
+            return values[0]
+    return None
+
+
+def _payload_strings_for_key(payload: JsonValue, key: str) -> tuple[str, ...]:
+    values: list[str] = []
+    _collect_payload_strings_for_key(payload, key, values)
+    unique_values: list[str] = []
+    for value in values:
+        if value not in unique_values:
+            unique_values.append(value)
+    return tuple(unique_values)
+
+
+def _collect_payload_strings_for_key(
+    payload: JsonValue,
+    key: str,
+    values: list[str],
+) -> None:
+    if type(payload) is dict:
+        for payload_key, payload_value in payload.items():
+            if payload_key == key:
+                value = _single_payload_string(payload_value)
+                if value is not None:
+                    values.append(value)
+                continue
+            _collect_payload_strings_for_key(payload_value, key, values)
+    elif type(payload) is list:
+        for item in payload:
+            _collect_payload_strings_for_key(item, key, values)
+
+
+def _single_payload_string(value: JsonValue) -> str | None:
+    if type(value) is str and value:
+        return value
+    if type(value) is list:
+        strings = tuple(item for item in value if type(item) is str and item)
+        if len(strings) == 1:
+            return strings[0]
+    return None
+
+
+def _view_has_unit(view: BattlefieldView, unit_id: str) -> bool:
+    return any(unit.unit_id == unit_id for unit in view.units)
+
+
+def _view_has_model(view: BattlefieldView, unit_id: str | None, model_id: str) -> bool:
+    if unit_id is None:
+        return False
+    for unit in view.units:
+        if unit.unit_id != unit_id:
+            continue
+        return any(model.model_id == model_id for model in unit.models)
+    return False
+
+
+def _unit_id_for_model(view: BattlefieldView, model_id: str) -> str | None:
+    for unit in view.units:
+        if any(model.model_id == model_id for model in unit.models):
+            return unit.unit_id
+    return None
 
 
 def _pending_decision_summary(pending_decision: UiDecision | None) -> str:

@@ -12,7 +12,7 @@ import pytest
 from tests.support.gui_driver import GuiTestDriver
 from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
-from warhammer40k_arcade_ui.core_client.protocol import JsonObject
+from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision, UiFiniteOption
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
@@ -93,6 +93,49 @@ def test_hud_finite_option_button_click_updates_highlight_without_battlefield_se
     assert driver.highlighted_finite_option_id == "advance"
     assert driver.selected_unit_id == "intercessor_squad"
     assert driver.selected_model_id == "intercessor_1"
+
+
+def test_hud_finite_option_button_click_focuses_matching_projected_unit() -> None:
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+        pending_decision=_unit_selection_decision(),
+    )
+    driver = GuiTestDriver(window=window)
+    try:
+        driver.window.on_draw()
+        guardian_button = next(
+            region for region in driver.hud_button_hit_regions if region.option_id == "guardian"
+        )
+        center_x = round((guardian_button.bounds[0] + guardian_button.bounds[2]) / 2.0)
+        center_y = round((guardian_button.bounds[1] + guardian_button.bounds[3]) / 2.0)
+
+        driver.click_screen(center_x, center_y)
+
+        assert driver.highlighted_finite_option_id == "guardian"
+        assert driver.selected_unit_id == "guardian_squad"
+        assert driver.selected_model_id is None
+    finally:
+        driver.close()
+
+
+def test_keyboard_cycle_finite_option_focuses_matching_projected_unit() -> None:
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+        pending_decision=_unit_selection_decision(),
+    )
+    driver = GuiTestDriver(window=window)
+    try:
+        driver.press_key(arcade.key.TAB)
+
+        assert driver.highlighted_finite_option_id == "guardian"
+        assert driver.selected_unit_id == "guardian_squad"
+        assert driver.selected_model_id is None
+    finally:
+        driver.close()
 
 
 def test_fake_fixture_confirm_without_pending_decision_is_noop() -> None:
@@ -238,3 +281,25 @@ def _pending_payload(driver: GuiTestDriver) -> JsonObject:
     decision = driver.window.pending_decision
     assert decision is not None
     return cast(JsonObject, decision.payload)
+
+
+def _unit_selection_decision() -> UiDecision:
+    return UiDecision(
+        request_id="decision-request-select-unit",
+        decision_type="select_target_unit",
+        actor_id="player_1",
+        payload={"phase": "test"},
+        options=(
+            UiFiniteOption(
+                option_id="intercessor",
+                label="Intercessors",
+                payload={"unit_instance_id": "intercessor_squad"},
+            ),
+            UiFiniteOption(
+                option_id="guardian",
+                label="Guardians",
+                payload={"unit_instance_id": "guardian_squad"},
+            ),
+        ),
+        is_parameterized=False,
+    )
