@@ -158,4 +158,3 @@ uv run pre-commit run --all-files
 Review should focus on whether assignment editing is data-driven from the pending request. The UI
 can make assignment entry ergonomic, but it must not become a shooting, melee, or Stratagem rule
 engine.
-

@@ -36,4 +36,3 @@ Concretize this plan only after the core exposes first-turn selection as one or 
 - No local initiative roll.
 - No local deployment/mission dependency logic.
 - No authoritative phase advancement outside the engine.
-

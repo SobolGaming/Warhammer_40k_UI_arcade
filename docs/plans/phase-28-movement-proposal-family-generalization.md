@@ -142,4 +142,3 @@ uv run pre-commit run --all-files
 Review should focus on whether "movement" has become a generic path-witness editor rather than a
 Movement phase-only implementation. Each family still needs a strict serializer because the engine
 payload shapes are intentionally different.
-

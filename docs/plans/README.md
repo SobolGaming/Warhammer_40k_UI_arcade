@@ -25,4 +25,3 @@ engine owner decides to expose the corresponding setup concepts as `DecisionRequ
 - [Preliminary: Mission And Layout Selection Flow](preliminary-mission-layout-selection-flow.md)
 - [Preliminary: Attacker And Defender Decision Flow](preliminary-attacker-defender-decision-flow.md)
 - [Preliminary: First Turn Decision Flow](preliminary-first-turn-decision-flow.md)
-

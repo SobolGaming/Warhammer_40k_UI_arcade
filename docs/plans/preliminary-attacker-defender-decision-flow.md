@@ -37,4 +37,3 @@ Concretize this plan only after the core exposes attacker/defender assignment as
 - No local roll-off.
 - No local option synthesis.
 - No hidden setup data leak.
-

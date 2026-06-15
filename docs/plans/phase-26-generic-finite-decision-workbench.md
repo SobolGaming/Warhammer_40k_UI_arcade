@@ -150,4 +150,3 @@ uv run pre-commit run --all-files
 
 Review should focus on boundary discipline. This phase is UI polish, not a rule interpretation
 layer. Any label improvement must be derived from data the engine already exposed to the viewer.
-

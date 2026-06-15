@@ -60,6 +60,10 @@ During implementation:
   `GH_TOKEN` or `gh auth login --with-token` as appropriate for the requested operation;
 - after any repository file changes, push the task branch and open or update the PR automatically as
   part of the same task closeout;
+- after opening or updating a PR, monitor the PR checks until they complete; inspect any failing
+  checks, fix actionable failures, push the fixes, and re-check before treating a code or
+  documentation update as complete. If checks are blocked, unavailable, or external to GitHub
+  Actions, report that explicitly with the remaining risk;
 - if the user explicitly requests local-only work, do not push or open a PR, and state that the
   task intentionally violates the default PR-mediated workflow at the user's request;
 - update the relevant phase plan, README, architecture docs, or ADR notes in the same work item when

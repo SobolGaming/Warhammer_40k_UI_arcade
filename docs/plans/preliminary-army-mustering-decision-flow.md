@@ -42,4 +42,3 @@ surfaces with:
 - No local detachment legality engine.
 - No hidden roster leak across viewers.
 - No authoritative army mutation outside core requests.
-

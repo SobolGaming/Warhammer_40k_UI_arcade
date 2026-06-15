@@ -42,4 +42,3 @@ needed to audit the selected setup path.
 - No local terrain placement validator.
 - No mission scoring rule implementation in the UI.
 - No hidden setup leakage before the core marks information public.
-
