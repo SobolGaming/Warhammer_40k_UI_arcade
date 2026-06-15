@@ -1,6 +1,6 @@
 # Phase 25: Legacy UI Cleanup
 
-Status: Proposed
+Status: Implemented
 
 ## Purpose
 
@@ -202,3 +202,42 @@ Add or update focused tests for:
 Review should focus on accidental behavior loss. This phase is deletion-heavy, so the safest review
 question is not whether old code was removed, but whether every removed display path has an
 intentional modern replacement in composition/runtime data, event trace, crash reporting, or tests.
+
+## Implementation Notes
+
+- Removed the obsolete direct ergonomic renderer `render/hud_ergonomics.py` and the unused
+  `hud/widgets.py` Arcade GUI placeholder module.
+- Removed standalone debug-inspector view models and exports. Diagnostics, events, hotkey hints,
+  and preference/source evidence now flow through ergonomic HUD runtime data, forensic traces, and
+  crash bundles instead of a separate panel.
+- Removed selection-owned panel visibility state and commands. `SelectionState` now owns selected
+  entities, active overlays, context menus, and request-scoped local interaction state only.
+- Removed legacy preference fields and hotkeys:
+  - `selection.show_debug_inspector`
+  - `hud.show_selected_model_panel`
+  - `hud.show_selected_unit_panel`
+  - `toggle_debug_inspector`
+  - `show_selected_model`
+  - `show_selected_unit`
+- Regenerated documented and packaged preference profiles from the updated built-in profile
+  definitions.
+- Renamed and narrowed the old `build_hud_primitives(...)` path to
+  `build_screen_overlay_primitives(...)`, which now renders only transient non-panel overlays such
+  as the context menu.
+- Removed runtime Phase 6/7 debug environment launch aliases while keeping deterministic debug
+  fixtures available to tests and the GUI driver.
+- Added regression coverage in `tests/test_legacy_ui_cleanup.py` so production code does not
+  reimport the retired direct HUD modules or removed inspector symbols.
+
+Verification performed with `UV_CACHE_DIR=/tmp/uv-cache`:
+
+```bash
+uv run pytest tests/test_selection_state.py tests/test_hud_selection.py \
+  tests/test_hud_ergonomics.py tests/test_render_primitives.py tests/test_entrypoint.py \
+  tests/test_preferences.py tests/test_legacy_ui_cleanup.py
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src tests
+uv run pyright
+uv run pytest tests/
+```

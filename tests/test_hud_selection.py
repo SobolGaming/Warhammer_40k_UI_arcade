@@ -12,7 +12,6 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 from warhammer40k_arcade_ui.hud.view_models import (
     build_assignment_hud_panel,
     build_context_menu,
-    build_debug_inspector,
     build_finite_decision_panel,
     build_movement_draft_panel,
     build_unit_panel,
@@ -284,7 +283,6 @@ def test_missing_movement_proposal_unit_is_loud_projection_diagnostic() -> None:
         diagnostics=(),
         preferences=default_preferences(),
         preference_source_label="default.yaml",
-        debug_visible=False,
     )
 
     assert draft is None
@@ -332,7 +330,6 @@ def test_missing_movement_mode_context_is_loud_assignment_diagnostic() -> None:
         diagnostics=(),
         preferences=default_preferences(),
         preference_source_label="default.yaml",
-        debug_visible=False,
     )
 
     assert draft is None
@@ -368,7 +365,6 @@ def test_assignment_hud_shows_ready_movement_groups_and_refs() -> None:
         diagnostics=(),
         preferences=preferences,
         preference_source_label="default.yaml",
-        debug_visible=True,
     )
 
     assert panel is not None
@@ -405,7 +401,6 @@ def test_assignment_hud_can_be_hidden_by_preferences() -> None:
         diagnostics=(),
         preferences=preferences,
         preference_source_label="default.yaml",
-        debug_visible=True,
     )
 
     assert panel is None
@@ -426,7 +421,6 @@ def test_assignment_hud_reports_unsupported_charge_move_without_movement_draft()
         diagnostics=(),
         preferences=default_preferences(),
         preference_source_label="default.yaml",
-        debug_visible=False,
     )
 
     assert draft is None
@@ -465,7 +459,6 @@ def test_assignment_hud_summarizes_fight_order_finite_options() -> None:
         diagnostics=(),
         preferences=default_preferences(),
         preference_source_label="default.yaml",
-        debug_visible=False,
     )
 
     assert panel is not None
@@ -479,30 +472,6 @@ def test_assignment_hud_summarizes_fight_order_finite_options() -> None:
     assert panel.groups[0].source_ref_keys == ("unit:intercessor_squad",)
     assert panel.groups[0].summary_lines == ("Fight type: normal; unit: intercessor_squad",)
     assert panel.groups[1].summary_lines == ("Engine-issued pass option.",)
-
-
-def test_debug_inspector_reports_request_selection_cursor_and_event_cursor() -> None:
-    selection = _selected_intercessors().toggle_debug_inspector()
-    decision = _finite_decision_for("intercessor_squad")
-
-    inspector = build_debug_inspector(
-        selection=selection,
-        pending_decision=decision,
-        cursor_position=(12.0, 13.5),
-        event_cursor=7,
-        preference_source_label="keyboard-heavy.yaml",
-    )
-
-    assert inspector is not None
-    assert inspector.lines == (
-        "Request: decision-request-000004",
-        "Selected unit: intercessor_squad",
-        "Proposal kind: none",
-        "Cursor: 12.00, 13.50 in",
-        "Action summary: hidden",
-        "Event cursor: 7",
-        "UI prefs: keyboard-heavy.yaml",
-    )
 
 
 def test_decision_target_detection_uses_payload_unit_ids() -> None:

@@ -44,16 +44,6 @@ def command_registry() -> dict[str, CommandDefinition]:
             label="Toggle selected overlay",
             status="active",
         ),
-        "show_selected_model": CommandDefinition(
-            command_id="show_selected_model",
-            label="Show selected model details",
-            status="active",
-        ),
-        "show_selected_unit": CommandDefinition(
-            command_id="show_selected_unit",
-            label="Show selected unit details",
-            status="active",
-        ),
         "open_selected_unit_actions": CommandDefinition(
             command_id="open_selected_unit_actions",
             label="Open selected-unit action menu",
@@ -102,11 +92,6 @@ def command_registry() -> dict[str, CommandDefinition]:
         "select_current_entity_group": CommandDefinition(
             command_id="select_current_entity_group",
             label="Select current entity group",
-            status="active",
-        ),
-        "toggle_debug_inspector": CommandDefinition(
-            command_id="toggle_debug_inspector",
-            label="Toggle debug inspector",
             status="active",
         ),
         "toggle_action_summary": CommandDefinition(

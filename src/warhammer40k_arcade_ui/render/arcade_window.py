@@ -69,7 +69,7 @@ from warhammer40k_arcade_ui.render.primitives import (
     PolylinePrimitive,
     RenderPrimitive,
     TextPrimitive,
-    build_hud_primitives,
+    build_screen_overlay_primitives,
     build_world_primitives,
 )
 from warhammer40k_arcade_ui.render.scissor import scoped_scissor
@@ -321,17 +321,13 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
         self.clear()
         highlighted_option = self._finite_state.highlighted_option
-        unit_panel = (
-            build_unit_panel(
-                view=self._battlefield_view,
-                selection=self._selection_state,
-                pending_decision=self._pending_decision,
-                highlighted_option_id=None
-                if highlighted_option is None
-                else highlighted_option.option_id,
-            )
-            if self._selection_state.selected_unit_panel_visible
-            else None
+        unit_panel = build_unit_panel(
+            view=self._battlefield_view,
+            selection=self._selection_state,
+            pending_decision=self._pending_decision,
+            highlighted_option_id=None
+            if highlighted_option is None
+            else highlighted_option.option_id,
         )
         context_menu = build_context_menu(
             view=self._battlefield_view,
@@ -360,7 +356,6 @@ class ArcadeWarhammerWindow(arcade.Window):
             diagnostics=self._finite_state.diagnostics,
             preferences=self._preferences,
             preference_source_label=self._preference_source_label,
-            debug_visible=self._selection_state.debug_inspector_visible,
             event_log_lines=self._finite_state.event_log_lines,
         )
         action_summary = build_action_visual_summary(
@@ -392,22 +387,15 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft,
             action_summary,
         )
-        hud_primitives = build_hud_primitives(
-            view=self._battlefield_view,
-            viewport_width_px=self.width,
-            viewport_height_px=self.height,
-            mouse_world_position=self._mouse_world_position,
+        overlay_primitives = build_screen_overlay_primitives(
             context_menu=context_menu,
-            hud_layout=hud_layout,
-            include_layout_skeleton=False,
-            include_layout_labels=False,
         )
         composition_primitives = self._hud_composition_primitives(
             ergonomic_hud=ergonomic_hud,
             hud_layout=hud_layout,
         )
         _draw_world_primitives(world_primitives, self._camera)
-        _draw_world_primitives(hud_primitives, self._camera)
+        _draw_world_primitives(overlay_primitives, self._camera)
         _draw_world_primitives(composition_primitives, self._camera)
 
     def _hud_layout_preferences(self) -> UiPreferences:
@@ -669,16 +657,10 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "modifiers": list(modifier_names),
             },
         )
-        if invocation.command_id == "toggle_debug_inspector":
-            self._selection_state = self._selection_state.toggle_debug_inspector()
-        elif invocation.command_id == "toggle_action_summary":
+        if invocation.command_id == "toggle_action_summary":
             self._toggle_action_summary()
         elif invocation.command_id == "review_action_summary":
             self._toggle_action_summary_review()
-        elif invocation.command_id == "show_selected_unit":
-            self._selection_state = self._selection_state.show_selected_unit_panel()
-        elif invocation.command_id == "show_selected_model":
-            self._selection_state = self._selection_state.show_selected_model_panel()
         elif invocation.command_id == "toggle_overlay" and invocation.overlay_id is not None:
             self._selection_state = self._selection_state.toggle_overlay(invocation.overlay_id)
         elif invocation.command_id == "open_selected_unit_actions":

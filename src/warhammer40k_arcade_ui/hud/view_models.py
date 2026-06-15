@@ -12,7 +12,6 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiInvalidDiagnostic,
     UiMovementProposalRequest,
 )
-from warhammer40k_arcade_ui.hud.action_summary import ActionSummaryIntensity
 from warhammer40k_arcade_ui.preferences.schema import AssignmentHudMode, UiPreferences
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
@@ -166,38 +165,6 @@ class UnitPanelView:
     available_actions: tuple[ContextMenuAction, ...]
 
 
-@dataclass(frozen=True, slots=True)
-class DebugInspectorView:
-    """Debug inspector content derived from viewer-scoped state."""
-
-    request_id: str
-    selected_unit_id: str | None
-    proposal_kind: str | None
-    cursor_position: WorldPoint | None
-    action_summary_intensity: ActionSummaryIntensity
-    event_cursor: int
-    preference_source_label: str
-
-    @property
-    def lines(self) -> tuple[str, ...]:
-        """Return deterministic text lines for display."""
-
-        cursor = (
-            "none"
-            if self.cursor_position is None
-            else f"{self.cursor_position[0]:.2f}, {self.cursor_position[1]:.2f} in"
-        )
-        return (
-            f"Request: {self.request_id}",
-            f"Selected unit: {self.selected_unit_id or 'none'}",
-            f"Proposal kind: {self.proposal_kind or 'none'}",
-            f"Cursor: {cursor}",
-            f"Action summary: {self.action_summary_intensity}",
-            f"Event cursor: {self.event_cursor}",
-            f"UI prefs: {self.preference_source_label}",
-        )
-
-
 def build_unit_panel(
     *,
     view: BattlefieldView,
@@ -220,9 +187,7 @@ def build_unit_panel(
         unit_id=unit.unit_id,
         unit_label=unit.label,
         model_count=len(unit.models),
-        selected_model_id=model.model_id
-        if selection.selected_model_panel_visible and model
-        else None,
+        selected_model_id=model.model_id if model else None,
         position_summary=_position_summary(unit),
         pending_request_id=(
             pending_decision.request_id if actions and pending_decision is not None else None
@@ -482,7 +447,6 @@ def build_assignment_hud_panel(
     diagnostics: tuple[UiInvalidDiagnostic, ...],
     preferences: UiPreferences,
     preference_source_label: str,
-    debug_visible: bool,
     event_log_lines: tuple[str, ...] = (),
 ) -> AssignmentHudPanelView | None:
     """Build the generic request-scoped assignment HUD without adding rules semantics."""
@@ -496,7 +460,7 @@ def build_assignment_hud_panel(
             pending_decision=pending_decision,
             diagnostic_lines=diagnostic_lines,
             preferences=preferences,
-            preference_source_label=preference_source_label if debug_visible else None,
+            preference_source_label=preference_source_label,
             chain_lines=_chain_lines(preferences, event_log_lines),
         )
     unsupported_label = unsupported_parameterized_tool_label(pending_decision)
@@ -506,7 +470,7 @@ def build_assignment_hud_panel(
             unsupported_label=unsupported_label,
             diagnostic_lines=diagnostic_lines,
             preferences=preferences,
-            preference_source_label=preference_source_label if debug_visible else None,
+            preference_source_label=preference_source_label,
             chain_lines=_chain_lines(preferences, event_log_lines),
         )
     context_diagnostic = _movement_proposal_context_diagnostic_line(pending_decision)
@@ -516,7 +480,7 @@ def build_assignment_hud_panel(
             diagnostic_line=context_diagnostic,
             diagnostic_lines=diagnostic_lines,
             preferences=preferences,
-            preference_source_label=preference_source_label if debug_visible else None,
+            preference_source_label=preference_source_label,
             chain_lines=_chain_lines(preferences, event_log_lines),
         )
     missing_unit_diagnostic = _missing_movement_proposal_unit_diagnostic_line(
@@ -529,7 +493,7 @@ def build_assignment_hud_panel(
             diagnostic_line=missing_unit_diagnostic,
             diagnostic_lines=diagnostic_lines,
             preferences=preferences,
-            preference_source_label=preference_source_label if debug_visible else None,
+            preference_source_label=preference_source_label,
             chain_lines=_chain_lines(preferences, event_log_lines),
         )
     if _is_fight_order_decision(pending_decision):
@@ -538,7 +502,7 @@ def build_assignment_hud_panel(
             highlighted_option_index=highlighted_option_index,
             diagnostic_lines=diagnostic_lines,
             preferences=preferences,
-            preference_source_label=preference_source_label if debug_visible else None,
+            preference_source_label=preference_source_label,
             chain_lines=_chain_lines(preferences, event_log_lines),
         )
     return None
@@ -568,31 +532,6 @@ def build_context_menu(
         unit_id=unit.unit_id,
         anchor_world=anchor_world,
         actions=actions,
-    )
-
-
-def build_debug_inspector(
-    *,
-    selection: SelectionState,
-    pending_decision: UiDecision | None,
-    cursor_position: WorldPoint | None,
-    action_summary_intensity: ActionSummaryIntensity = "hidden",
-    event_cursor: int,
-    preference_source_label: str,
-) -> DebugInspectorView | None:
-    """Build debug inspector content when enabled by state/preferences."""
-
-    if not selection.debug_inspector_visible:
-        return None
-    proposal = None if pending_decision is None else pending_decision.movement_proposal
-    return DebugInspectorView(
-        request_id="none" if pending_decision is None else pending_decision.request_id,
-        selected_unit_id=selection.selected_unit_id,
-        proposal_kind=None if proposal is None else proposal.proposal_kind,
-        cursor_position=cursor_position,
-        action_summary_intensity=action_summary_intensity,
-        event_cursor=event_cursor,
-        preference_source_label=preference_source_label,
     )
 
 

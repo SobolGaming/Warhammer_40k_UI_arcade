@@ -104,15 +104,12 @@ def test_selection_uses_nearest_base_when_overlap_cycling_is_disabled() -> None:
 def test_hotkeys_are_matched_from_preferences() -> None:
     preferences = default_preferences()
 
-    debug = command_for_key(preferences=preferences, key="d", modifiers=("ctrl",))
-    unit_panel = command_for_key(preferences=preferences, key="u")
+    action_menu = command_for_key(preferences=preferences, key="space")
     summary_toggle = command_for_key(preferences=preferences, key="v")
     summary_review = command_for_key(preferences=preferences, key="v", modifiers=("shift",))
 
-    assert debug is not None
-    assert debug.command_id == "toggle_debug_inspector"
-    assert unit_panel is not None
-    assert unit_panel.command_id == "show_selected_unit"
+    assert action_menu is not None
+    assert action_menu.command_id == "open_selected_unit_actions"
     assert summary_toggle is not None
     assert summary_toggle.command_id == "toggle_action_summary"
     assert summary_review is not None
