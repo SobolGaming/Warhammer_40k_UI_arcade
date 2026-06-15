@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from warhammer40k_arcade_ui.app import phase_debug_enabled, run_app
+from warhammer40k_arcade_ui.app import run_app
 from warhammer40k_arcade_ui.diagnostics.crash_report import (
     CrashReportContext,
     install_crash_report_excepthook,
@@ -168,8 +168,6 @@ def parse_args(argv: Sequence[str] | None) -> CliArgs:
 def _runtime_mode(args: CliArgs) -> str:
     if args.live_core_smoke:
         return "live_core_smoke"
-    if phase_debug_enabled():
-        return "debug_fixture"
     return "fake_fixture"
 
 

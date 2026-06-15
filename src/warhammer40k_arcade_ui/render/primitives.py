@@ -10,7 +10,7 @@ from warhammer40k_arcade_ui.hud.action_summary import (
     ActionVisualSummary,
     ActionVisualSummaryGroup,
 )
-from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, ScreenRect
+from warhammer40k_arcade_ui.hud.layouts import ScreenRect
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
@@ -34,10 +34,6 @@ SELECTION_GOLD: Color = (255, 225, 96, 255)
 SELECTION_UNIT_FILL: Color = (255, 225, 96, 28)
 HUD_TEXT: Color = (238, 241, 233, 255)
 HUD_ACCENT: Color = (255, 222, 135, 255)
-HUD_MUTED: Color = (178, 190, 184, 255)
-HUD_ZONE_FILL: Color = (14, 18, 20, 122)
-HUD_ZONE_OUTLINE: Color = (164, 177, 170, 148)
-HUD_CENTER_OUTLINE: Color = (210, 224, 215, 74)
 MOVEMENT_PATH: Color = (102, 220, 180, 255)
 MOVEMENT_PREVIEW: Color = (102, 220, 180, 150)
 MOVEMENT_WARNING: Color = (255, 168, 94, 255)
@@ -142,41 +138,20 @@ def build_world_primitives(
     return tuple(primitives)
 
 
-def build_hud_primitives(
+def build_screen_overlay_primitives(
     *,
-    view: BattlefieldView,
-    viewport_width_px: int,
-    viewport_height_px: int,
-    mouse_world_position: WorldPoint | None,
     context_menu: ContextMenuView | None = None,
-    hud_layout: HudLayoutView | None = None,
-    include_layout_skeleton: bool = True,
-    include_layout_labels: bool = True,
 ) -> tuple[RenderPrimitive, ...]:
     """Build non-panel screen-space primitives that remain fixed during camera movement.
 
-    Player-facing panel text is intentionally owned by the ergonomic HUD renderer. This helper
-    remains for layout skeletons, context menus, and narrow direct screen annotations.
+    Player-facing panel text is intentionally owned by the ergonomic HUD composition renderer. This
+    helper remains only for transient overlays that are not part of the configured HUD, such as the
+    selected-unit context menu.
     """
 
     primitives: list[RenderPrimitive] = []
-    if hud_layout is not None and include_layout_skeleton:
-        primitives.extend(_hud_layout_primitives(hud_layout))
-    elif hud_layout is not None and include_layout_labels:
-        primitives.extend(_hud_layout_label_primitives(hud_layout))
     if context_menu is not None:
         primitives.extend(_context_menu_primitives(context_menu))
-    if mouse_world_position is not None:
-        primitives.append(
-            TextPrimitive(
-                layer="hud_debug",
-                text=(f"Mouse: {mouse_world_position[0]:.2f}, {mouse_world_position[1]:.2f} in"),
-                position=(16.0, 18.0),
-                color=HUD_ACCENT,
-                font_size=12.0,
-                coordinate_space="screen",
-            )
-        )
     return tuple(primitives)
 
 
@@ -334,57 +309,6 @@ def _selection_primitives(
                 fill_color=(0, 0, 0, 0),
                 outline_color=(255, 246, 168, 255),
                 line_width=2.0,
-            )
-        )
-    return tuple(primitives)
-
-
-def _hud_layout_primitives(layout: HudLayoutView) -> tuple[RenderPrimitive, ...]:
-    primitives: list[RenderPrimitive] = [
-        PolygonPrimitive(
-            layer="hud_center_viewport",
-            points=_rect_points(layout.center_viewport),
-            fill_color=(0, 0, 0, 0),
-            outline_color=HUD_CENTER_OUTLINE,
-            line_width=1.0,
-            coordinate_space="screen",
-        ),
-        TextPrimitive(
-            layer="hud_center_viewport",
-            text="Battlefield viewport",
-            position=(layout.center_viewport.x + 10.0, layout.center_viewport.top - 18.0),
-            color=HUD_CENTER_OUTLINE,
-            font_size=10.0,
-            coordinate_space="screen",
-        ),
-    ]
-    for region in layout.regions:
-        primitives.append(
-            PolygonPrimitive(
-                layer=f"hud_zone_{region.zone_id}",
-                points=_rect_points(region.rect),
-                fill_color=HUD_ZONE_FILL,
-                outline_color=HUD_ZONE_OUTLINE,
-                line_width=1.0,
-                coordinate_space="screen",
-            )
-        )
-    primitives.extend(_hud_layout_label_primitives(layout))
-    return tuple(primitives)
-
-
-def _hud_layout_label_primitives(layout: HudLayoutView) -> tuple[TextPrimitive, ...]:
-    primitives: list[TextPrimitive] = []
-    for region in layout.regions:
-        state = "collapsed" if region.collapsed else "open"
-        primitives.append(
-            TextPrimitive(
-                layer=f"hud_zone_label_{region.zone_id}",
-                text=f"{region.label} [{state}]",
-                position=(region.rect.x + 10.0, region.rect.top - 16.0),
-                color=HUD_MUTED,
-                font_size=10.0,
-                coordinate_space="screen",
             )
         )
     return tuple(primitives)
@@ -575,15 +499,6 @@ def _context_menu_primitives(menu: ContextMenuView) -> tuple[TextPrimitive, ...]
             coordinate_space="world",
         )
         for index, line in enumerate(lines)
-    )
-
-
-def _rect_points(rect: ScreenRect) -> tuple[WorldPoint, ...]:
-    return (
-        (rect.x, rect.y),
-        (rect.right, rect.y),
-        (rect.right, rect.top),
-        (rect.x, rect.top),
     )
 
 

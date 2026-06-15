@@ -6,8 +6,8 @@ from dataclasses import replace
 
 from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
 from warhammer40k_arcade_ui.hud.composition import load_hud_composition_reference
-from warhammer40k_arcade_ui.hud.ergonomics import build_hud_ergonomics_view
-from warhammer40k_arcade_ui.hud.layouts import build_hud_layout
+from warhammer40k_arcade_ui.hud.ergonomics import HudErgonomicsView, build_hud_ergonomics_view
+from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, build_hud_layout
 from warhammer40k_arcade_ui.hud.runtime_data import runtime_data_for_ergonomic_hud
 from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
 from warhammer40k_arcade_ui.hud.view_models import (
@@ -18,7 +18,6 @@ from warhammer40k_arcade_ui.hud.view_models import (
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
-from warhammer40k_arcade_ui.render.hud_ergonomics import build_ergonomic_hud_primitives
 from warhammer40k_arcade_ui.render.primitives import (
     PolygonPrimitive,
     RenderPrimitive,
@@ -62,7 +61,6 @@ def test_ergonomic_hud_view_summarizes_selected_unit_movement_and_hotkeys() -> N
         diagnostics=(),
         preferences=preferences,
         preference_source_label="docs/preferences/default.yaml",
-        debug_visible=False,
         event_log_lines=("movement_proposal_submitted: player_1",),
     )
 
@@ -224,7 +222,6 @@ def test_ergonomic_assignment_subtitle_distinguishes_preview_from_ready_review()
         diagnostics=(),
         preferences=preferences,
         preference_source_label="docs/preferences/default.yaml",
-        debug_visible=False,
     )
     preview_ergonomics = build_hud_ergonomics_view(
         view=view,
@@ -240,17 +237,14 @@ def test_ergonomic_assignment_subtitle_distinguishes_preview_from_ready_review()
         event_log_lines=(),
     )
 
-    preview_texts = _text_lines(
-        build_ergonomic_hud_primitives(
-            ergonomics=preview_ergonomics,
-            hud_layout=layout,
-            viewport_width_px=1280,
-            viewport_height_px=800,
-        )
-    )
+    preview_texts = _composition_text_lines(preview_ergonomics, layout)
+    preview_runtime = runtime_data_for_ergonomic_hud(preview_ergonomics)
+    preview_assignment = preview_runtime["current_assignment"]
+    assert type(preview_assignment) is dict
     assert preview_ergonomics.assignment_subtitle == "Drafting paths: preview only"
     assert preview_ergonomics.assignment_color_role == "preview"
-    assert "Drafting paths: preview only" in preview_texts
+    assert preview_assignment["status"] == "Drafting paths: preview only"
+    assert "Current Assignment" in preview_texts
 
     ready_draft = draft.mark_ready(view=view)
     ready_assignment_panel = build_assignment_hud_panel(
@@ -260,7 +254,6 @@ def test_ergonomic_assignment_subtitle_distinguishes_preview_from_ready_review()
         diagnostics=(),
         preferences=preferences,
         preference_source_label="docs/preferences/default.yaml",
-        debug_visible=False,
     )
     ready_ergonomics = build_hud_ergonomics_view(
         view=view,
@@ -279,17 +272,14 @@ def test_ergonomic_assignment_subtitle_distinguishes_preview_from_ready_review()
         event_log_lines=(),
     )
 
-    ready_texts = _text_lines(
-        build_ergonomic_hud_primitives(
-            ergonomics=ready_ergonomics,
-            hud_layout=layout,
-            viewport_width_px=1280,
-            viewport_height_px=800,
-        )
-    )
+    ready_texts = _composition_text_lines(ready_ergonomics, layout)
+    ready_runtime = runtime_data_for_ergonomic_hud(ready_ergonomics)
+    ready_assignment = ready_runtime["current_assignment"]
+    assert type(ready_assignment) is dict
     assert ready_ergonomics.assignment_subtitle == "Draft review: ENTER submits to engine"
     assert ready_ergonomics.assignment_color_role == "active"
-    assert "Draft review: ENTER submits to engine" in ready_texts
+    assert ready_assignment["status"] == "Draft review: ENTER submits to engine"
+    assert "Current Assignment" in ready_texts
 
 
 def test_ergonomic_hud_primitives_use_toolkit_components_in_screen_space() -> None:
@@ -330,7 +320,6 @@ def test_ergonomic_hud_primitives_use_toolkit_components_in_screen_space() -> No
         diagnostics=(),
         preferences=preferences,
         preference_source_label="docs/preferences/default.yaml",
-        debug_visible=False,
     )
     ergonomics = build_hud_ergonomics_view(
         view=view,
@@ -346,25 +335,23 @@ def test_ergonomic_hud_primitives_use_toolkit_components_in_screen_space() -> No
         event_log_lines=("movement_proposal_submitted: player_1",),
     )
 
-    primitives = build_ergonomic_hud_primitives(
-        ergonomics=ergonomics,
-        hud_layout=layout,
+    result = load_hud_composition_reference("default-hud")
+    assert result.profile is not None, result.diagnostics
+    primitives = render_composition_profile(
+        result.profile,
         viewport_width_px=1280,
         viewport_height_px=800,
+        runtime_data=runtime_data_for_ergonomic_hud(ergonomics),
+        hud_layout=layout,
+        include_background=False,
     )
 
     texts = _text_lines(primitives)
     assert "Selected Unit" in texts
     assert "Intercessors" in texts
-    assert "Decision" in texts
-    assert "Assignments" in texts
-    assert "Draft review: ENTER submits to engine" in texts
-    assert "Synthetic witness" in texts
-    assert any(
-        text.startswith("Synthetic midpoint witness evidence: 1 straight") and text.endswith("...")
-        for text in texts
-    )
-    assert "Review" in texts
+    assert "Current Action" in texts
+    assert "Current Assignment" in texts
+    assert any("Movement draft ready" in text for text in texts)
     assert any(type(primitive) is PolygonPrimitive for primitive in primitives)
     assert all(primitive.coordinate_space == "screen" for primitive in primitives)
 
@@ -403,7 +390,6 @@ def test_ergonomic_hud_renders_through_configured_default_composition() -> None:
         diagnostics=(),
         preferences=preferences,
         preference_source_label="docs/preferences/default.yaml",
-        debug_visible=False,
     )
     ergonomics = build_hud_ergonomics_view(
         view=view,
@@ -508,3 +494,20 @@ def _movement_proposal_decision() -> UiDecision:
 
 def _text_lines(primitives: tuple[RenderPrimitive, ...]) -> list[str]:
     return [primitive.text for primitive in primitives if type(primitive) is TextPrimitive]
+
+
+def _composition_text_lines(
+    ergonomics: HudErgonomicsView,
+    layout: HudLayoutView,
+) -> list[str]:
+    result = load_hud_composition_reference("default-hud")
+    assert result.profile is not None, result.diagnostics
+    primitives = render_composition_profile(
+        result.profile,
+        viewport_width_px=1280,
+        viewport_height_px=800,
+        runtime_data=runtime_data_for_ergonomic_hud(ergonomics),
+        hud_layout=layout,
+        include_background=False,
+    )
+    return _text_lines(primitives)

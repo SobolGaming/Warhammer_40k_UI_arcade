@@ -102,7 +102,6 @@ def test_phase21a_unsupported_parameterized_requests_render_without_draft(
         diagnostics=(),
         preferences=default_preferences(),
         preference_source_label="default.yaml",
-        debug_visible=False,
     )
 
     assert draft is None

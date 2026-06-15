@@ -14,7 +14,6 @@ overlays:
 selection:
   default_mouse_button: left
   cycle_overlapping_bases: true
-  show_debug_inspector: false
 hud:
   layout_preset: wide_open
   text_scale: 1.0

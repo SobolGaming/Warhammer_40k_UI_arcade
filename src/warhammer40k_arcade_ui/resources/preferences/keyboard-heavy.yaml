@@ -20,13 +20,6 @@ hotkeys:
 - command_id: cycle_selection
   key: tab
   modifiers: []
-- command_id: show_selected_unit
-  key: i
-  modifiers: []
-- command_id: show_selected_model
-  key: i
-  modifiers:
-  - shift
 - command_id: open_selected_unit_actions
   key: space
   modifiers: []
@@ -63,10 +56,6 @@ hotkeys:
 - command_id: toggle_measure_mode
   key: r
   modifiers: []
-- command_id: toggle_debug_inspector
-  key: d
-  modifiers:
-  - ctrl
 - command_id: toggle_action_summary
   key: v
   modifiers: []
@@ -77,7 +66,6 @@ hotkeys:
 selection:
   default_mouse_button: left
   cycle_overlapping_bases: true
-  show_debug_inspector: false
 hud:
   layout_preset: compass_ring
   composition_profile: default-hud
@@ -114,8 +102,6 @@ hud:
   show_active_player: true
   show_event_log: true
   show_config_diagnostics: true
-  show_selected_model_panel: true
-  show_selected_unit_panel: true
   show_assignment_hud: true
   assignment_hud_mode: compact
   show_assignment_warning_markers: true

@@ -125,7 +125,6 @@ class SelectionBehaviorPreferences:
 
     default_mouse_button: str
     cycle_overlapping_bases: bool
-    show_debug_inspector: bool
 
     def to_payload(self) -> JsonObject:
         """Convert to deterministic JSON-safe payload."""
@@ -133,7 +132,6 @@ class SelectionBehaviorPreferences:
         return {
             "default_mouse_button": self.default_mouse_button,
             "cycle_overlapping_bases": self.cycle_overlapping_bases,
-            "show_debug_inspector": self.show_debug_inspector,
         }
 
 
@@ -167,8 +165,6 @@ class HudPreferences:
     show_active_player: bool
     show_event_log: bool
     show_config_diagnostics: bool
-    show_selected_model_panel: bool
-    show_selected_unit_panel: bool
     show_assignment_hud: bool
     assignment_hud_mode: AssignmentHudMode
     show_assignment_warning_markers: bool
@@ -189,8 +185,6 @@ class HudPreferences:
             "show_active_player": self.show_active_player,
             "show_event_log": self.show_event_log,
             "show_config_diagnostics": self.show_config_diagnostics,
-            "show_selected_model_panel": self.show_selected_model_panel,
-            "show_selected_unit_panel": self.show_selected_unit_panel,
             "show_assignment_hud": self.show_assignment_hud,
             "assignment_hud_mode": self.assignment_hud_mode,
             "show_assignment_warning_markers": self.show_assignment_warning_markers,
@@ -463,7 +457,7 @@ def _parse_selection(
     section = _object_section(payload, "selection", diagnostics)
     _diagnose_unknown_keys(
         section,
-        frozenset(("default_mouse_button", "cycle_overlapping_bases", "show_debug_inspector")),
+        frozenset(("default_mouse_button", "cycle_overlapping_bases")),
         "selection",
         diagnostics,
     )
@@ -488,12 +482,6 @@ def _parse_selection(
             diagnostics,
             "selection",
         ),
-        show_debug_inspector=_required_bool(
-            section,
-            "show_debug_inspector",
-            diagnostics,
-            "selection",
-        ),
     )
 
 
@@ -510,8 +498,6 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
                 "show_active_player",
                 "show_event_log",
                 "show_config_diagnostics",
-                "show_selected_model_panel",
-                "show_selected_unit_panel",
                 "show_assignment_hud",
                 "assignment_hud_mode",
                 "show_assignment_warning_markers",
@@ -559,18 +545,6 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
         show_config_diagnostics=_required_bool(
             section,
             "show_config_diagnostics",
-            diagnostics,
-            "hud",
-        ),
-        show_selected_model_panel=_required_bool(
-            section,
-            "show_selected_model_panel",
-            diagnostics,
-            "hud",
-        ),
-        show_selected_unit_panel=_required_bool(
-            section,
-            "show_selected_unit_panel",
             diagnostics,
             "hud",
         ),

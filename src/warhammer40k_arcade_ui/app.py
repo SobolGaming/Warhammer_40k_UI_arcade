@@ -23,9 +23,6 @@ from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
     trace_core_client,
 )
 
-PHASE6_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6"
-PHASE7_DEBUG_ENV_VAR = "WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7"
-
 logger = logging.getLogger(__name__)
 
 
@@ -169,25 +166,6 @@ def create_window(
                 ),
                 crash_report_dir=crash_report_dir,
             )
-        if phase_debug_enabled():
-            from warhammer40k_arcade_ui.debug_fixtures import (
-                phase6_debug_core_client,
-                phase6_debug_pending_decision,
-            )
-
-            return ArcadeWarhammerWindow(
-                config=resolved_config,
-                preferences_path=ui_prefs_path,
-                pending_decision=phase6_debug_pending_decision(),
-                core_client=trace_core_client(phase6_debug_core_client(), resolved_trace_writer),
-                viewer_player_id="player_1",
-                trace_writer=resolved_trace_writer,
-                crash_report_context=resolved_crash_context.with_updates(
-                    runtime_mode="debug_fixture",
-                    viewer_player_id="player_1",
-                ),
-                crash_report_dir=crash_report_dir,
-            )
         return ArcadeWarhammerWindow(
             config=resolved_config,
             preferences_path=ui_prefs_path,
@@ -264,12 +242,6 @@ def run_app(
     runtime.run()
 
 
-def phase_debug_enabled() -> bool:
-    """Return whether any deterministic phase debug fixture is enabled."""
-
-    return environ.get(PHASE6_DEBUG_ENV_VAR) == "1" or environ.get(PHASE7_DEBUG_ENV_VAR) == "1"
-
-
 def _resolve_trace_writer(
     *,
     event_trace_level: str | None,
@@ -300,8 +272,6 @@ def _resolve_trace_writer(
 def _runtime_mode(live_core_smoke: bool) -> str:
     if live_core_smoke:
         return "live_core_smoke"
-    if phase_debug_enabled():
-        return "debug_fixture"
     return "fake_fixture"
 
 

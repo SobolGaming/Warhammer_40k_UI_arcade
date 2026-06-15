@@ -17,7 +17,6 @@ from warhammer40k_arcade_ui.hud.action_summary import (
     ActionVisualSummaryGroup,
     build_action_visual_summary,
 )
-from warhammer40k_arcade_ui.hud.layouts import build_hud_layout
 from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
 )
@@ -29,7 +28,7 @@ from warhammer40k_arcade_ui.render.primitives import (
     PolylinePrimitive,
     RenderPrimitive,
     TextPrimitive,
-    build_hud_primitives,
+    build_screen_overlay_primitives,
     build_world_primitives,
 )
 from warhammer40k_arcade_ui.render.view_models import (
@@ -193,81 +192,13 @@ def test_action_visual_summary_review_mode_labels_are_capped() -> None:
     assert review_labels == ["first"]
 
 
-def test_hud_primitives_are_screen_space_and_include_mouse_coordinates_only() -> None:
-    payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
-    view = BattlefieldView.from_payload(payload)
+def test_screen_overlay_primitives_are_empty_without_transient_overlays() -> None:
+    primitives = build_screen_overlay_primitives()
 
-    primitives = build_hud_primitives(
-        view=view,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-        mouse_world_position=(12.345, 22.0),
-    )
-
-    assert all(primitive.coordinate_space == "screen" for primitive in primitives)
-    assert _text_lines(primitives) == ["Mouse: 12.35, 22.00 in"]
+    assert primitives == ()
 
 
-def test_hud_layout_primitives_include_configurable_zone_skeleton() -> None:
-    view = default_battlefield_view()
-    preferences = default_preferences()
-    layout = build_hud_layout(
-        preferences=preferences,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-    )
-
-    primitives = build_hud_primitives(
-        view=view,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-        mouse_world_position=None,
-        hud_layout=layout,
-    )
-
-    polygon_layers = [
-        primitive.layer for primitive in primitives if type(primitive) is PolygonPrimitive
-    ]
-    texts = _text_lines(primitives)
-    assert "hud_center_viewport" in polygon_layers
-    assert "hud_zone_top_ribbon" in polygon_layers
-    assert "hud_zone_left_rail" in polygon_layers
-    assert "hud_zone_right_inspector" in polygon_layers
-    assert "hud_zone_bottom_workbench" in polygon_layers
-    assert "Action workbench [open]" in texts
-    assert all(primitive.coordinate_space == "screen" for primitive in primitives)
-
-
-def test_hud_layout_labels_remain_primitives_when_widget_shell_is_active() -> None:
-    view = default_battlefield_view()
-    preferences = default_preferences()
-    layout = build_hud_layout(
-        preferences=preferences,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-    )
-
-    primitives = build_hud_primitives(
-        view=view,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-        mouse_world_position=None,
-        hud_layout=layout,
-        include_layout_skeleton=False,
-    )
-
-    polygon_layers = [
-        primitive.layer for primitive in primitives if type(primitive) is PolygonPrimitive
-    ]
-    texts = _text_lines(primitives)
-    assert "hud_zone_left_rail" not in polygon_layers
-    assert "hud_zone_right_inspector" not in polygon_layers
-    assert "Army rolodex rail [open]" in texts
-    assert "Inspector panel [open]" in texts
-    assert "Action workbench [open]" in texts
-
-
-def test_hud_primitives_include_context_menu_without_legacy_panels() -> None:
+def test_screen_overlay_primitives_include_context_menu_without_legacy_panels() -> None:
     payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     view = BattlefieldView.from_payload(payload)
     preferences = default_preferences()
@@ -276,7 +207,7 @@ def test_hud_primitives_include_context_menu_without_legacy_panels() -> None:
         world_point=(7.0, 18.0),
         preferences=preferences,
     )
-    selection = selection.open_context_menu((7.0, 18.0)).toggle_debug_inspector()
+    selection = selection.open_context_menu((7.0, 18.0))
     decision = UiDecision(
         request_id="decision-request-000004",
         decision_type="select_movement_action",
@@ -292,11 +223,7 @@ def test_hud_primitives_include_context_menu_without_legacy_panels() -> None:
         is_parameterized=False,
     )
 
-    primitives = build_hud_primitives(
-        view=view,
-        viewport_width_px=1280,
-        viewport_height_px=800,
-        mouse_world_position=(7.0, 18.0),
+    primitives = build_screen_overlay_primitives(
         context_menu=build_context_menu(
             view=view,
             selection=selection,

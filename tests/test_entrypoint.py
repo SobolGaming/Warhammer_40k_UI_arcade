@@ -190,10 +190,3 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
     assert parsed.event_trace_include_categories == ("core_client",)
     assert parsed.event_trace_exclude_categories == ("render",)
     assert parsed.crash_report_dir == Path("/tmp/crashes")
-
-
-def test_phase7_debug_env_alias_enables_debug_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(app.PHASE6_DEBUG_ENV_VAR, raising=False)
-    monkeypatch.setenv(app.PHASE7_DEBUG_ENV_VAR, "1")
-
-    assert app.phase_debug_enabled() is True

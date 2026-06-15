@@ -126,8 +126,6 @@ hud:
   show_active_player: true
   show_event_log: true
   show_config_diagnostics: true
-  show_selected_model_panel: true
-  show_selected_unit_panel: true
   show_assignment_hud: true
   assignment_hud_mode: detailed
   show_assignment_warning_markers: true
@@ -170,8 +168,6 @@ Headless preview writes a PNG and JSON metadata file for review automation.
 Active command IDs:
 
 - `toggle_overlay`
-- `show_selected_model`
-- `show_selected_unit`
 - `open_selected_unit_actions`
 - `toggle_measure_mode`
 - `confirm`
@@ -182,7 +178,6 @@ Active command IDs:
 - `toggle_entity_selection`
 - `cycle_entity_layer`
 - `select_current_entity_group`
-- `toggle_debug_inspector`
 - `toggle_action_summary`
 - `review_action_summary`
 

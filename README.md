@@ -313,9 +313,13 @@ warhammer40k-arcade-ui/
         forensic_trace.py
       hud/
         __init__.py
+        composition.py
+        ergonomics.py
         layouts.py
+        runtime_data.py
+        toolkit.py
+        toolkit_render.py
         view_models.py
-        widgets.py
       input/
         __init__.py
         commands.py
@@ -392,8 +396,8 @@ surface.
 - Keep `pyright` strict for `src/`.
 - Prefer deterministic tests for non-rendering logic.
 - UI consumes engine `GameViewPayload`-style projections rather than mutable engine objects.
-- The current launch path renders a fixture-backed inspectable battlefield until live engine
-  projections are connected to the render view models.
+- The default launch path renders the packaged fixture-backed battlefield. Use `--live-core-smoke`
+  for an opt-in real local core session.
 - The opt-in live core smoke path launches a real local core session with
   `uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml`.
   It advances through fixed-secondary setup to the first Movement phase unit selection and then
@@ -409,13 +413,12 @@ surface.
 - Phase 6 finite-decision UI state generates deterministic `ui-result-*` IDs, submits only the
   current request's engine-provided finite option IDs, refreshes viewer-scoped event cursors, and
   displays parameterized requests as proposal-required pending state.
-- Manually validate the current fixture-backed Phase 6 finite flow with
-  `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE6=1 uv run warhammer40k-arcade-ui`.
+- Validate deterministic fixture-backed decision flows through the GUI driver tests and direct
+  fixture helpers in `tests/support/gui_driver.py` and `tests/test_debug_fixtures.py`.
 - Phase 7 movement drafting activates only for selected-unit `submit_movement_proposal` requests,
   renders advisory path/measurement overlays, and builds JSON-safe payload previews while leaving
   actual engine submission to a later movement proposal submission phase.
-- Manually validate the current fixture-backed Phase 7 movement draft flow with
-  `WARHAMMER40K_ARCADE_UI_DEBUG_PHASE7=1 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/default.yaml`.
+- Validate HUD-only rendering and composition changes with `uv run warhammer40k-hud-preview`.
 - Phase 8 entity-selection state is request-scoped and local-only: it builds typed selectable
   entity profiles from viewer projections and pending requests, supports explicit alias rules such
   as model-to-owning-unit, preserves deterministic selection order, and emits typed diagnostics for

@@ -34,9 +34,6 @@ class SelectionState:
     selected_unit_id: str | None
     selected_model_id: str | None
     active_overlay_ids: tuple[str, ...]
-    debug_inspector_visible: bool
-    selected_unit_panel_visible: bool
-    selected_model_panel_visible: bool
     context_menu_open: bool = False
     context_menu_anchor_world: WorldPoint | None = None
     last_hit_keys: tuple[str, ...] = ()
@@ -50,9 +47,6 @@ class SelectionState:
             selected_unit_id=None,
             selected_model_id=None,
             active_overlay_ids=_active_overlay_ids(preferences.overlays.enabled_by_default),
-            debug_inspector_visible=preferences.selection.show_debug_inspector,
-            selected_unit_panel_visible=preferences.hud.show_selected_unit_panel,
-            selected_model_panel_visible=preferences.hud.show_selected_model_panel,
         )
 
     def select_at(
@@ -78,9 +72,6 @@ class SelectionState:
             selected_unit_id=hit.unit_id,
             selected_model_id=hit.model_id,
             active_overlay_ids=_selection_overlay_ids(preferences),
-            debug_inspector_visible=self.debug_inspector_visible,
-            selected_unit_panel_visible=self.selected_unit_panel_visible,
-            selected_model_panel_visible=self.selected_model_panel_visible,
             context_menu_open=False,
             context_menu_anchor_world=None,
             last_hit_keys=hit_keys,
@@ -114,9 +105,6 @@ class SelectionState:
             selected_unit_id=None,
             selected_model_id=None,
             active_overlay_ids=_active_overlay_ids(preferences.overlays.enabled_by_default),
-            debug_inspector_visible=self.debug_inspector_visible,
-            selected_unit_panel_visible=self.selected_unit_panel_visible,
-            selected_model_panel_visible=self.selected_model_panel_visible,
         )
 
     def select_model_id(
@@ -132,27 +120,9 @@ class SelectionState:
             selected_unit_id=unit_id,
             selected_model_id=model_id,
             active_overlay_ids=_selection_overlay_ids(preferences),
-            debug_inspector_visible=self.debug_inspector_visible,
-            selected_unit_panel_visible=self.selected_unit_panel_visible,
-            selected_model_panel_visible=self.selected_model_panel_visible,
             context_menu_open=False,
             context_menu_anchor_world=None,
         )
-
-    def toggle_debug_inspector(self) -> SelectionState:
-        """Toggle the local debug inspector."""
-
-        return replace(self, debug_inspector_visible=not self.debug_inspector_visible)
-
-    def show_selected_unit_panel(self) -> SelectionState:
-        """Show the selected-unit information panel."""
-
-        return replace(self, selected_unit_panel_visible=True)
-
-    def show_selected_model_panel(self) -> SelectionState:
-        """Show selected-model details inside the selection panel."""
-
-        return replace(self, selected_model_panel_visible=True)
 
     def toggle_overlay(self, overlay_id: str) -> SelectionState:
         """Toggle a registered active advisory overlay."""

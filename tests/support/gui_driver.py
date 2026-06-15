@@ -232,12 +232,6 @@ class GuiTestDriver:
         return self.window.selection_state.active_overlay_ids
 
     @property
-    def debug_inspector_visible(self) -> bool:
-        """Return whether the debug inspector is currently visible."""
-
-        return self.window.selection_state.debug_inspector_visible
-
-    @property
     def context_menu_visible(self) -> bool:
         """Return whether a context menu is currently available to render."""
 
