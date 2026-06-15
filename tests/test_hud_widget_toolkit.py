@@ -31,6 +31,7 @@ from warhammer40k_arcade_ui.hud.toolkit import (
     known_icon_ids,
     known_widget_types,
     parse_overflow_policy,
+    parse_scroll_config,
     parse_size_spec,
     parse_status_chip_shape,
 )
@@ -189,6 +190,89 @@ def test_phase23_size_overflow_and_status_chip_shape_parsers() -> None:
     assert square_shape.square_extent_px == 52.0
 
 
+def test_phase31_scroll_config_parser_accepts_two_axis_scroll() -> None:
+    scroll = parse_scroll_config(
+        {
+            "enabled": True,
+            "axes": "both",
+            "wheel_axis": "auto",
+            "show_scrollbars": "always",
+            "wheel_step_px": 36,
+            "clamp_to_content": True,
+        }
+    )
+
+    assert scroll.enabled is True
+    assert scroll.allows_x is True
+    assert scroll.allows_y is True
+    assert scroll.wheel_axis == "auto"
+    assert scroll.show_scrollbars == "always"
+    assert scroll.wheel_step_px == 36.0
+
+
+def test_player_units_roster_renders_scroll_region_and_unit_buttons() -> None:
+    result = parse_hud_composition_payload(
+        {
+            "schema_version": 1,
+            "profile_id": "player_units_roster_preview",
+            "layout_preset": "compass_ring",
+            "theme": "default",
+            "sample_data": {
+                "hud.player_units.roster": {
+                    "title": "Player Units",
+                    "summary": "6 projected unit(s)",
+                    "buttons": [
+                        {
+                            "button_id": f"player_unit_{index}",
+                            "command_id": "select_unit",
+                            "action_kind": "select_unit",
+                            "unit_id": f"unit-{index}",
+                            "label": f"Intercessor Unit {index}",
+                            "icon_id": "entity.unit",
+                            "text_icon": "UN",
+                            "enabled": True,
+                            "selected": index == 2,
+                            "state": "selected" if index == 2 else "normal",
+                        }
+                        for index in range(6)
+                    ],
+                }
+            },
+            "regions": {
+                "left_rail": {
+                    "widget": {
+                        "type": "PlayerUnitsRoster",
+                        "id": "player_units_roster",
+                        "data_ref": "hud.player_units.roster",
+                        "title": "Player Units",
+                        "height": "140px",
+                        "button_height": 30,
+                        "scroll": {"enabled": True, "axes": "y"},
+                    }
+                }
+            },
+        },
+        preview=True,
+    )
+    assert result.profile is not None, result.diagnostics
+
+    render_result = render_composition_profile_with_hit_regions(
+        result.profile,
+        viewport_width_px=360,
+        viewport_height_px=260,
+        component_id="player_units_roster",
+    )
+
+    assert [region.component_id for region in render_result.scroll_regions] == [
+        "player_units_roster"
+    ]
+    assert render_result.scroll_regions[0].max_offset_y > 0.0
+    assert any(region.action_kind == "select_unit" for region in render_result.hit_regions)
+    assert {region.unit_id for region in render_result.hit_regions} <= {
+        f"unit-{index}" for index in range(6)
+    }
+
+
 def test_composition_rejects_invalid_phase23_schema_values() -> None:
     payload = {
         "schema_version": 1,
@@ -221,6 +305,7 @@ def test_composition_rejects_invalid_phase23_schema_values() -> None:
                             "title": "Bad constraints",
                             "min_width": "120px",
                             "max_width": "64px",
+                            "scroll": {"enabled": True, "axes": "diagonal"},
                         },
                     ],
                 }
@@ -236,6 +321,7 @@ def test_composition_rejects_invalid_phase23_schema_values() -> None:
         "invalid_status_chip_shape",
         "invalid_overflow_policy",
         "invalid_size_constraint",
+        "invalid_scroll_config",
     }.issubset(_codes(result))
 
 

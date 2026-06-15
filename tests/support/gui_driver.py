@@ -22,7 +22,7 @@ from warhammer40k_arcade_ui.diagnostics.forensic_trace import (
     ForensicTraceWriter,
     trace_core_client,
 )
-from warhammer40k_arcade_ui.hud.toolkit import HudButtonHitRegion
+from warhammer40k_arcade_ui.hud.toolkit import HudButtonHitRegion, HudScrollHitRegion
 from warhammer40k_arcade_ui.hud.view_models import ContextMenuAction
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.schema import UiPreferences
@@ -174,6 +174,19 @@ class GuiTestDriver:
         self.window.on_mouse_release(x, y, button, modifiers)
         return self
 
+    def scroll_screen(
+        self,
+        x: int,
+        y: int,
+        *,
+        scroll_x: float = 0.0,
+        scroll_y: float = 0.0,
+    ) -> GuiTestDriver:
+        """Scroll a screen coordinate through the window mouse wheel handler."""
+
+        self.window.on_mouse_scroll(x, y, scroll_x, scroll_y)
+        return self
+
     def press_key(self, symbol: int, *, modifiers: int = 0) -> GuiTestDriver:
         """Press a key through the window key handler."""
 
@@ -237,6 +250,18 @@ class GuiTestDriver:
         """Return HUD button hit regions from the latest drawn frame."""
 
         return self.window.hud_button_hit_regions
+
+    @property
+    def hud_scroll_hit_regions(self) -> tuple[HudScrollHitRegion, ...]:
+        """Return HUD scroll hit regions from the latest drawn frame."""
+
+        return self.window.hud_scroll_hit_regions
+
+    @property
+    def hud_scroll_offsets(self) -> dict[str, tuple[float, float]]:
+        """Return current HUD scroll offsets keyed by component ID."""
+
+        return self.window.hud_scroll_offsets
 
     @property
     def context_menu_visible(self) -> bool:

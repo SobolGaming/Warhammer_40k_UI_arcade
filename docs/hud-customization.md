@@ -207,6 +207,7 @@ Phase 23 also reserves named HUD presentation groups for runtime view-model outp
 - `hud.status_chips.pending`
 - `hud.selected_unit.card`
 - `hud.selected_unit.rows`
+- `hud.player_units.roster`
 - `hud.workbench.actions`
 - `hud.workbench.assignments.groups`
 - `hud.workbench.assignments.notices`
@@ -349,11 +350,40 @@ Modes:
 - `shrink_to_fit`: reduce font size down to `min_font_size_px`.
 - `visible`: allow content to draw without text truncation, though parent scissor clipping may still
   bound pixels.
-- `scroll`: accepted as schema, but currently renders as clipped content until interactive scroll
-  containers are implemented.
+- `scroll`: keep text as-is; use widget `scroll` settings for interactive child/panel scrolling.
 
 The live renderer and HUD preview apply Arcade scissor clipping to widget primitives so text and
 children do not spill into neighboring panels.
+
+## Scrollable Widgets
+
+Widgets can opt into interactive scrolling with a `scroll` object. This is separate from
+`overflow.mode`; use `overflow` for text behavior and `scroll` for child or row content that can
+move inside a fixed panel.
+
+```yaml
+scroll:
+  enabled: true
+  axes: y
+  wheel_axis: y
+  show_scrollbars: auto
+  wheel_step_px: 48
+  clamp_to_content: true
+```
+
+Fields:
+
+- `enabled`: boolean. Disabled or absent widgets do not intercept wheel input.
+- `axes`: `x`, `y`, or `both`.
+- `wheel_axis`: `x`, `y`, or `auto`. `auto` uses horizontal wheel input when available and vertical
+  wheel input for vertical scrolling.
+- `show_scrollbars`: `never`, `auto`, or `always`.
+- `wheel_step_px`: positive pixel distance per wheel notch.
+- `drag_scrollbars`: accepted for schema stability, but dragging is not implemented yet.
+- `clamp_to_content`: keep offsets within the measured content extent.
+
+The default HUD enables scrolling only on the `PlayerUnitsRoster` in the left rail. Wheel input over
+that roster is consumed by the HUD and does not zoom the battlefield.
 
 ## Status Chip Shapes
 
@@ -408,6 +438,7 @@ Most widgets accept shared presentation properties:
 - `max_height`
 - `aspect_ratio`
 - `overflow`
+- `scroll`
 - `shape`
 - `text`
 - `icons`
@@ -545,6 +576,27 @@ Important properties:
 - `status_summary`
 - `compact`
 - `expanded`
+
+### `PlayerUnitsRoster`
+
+Purpose: scrollable viewer-scoped player-unit roster.
+
+Important properties:
+
+- `data_ref`: usually `hud.player_units.roster`.
+- `title`
+- `subtitle`
+- `button_height`
+- `button_min_width`
+- `button_gap`
+- `button_shape`
+- `status_icon_text`
+- `scroll`
+
+Runtime rows are generated from the viewer player's projected units. Each row is a button with a
+placeholder circular status icon and unit name. Clicking a row selects the corresponding battlefield
+unit locally; it does not submit an engine decision. Battlefield selection and Current Action focus
+also update the selected roster-row visual through the same local selection state.
 
 ### `DatasheetHeader`
 
@@ -776,7 +828,8 @@ Fix diagnostics in the YAML. Do not rely on permissive fallback.
 
 - HUD YAML cannot create conditions, loops, rules, or scripts.
 - Repeated collection binding is planned but not yet a general-purpose runtime templating system.
-- `scroll` overflow is accepted but not interactive.
+- Interactive widget scrolling is implemented for configured scrollable viewports, but scrollbar
+  dragging is not implemented yet.
 - `grid` layout uses equal cells in the current implementation.
 - `rounded_rect` and `pill` are schema-supported status-chip shapes, but current rendering is the
   standard labelled-box presentation.

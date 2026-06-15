@@ -129,6 +129,45 @@ def test_ergonomic_hud_view_honors_phase_and_event_visibility_preferences() -> N
     assert ergonomics.assignment_subtitle == "No active assignment draft"
 
 
+def test_player_units_roster_runtime_data_filters_and_highlights_viewer_units() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    finite_panel = build_finite_decision_panel(
+        pending_decision=None,
+        highlighted_option_index=0,
+        status_message="Idle",
+        diagnostics=(),
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=build_unit_panel(
+            view=view,
+            selection=selection,
+            pending_decision=None,
+        ),
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+        selected_unit_id=selection.selected_unit_id,
+        viewer_player_id="player_1",
+    )
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    roster = cast(JsonObject, runtime["hud.player_units.roster"])
+    buttons = cast(list[JsonObject], roster["buttons"])
+
+    assert [button["unit_id"] for button in buttons] == ["intercessor_squad"]
+    assert buttons[0]["selected"] is True
+    assert buttons[0]["action_kind"] == "select_unit"
+
+
 def test_ergonomic_selected_unit_actions_mark_highlighted_option() -> None:
     view = default_battlefield_view()
     preferences = default_preferences()

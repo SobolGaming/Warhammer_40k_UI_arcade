@@ -1,0 +1,150 @@
+schema_version: 1
+profile_id: player_units_roster_preview
+layout_preset: compass_ring
+theme: default
+sample_data:
+  hud.player_units.roster:
+    title: Player Units
+    summary: 12 projected unit(s)
+    color_role: player
+    buttons:
+    - button_id: player_unit_intercessor_1
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:intercessor-unit-1
+      label: Intercessor Unit 1
+      icon_id: entity.unit
+      text_icon: UN
+      selected: true
+      state: selected
+      enabled: true
+    - button_id: player_unit_intercessor_2
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:intercessor-unit-2
+      label: Intercessor Unit 2
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_intercessor_3
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:intercessor-unit-3
+      label: Intercessor Unit 3
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_intercessor_4
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:intercessor-unit-4
+      label: Intercessor Unit 4
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_infernus_1
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:infernus-unit-1
+      label: Infernus Unit 1
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_infernus_2
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:infernus-unit-2
+      label: Infernus Unit 2
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_hellblaster_1
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:hellblaster-unit-1
+      label: Hellblaster Unit 1
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_hellblaster_2
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:hellblaster-unit-2
+      label: Hellblaster Unit 2
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_aggressor_1
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:aggressor-unit-1
+      label: Aggressor Unit 1
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_terminator_1
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:terminator-unit-1
+      label: Terminator Unit 1
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_lieutenant_1
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:lieutenant-1
+      label: Lieutenant
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+    - button_id: player_unit_captain_1
+      command_id: select_unit
+      action_kind: select_unit
+      unit_id: army-alpha:captain-1
+      label: Captain
+      icon_id: entity.unit
+      text_icon: UN
+      selected: false
+      state: normal
+      enabled: true
+regions:
+  left_rail:
+    widget:
+      type: PlayerUnitsRoster
+      id: player_units_roster
+      data_ref: hud.player_units.roster
+      title: Player Units
+      width: 260px
+      height: 260px
+      button_height: 34
+      button_min_width: 180
+      button_gap: 6
+      button_shape: rect
+      scroll:
+        enabled: true
+        axes: y
+        wheel_axis: y
+        show_scrollbars: always
+        wheel_step_px: 48
+        clamp_to_content: true
