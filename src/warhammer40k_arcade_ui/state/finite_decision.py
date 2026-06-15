@@ -90,6 +90,26 @@ class FiniteDecisionUiState:
             highlighted_option_index=(self.highlighted_option_index + 1) % len(options),
         )
 
+    def highlight_option(self, option_id: str) -> FiniteDecisionUiState:
+        """Move focus to a finite option by engine-provided option ID."""
+
+        options = self.finite_options
+        for index, option in enumerate(options):
+            if option.option_id == option_id:
+                return replace(
+                    self,
+                    highlighted_option_index=index,
+                    diagnostics=(),
+                    status_kind="waiting_for_decision"
+                    if self.pending_decision is not None
+                    else self.status_kind,
+                )
+        return self.with_local_invalid(
+            violation_code="selected_option_not_pending",
+            message="Finite option selection is not pending.",
+            field="selected_option_id",
+        )
+
     def highlight_option_for_unit(self, unit_id: str | None) -> FiniteDecisionUiState:
         """Move focus to the finite option naming a selected unit, if one exists."""
 

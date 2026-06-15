@@ -1,6 +1,6 @@
 # Phase 27: Current Action View And Clickable HUD Buttons
 
-Status: Proposed
+Status: Implemented
 
 ## Purpose
 
@@ -231,3 +231,28 @@ uv run pre-commit run --all-files
 Review should focus on keeping interaction generic and presentation-only. The new clickable button
 system should be reusable, but button clicks must still submit through the same engine decision path
 and must not become a private gameplay command layer.
+
+## Implementation Notes
+
+- Added reusable `HudButtonView`, `CurrentActionView`, and `HudButtonHitRegion` models.
+- Added `CurrentActionPanel` to the HUD toolkit and default/command-bench HUD compositions.
+- Added render-result support for frame-local HUD button hit regions while preserving the existing
+  primitive-only `render_composition_profile(...)` API for previews and tests.
+- Routed left-click HUD button hit tests before context menus, movement drafting, and battlefield
+  selection.
+- Finite option button clicks update only the highlighted engine option ID; they do not submit or
+  mutate authoritative game state.
+- `ENTER` remains the conservative submission action and traces `ui.hud_button_submitted` with the
+  selected option/request metadata.
+- Removed the movement donut from the default and command-bench action columns so the combined
+  current-action panel has room to render readable option buttons.
+
+## Verification Notes
+
+- Added finite-state regression coverage for option-ID highlight selection.
+- Added toolkit renderer coverage for `CurrentActionPanel` text, button primitives, and hit-region
+  metadata.
+- Added ergonomic HUD coverage for finite option button runtime data and configured composition
+  rendering.
+- Added GUI event-driver coverage proving a HUD finite-option button click changes highlighted
+  option without changing battlefield selection.

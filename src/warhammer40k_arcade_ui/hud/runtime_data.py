@@ -12,6 +12,8 @@ from warhammer40k_arcade_ui.hud.dice_tray import dice_tray_runtime_data
 from warhammer40k_arcade_ui.hud.ergonomics import HudErgonomicsView
 from warhammer40k_arcade_ui.hud.toolkit import (
     AssignmentGroupRowView,
+    CurrentActionView,
+    HudButtonView,
     HudTheme,
     IconTextBarView,
     StatusChipView,
@@ -36,7 +38,7 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
     assignment_notice_rows = tuple(
         _icon_text_bar_data(row) for row in ergonomics.assignment_notice_rows
     )
-    current_action = _current_action_data(action_rows)
+    current_action = _current_action_view_data(ergonomics.current_action)
     current_assignment = _current_assignment_data(
         assignment_rows=assignment_rows,
         notice_rows=assignment_notice_rows,
@@ -212,16 +214,54 @@ def _assignment_row_data(row: AssignmentGroupRowView) -> JsonObject:
     }
 
 
-def _current_action_data(action_rows: tuple[JsonObject, ...]) -> JsonObject:
-    for row in action_rows:
-        if row.get("id") == "movement_draft_row":
-            return row
-    for row in action_rows:
-        if row.get("id") == "highlighted_option_row":
-            return row
-    if action_rows:
-        return action_rows[0]
-    return {"label": "Current Action", "summary": "No active action", "value": ""}
+def _current_action_view_data(current_action: CurrentActionView) -> JsonObject:
+    return {
+        "id": current_action.component_id,
+        "label": current_action.title,
+        "title": current_action.title,
+        "summary": current_action.advisory_status,
+        "status": current_action.advisory_status,
+        "request": current_action.request_summary,
+        "request_summary": current_action.request_summary,
+        "actor": current_action.actor_summary,
+        "actor_summary": current_action.actor_summary,
+        "selected_action_id": current_action.selected_action_id or "",
+        "confirm_hint": current_action.confirm_hint,
+        "cancel_hint": current_action.cancel_hint,
+        "source_kind": current_action.source_kind,
+        "color_role": "warning"
+        if current_action.buttons and current_action.selected_action_id is None
+        else "active"
+        if current_action.buttons
+        else "neutral",
+        "buttons": [_button_data(button) for button in current_action.buttons],
+    }
+
+
+def _button_data(button: HudButtonView) -> JsonObject:
+    metadata = button.metadata if button.metadata is not None else {}
+    return {
+        "id": button.component_id,
+        "component_id": button.component_id,
+        "button_id": button.button_id,
+        "command_id": button.command_id,
+        "action_kind": button.action_kind,
+        "option_id": button.option_id or "",
+        "request_id": button.request_id or "",
+        "label": button.label,
+        "icon_id": button.icon_id or "",
+        "text_icon": button.text_icon,
+        "tooltip": button.tooltip,
+        "hotkey_hint": button.hotkey_hint,
+        "state": button.state,
+        "color_role": button.color_role,
+        "visual_role": button.visual_role,
+        "selected": button.selected,
+        "focused": button.focused,
+        "enabled": button.enabled,
+        "disabled_reason": button.disabled_reason,
+        "metadata": metadata,
+    }
 
 
 def _movement_budget_data(action_rows: tuple[IconTextBarView, ...]) -> JsonObject:

@@ -72,6 +72,29 @@ def test_keyboard_confirm_submits_highlighted_finite_option(
     assert not driver.movement_draft_ready
 
 
+def test_hud_finite_option_button_click_updates_highlight_without_battlefield_selection(
+    driver: GuiTestDriver,
+) -> None:
+    driver.click_world((7.0, 18.0))
+
+    assert driver.selected_unit_id == "intercessor_squad"
+    assert driver.selected_model_id == "intercessor_1"
+    assert driver.highlighted_finite_option_id == "normal_move"
+
+    driver.window.on_draw()
+    advance_button = next(
+        region for region in driver.hud_button_hit_regions if region.option_id == "advance"
+    )
+    center_x = round((advance_button.bounds[0] + advance_button.bounds[2]) / 2.0)
+    center_y = round((advance_button.bounds[1] + advance_button.bounds[3]) / 2.0)
+
+    driver.click_screen(center_x, center_y)
+
+    assert driver.highlighted_finite_option_id == "advance"
+    assert driver.selected_unit_id == "intercessor_squad"
+    assert driver.selected_model_id == "intercessor_1"
+
+
 def test_fake_fixture_confirm_without_pending_decision_is_noop() -> None:
     window = ArcadeWarhammerWindow(
         config=AppConfig(window_width=1280, window_height=800, resizable=False),

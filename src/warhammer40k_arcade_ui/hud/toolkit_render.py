@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from math import ceil
 
 from warhammer40k_arcade_ui.hud.composition import (
@@ -11,6 +11,8 @@ from warhammer40k_arcade_ui.hud.composition import (
 )
 from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, ScreenRect, build_hud_layout
 from warhammer40k_arcade_ui.hud.toolkit import (
+    HudButtonActionKind,
+    HudButtonHitRegion,
     HudComponentNode,
     HudTheme,
     OverflowPolicy,
@@ -36,6 +38,14 @@ _PREVIEW_BACKGROUND: Color = (26, 30, 29, 255)
 _TRANSPARENT: Color = (0, 0, 0, 0)
 
 
+@dataclass(frozen=True, slots=True)
+class HudCompositionRenderResult:
+    """Rendered HUD primitives plus frame-local clickable hit regions."""
+
+    primitives: tuple[RenderPrimitive, ...]
+    hit_regions: tuple[HudButtonHitRegion, ...]
+
+
 def render_composition_profile(
     profile: HudCompositionProfile,
     *,
@@ -49,6 +59,31 @@ def render_composition_profile(
 ) -> tuple[RenderPrimitive, ...]:
     """Render a composition profile or one component subtree to deterministic primitives."""
 
+    return render_composition_profile_with_hit_regions(
+        profile,
+        viewport_width_px=viewport_width_px,
+        viewport_height_px=viewport_height_px,
+        component_id=component_id,
+        theme=theme,
+        runtime_data=runtime_data,
+        hud_layout=hud_layout,
+        include_background=include_background,
+    ).primitives
+
+
+def render_composition_profile_with_hit_regions(
+    profile: HudCompositionProfile,
+    *,
+    viewport_width_px: int,
+    viewport_height_px: int,
+    component_id: str | None = None,
+    theme: HudTheme | None = None,
+    runtime_data: JsonObject | None = None,
+    hud_layout: HudLayoutView | None = None,
+    include_background: bool = True,
+) -> HudCompositionRenderResult:
+    """Render deterministic primitives and collect clickable button hit regions."""
+
     if viewport_width_px <= 0:
         raise ValueError("viewport_width_px must be positive")
     if viewport_height_px <= 0:
@@ -56,6 +91,7 @@ def render_composition_profile(
     render_theme = theme or default_hud_theme()
     active_data = profile.sample_data if runtime_data is None else runtime_data
     primitives: list[RenderPrimitive] = []
+    hit_regions: list[HudButtonHitRegion] = []
     if include_background:
         primitives.append(
             PolygonPrimitive(
@@ -72,15 +108,15 @@ def render_composition_profile(
         if component is None:
             raise ValueError(f"Unknown HUD component id: {component_id}")
         root_rect = ScreenRect(24.0, 24.0, viewport_width_px - 48.0, viewport_height_px - 48.0)
-        primitives.extend(
-            render_component_tree(
-                component,
-                rect=root_rect,
-                theme=render_theme,
-                sample_data=active_data,
-            )
+        result = render_component_tree_with_hit_regions(
+            component,
+            rect=root_rect,
+            theme=render_theme,
+            sample_data=active_data,
         )
-        return tuple(primitives)
+        primitives.extend(result.primitives)
+        hit_regions.extend(result.hit_regions)
+        return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
 
     layout = hud_layout or _default_layout_for_profile(
         profile=profile,
@@ -91,15 +127,15 @@ def render_composition_profile(
         resolved_region = layout.region(region.region_id)
         if resolved_region is None:
             continue
-        primitives.extend(
-            render_component_tree(
-                region.widget,
-                rect=resolved_region.rect.inset(8.0),
-                theme=render_theme,
-                sample_data=active_data,
-            )
+        result = render_component_tree_with_hit_regions(
+            region.widget,
+            rect=resolved_region.rect.inset(8.0),
+            theme=render_theme,
+            sample_data=active_data,
         )
-    return tuple(primitives)
+        primitives.extend(result.primitives)
+        hit_regions.extend(result.hit_regions)
+    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
 
 
 def _default_layout_for_profile(
@@ -129,28 +165,63 @@ def render_component_tree(
 ) -> tuple[RenderPrimitive, ...]:
     """Render one component subtree inside a parent-relative rectangle."""
 
+    return render_component_tree_with_hit_regions(
+        node,
+        rect=rect,
+        theme=theme,
+        sample_data=sample_data,
+    ).primitives
+
+
+def render_component_tree_with_hit_regions(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    sample_data: JsonObject,
+) -> HudCompositionRenderResult:
+    """Render one component subtree and collect clickable hit regions."""
+
     primitives: list[RenderPrimitive] = []
+    hit_regions: list[HudButtonHitRegion] = []
     node_clip = rect if _clip_enabled(node) else None
-    primitives.extend(
-        _with_clip(
-            _component_shell(node, rect=rect, theme=theme, sample_data=sample_data),
-            node_clip,
-        )
+    result = _component_shell_with_hit_regions(
+        node,
+        rect=rect,
+        theme=theme,
+        sample_data=sample_data,
     )
+    primitives.extend(_with_clip(result.primitives, node_clip))
+    hit_regions.extend(result.hit_regions)
     child_rects = _child_rects(node, rect)
     for child, child_rect in zip(node.children, child_rects, strict=True):
-        primitives.extend(
-            _with_clip(
-                render_component_tree(
-                    child,
-                    rect=child_rect,
-                    theme=theme,
-                    sample_data=sample_data,
-                ),
-                node_clip,
-            )
+        child_result = render_component_tree_with_hit_regions(
+            child,
+            rect=child_rect,
+            theme=theme,
+            sample_data=sample_data,
         )
-    return tuple(primitives)
+        primitives.extend(_with_clip(child_result.primitives, node_clip))
+        hit_regions.extend(child_result.hit_regions)
+    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
+
+
+def _component_shell_with_hit_regions(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    sample_data: JsonObject,
+) -> HudCompositionRenderResult:
+    data_value = _data_value(node, sample_data)
+    if node.widget_type == "CurrentActionPanel":
+        return _current_action_panel(node, rect=rect, theme=theme, data_value=data_value)
+    if node.widget_type == "ActionButton":
+        return _action_button(node, rect=rect, theme=theme, data_value=data_value)
+    return HudCompositionRenderResult(
+        _component_shell(node, rect=rect, theme=theme, sample_data=sample_data),
+        (),
+    )
 
 
 def _component_shell(
@@ -273,6 +344,427 @@ def _labelled_box(
             )
         )
     return tuple(primitives)
+
+
+def _current_action_panel(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    data_value: JsonValue | None,
+) -> HudCompositionRenderResult:
+    data = _data_object(data_value)
+    overflow = _overflow_policy(node)
+    title = _attribute_text(
+        node,
+        "title",
+        default=json_text(data.get("title"), default="Current Action"),
+    )
+    actor = json_text(data.get("actor"), default=json_text(data.get("actor_summary")))
+    request = json_text(data.get("request"), default=json_text(data.get("request_summary")))
+    status = json_text(
+        data.get("status"),
+        default=json_text(data.get("summary"), default=json_text(data.get("advisory_status"))),
+    )
+    confirm_hint = _attribute_text(
+        node,
+        "confirm_hint",
+        default=json_text(data.get("confirm_hint")),
+    )
+    cancel_hint = _attribute_text(
+        node,
+        "cancel_hint",
+        default=json_text(data.get("cancel_hint")),
+    )
+    buttons = _object_items(data.get("buttons"))[: _attribute_int(node, "max_buttons", default=8)]
+    color_role = json_text(data.get("color_role"), default="active" if buttons else "neutral")
+    accent = theme.color_for_role(color_role)
+    text_width = max(theme.compact_font_size_px, rect.width - (theme.inner_padding_px * 2.0))
+    primitives: list[RenderPrimitive] = [
+        _panel(rect, theme=theme, outline_color=_with_alpha(accent, 184))
+    ]
+    title_y = rect.top - theme.inner_padding_px - 2.0
+    primitives.append(
+        TextPrimitive(
+            layer="hud_widget_text",
+            text=_overflow_text(
+                title,
+                width_px=text_width,
+                font_size_px=theme.title_font_size_px,
+                policy=overflow,
+            ),
+            position=(rect.x + theme.inner_padding_px, title_y),
+            color=theme.text,
+            font_size=_font_size_for_text(
+                title,
+                width_px=text_width,
+                font_size_px=theme.title_font_size_px,
+                policy=overflow,
+            ),
+            coordinate_space="screen",
+            anchor_y="top",
+        )
+    )
+    meta_parts: list[str] = []
+    if _attribute_bool(node, "show_actor", default=True) and actor:
+        meta_parts.append(f"Actor: {actor}")
+    if _attribute_bool(node, "show_request", default=True) and request:
+        meta_parts.append(f"Request: {request}")
+    meta = "    ".join(meta_parts)
+    line_y = title_y - theme.line_height_px
+    if meta:
+        primitives.append(
+            TextPrimitive(
+                layer="hud_widget_text",
+                text=_overflow_text(
+                    meta,
+                    width_px=text_width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
+                position=(rect.x + theme.inner_padding_px, line_y),
+                color=theme.muted_text,
+                font_size=_font_size_for_text(
+                    meta,
+                    width_px=text_width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
+                coordinate_space="screen",
+                anchor_y="top",
+            )
+        )
+        line_y -= theme.line_height_px
+    if status:
+        primitives.append(
+            TextPrimitive(
+                layer="hud_widget_text",
+                text=_overflow_text(
+                    status,
+                    width_px=text_width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
+                position=(rect.x + theme.inner_padding_px, line_y),
+                color=theme.muted_text,
+                font_size=_font_size_for_text(
+                    status,
+                    width_px=text_width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
+                coordinate_space="screen",
+                anchor_y="top",
+            )
+        )
+        line_y -= theme.line_height_px
+    hit_regions: list[HudButtonHitRegion] = []
+    button_area = ScreenRect(
+        rect.x + theme.inner_padding_px,
+        rect.y + theme.inner_padding_px + theme.line_height_px,
+        text_width,
+        max(0.0, line_y - rect.y - theme.inner_padding_px - theme.line_height_px - 4.0),
+    )
+    button_result = _button_row(
+        node,
+        buttons=buttons,
+        rect=button_area,
+        theme=theme,
+    )
+    primitives.extend(button_result.primitives)
+    hit_regions.extend(button_result.hit_regions)
+    hint_text = " | ".join(part for part in (confirm_hint, cancel_hint) if part)
+    if hint_text:
+        primitives.append(
+            TextPrimitive(
+                layer="hud_widget_text",
+                text=_overflow_text(
+                    hint_text,
+                    width_px=text_width,
+                    font_size_px=max(8.0, theme.compact_font_size_px - 1.0),
+                    policy=overflow,
+                ),
+                position=(rect.x + theme.inner_padding_px, rect.y + theme.inner_padding_px),
+                color=theme.muted_text,
+                font_size=max(8.0, theme.compact_font_size_px - 1.0),
+                coordinate_space="screen",
+                anchor_y="baseline",
+            )
+        )
+    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
+
+
+def _action_button(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    data_value: JsonValue | None,
+) -> HudCompositionRenderResult:
+    data = _data_object(data_value)
+    label = _attribute_text(node, "label", default=json_text(data.get("label"), default="Action"))
+    icon_id = node.icon_id or _attribute_text(
+        node,
+        "icon_id",
+        default=json_text(data.get("icon_id")),
+    )
+    command_id = _attribute_text(
+        node,
+        "command_id",
+        default=json_text(data.get("command_id"), default=node.widget_id),
+    )
+    enabled = _attribute_bool(
+        node,
+        "enabled",
+        default=_button_bool(data, "enabled", default=True),
+    )
+    button_data: JsonObject = {
+        "component_id": node.widget_id,
+        "button_id": json_text(data.get("button_id"), default=node.widget_id),
+        "label": label,
+        "icon_id": icon_id,
+        "command_id": command_id,
+        "action_kind": "local_command",
+        "enabled": enabled,
+        "state": json_text(data.get("state"), default="normal"),
+        "color_role": json_text(data.get("color_role"), default="neutral"),
+    }
+    primitives = _hud_button_primitives(button_data, rect=rect, theme=theme, node=node)
+    hit_region = _hit_region_for_button(node.widget_id, button_data, rect)
+    return HudCompositionRenderResult(primitives, () if hit_region is None else (hit_region,))
+
+
+def _button_row(
+    node: HudComponentNode,
+    *,
+    buttons: tuple[JsonObject, ...],
+    rect: ScreenRect,
+    theme: HudTheme,
+) -> HudCompositionRenderResult:
+    if not buttons or rect.width <= 0.0 or rect.height <= 0.0:
+        return HudCompositionRenderResult((), ())
+    gap = max(0.0, _attribute_float(node, "button_gap", default=6.0))
+    button_height = min(
+        rect.height,
+        max(20.0, _attribute_float(node, "button_height", default=34.0)),
+    )
+    min_width = max(36.0, _attribute_float(node, "button_min_width", default=98.0))
+    x = rect.x
+    y_top = rect.top
+    primitives: list[RenderPrimitive] = []
+    hit_regions: list[HudButtonHitRegion] = []
+    for button in buttons:
+        label = json_text(button.get("label"), default=json_text(button.get("button_id")))
+        wanted_width = max(
+            min_width,
+            min(rect.width, _estimated_text_width(label, theme.compact_font_size_px) + 34.0),
+        )
+        if x > rect.x and x + wanted_width > rect.right:
+            x = rect.x
+            y_top -= button_height + gap
+        if y_top - button_height < rect.y:
+            break
+        button_rect = ScreenRect(
+            x,
+            y_top - button_height,
+            min(wanted_width, rect.width),
+            button_height,
+        )
+        primitives.extend(_hud_button_primitives(button, rect=button_rect, theme=theme, node=node))
+        hit_region = _hit_region_for_button(node.widget_id, button, button_rect)
+        if hit_region is not None:
+            hit_regions.append(hit_region)
+        x += button_rect.width + gap
+    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
+
+
+def _hud_button_primitives(
+    button: JsonObject,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    node: HudComponentNode,
+) -> tuple[RenderPrimitive, ...]:
+    state = _button_state(button)
+    enabled = _button_bool(button, "enabled", default=True)
+    selected = _button_bool(button, "selected", default=False)
+    role = json_text(button.get("visual_role"), default=json_text(button.get("color_role")))
+    accent = _button_accent(theme=theme, state=state, role=role, selected=selected, enabled=enabled)
+    fill = _button_fill(theme=theme, state=state, selected=selected, enabled=enabled)
+    outline = _with_alpha(accent, 226 if enabled else 132)
+    icon_id = json_text(button.get("icon_id"))
+    text_icon = json_text(button.get("text_icon"))
+    label = json_text(button.get("label"), default=json_text(button.get("button_id"), default=""))
+    hotkey_hint = json_text(button.get("hotkey_hint"))
+    shape = _attribute_text(
+        node,
+        "button_shape",
+        default=json_text(button.get("shape"), default="rect"),
+    )
+    primitives: list[RenderPrimitive] = [
+        _button_panel(rect, theme=theme, fill_color=fill, outline_color=outline, shape=shape)
+    ]
+    text_left = rect.x + 10.0
+    if icon_id or text_icon:
+        icon_size = min(theme.icon_size_px * 0.78, rect.height - 8.0)
+        icon_rect = ScreenRect(
+            rect.x + 7.0,
+            rect.y + ((rect.height - icon_size) / 2.0),
+            icon_size,
+            icon_size,
+        )
+        primitives.extend(
+            _icon_placeholder(icon_rect, theme=theme, label=text_icon or _icon_label(icon_id))
+        )
+        text_left = icon_rect.right + 7.0
+    label_width = max(4.0, rect.right - text_left - 8.0)
+    if hotkey_hint:
+        label = f"{label}  {hotkey_hint}"
+    text_color = theme.disabled if not enabled else theme.text
+    primitives.append(
+        TextPrimitive(
+            layer="hud_widget_button_text",
+            text=_truncate(label, max_chars=_max_chars(label_width, theme.compact_font_size_px)),
+            position=(text_left, rect.y + (rect.height / 2.0)),
+            color=text_color,
+            font_size=theme.compact_font_size_px,
+            coordinate_space="screen",
+            anchor_y="center",
+        )
+    )
+    return tuple(primitives)
+
+
+def _button_panel(
+    rect: ScreenRect,
+    *,
+    theme: HudTheme,
+    fill_color: Color,
+    outline_color: Color,
+    shape: str,
+) -> PolygonPrimitive | CirclePrimitive:
+    if shape == "square":
+        extent = min(rect.width, rect.height)
+        square = ScreenRect(rect.x, rect.y + ((rect.height - extent) / 2.0), extent, extent)
+        return _panel(square, theme=theme, fill_color=fill_color, outline_color=outline_color)
+    if shape == "pill":
+        center = (rect.x + (rect.width / 2.0), rect.y + (rect.height / 2.0))
+        return CirclePrimitive(
+            layer="hud_widget_button",
+            center=center,
+            radius=min(rect.width, rect.height) / 2.0,
+            fill_color=fill_color,
+            outline_color=outline_color,
+            line_width=1.0,
+            coordinate_space="screen",
+        )
+    return PolygonPrimitive(
+        layer="hud_widget_button",
+        points=_rect_points(rect),
+        fill_color=fill_color,
+        outline_color=outline_color,
+        line_width=1.0,
+        coordinate_space="screen",
+    )
+
+
+def _button_accent(
+    *,
+    theme: HudTheme,
+    state: str,
+    role: str,
+    selected: bool,
+    enabled: bool,
+) -> Color:
+    if not enabled or state == "disabled":
+        return theme.disabled
+    if selected or state in ("selected", "focus"):
+        return theme.selected
+    if state == "hover":
+        return theme.active
+    if state == "warning":
+        return theme.warning
+    if state == "invalid":
+        return theme.invalid
+    if state == "active":
+        return theme.active
+    return theme.color_for_role(role)
+
+
+def _button_fill(
+    *,
+    theme: HudTheme,
+    state: str,
+    selected: bool,
+    enabled: bool,
+) -> Color:
+    if not enabled or state == "disabled":
+        return (32, 36, 36, 94)
+    if selected or state in ("selected", "focus"):
+        return _with_alpha(theme.selected, 78)
+    if state == "hover":
+        return _with_alpha(theme.active, 70)
+    if state == "warning":
+        return _with_alpha(theme.warning, 58)
+    if state == "invalid":
+        return _with_alpha(theme.invalid, 58)
+    if state == "active":
+        return _with_alpha(theme.active, 52)
+    return (26, 32, 34, 132)
+
+
+def _hit_region_for_button(
+    component_id: str,
+    button: JsonObject,
+    rect: ScreenRect,
+) -> HudButtonHitRegion | None:
+    button_id = json_text(button.get("button_id"), default=json_text(button.get("id")))
+    command_id = json_text(button.get("command_id"))
+    action_kind = _button_action_kind(json_text(button.get("action_kind"), default="none"))
+    if not button_id or not command_id:
+        return None
+    return HudButtonHitRegion(
+        component_id=component_id,
+        button_id=button_id,
+        action_kind=action_kind,
+        command_id=command_id,
+        enabled=_button_bool(button, "enabled", default=True),
+        bounds=(rect.x, rect.y, rect.right, rect.top),
+        option_id=json_text(button.get("option_id")) or None,
+        request_id=json_text(button.get("request_id")) or None,
+        disabled_reason=json_text(button.get("disabled_reason")),
+    )
+
+
+def _button_action_kind(value: str) -> HudButtonActionKind:
+    if value == "finite_option":
+        return "finite_option"
+    if value == "local_command":
+        return "local_command"
+    return "none"
+
+
+def _button_state(button: JsonObject) -> str:
+    state = json_text(button.get("state"), default="normal")
+    if state in (
+        "normal",
+        "hover",
+        "focus",
+        "selected",
+        "active",
+        "disabled",
+        "warning",
+        "invalid",
+    ):
+        return state
+    return "normal"
+
+
+def _button_bool(button: JsonObject, key: str, *, default: bool) -> bool:
+    value = button.get(key)
+    if type(value) is bool:
+        return value
+    return default
 
 
 def _status_chip(
@@ -1268,6 +1760,13 @@ def _attribute_float(node: HudComponentNode, key: str, *, default: float) -> flo
     value = node.attributes.get(key)
     if type(value) is int or type(value) is float:
         return float(value)
+    return default
+
+
+def _attribute_int(node: HudComponentNode, key: str, *, default: int) -> int:
+    value = node.attributes.get(key)
+    if type(value) is int:
+        return value
     return default
 
 

@@ -46,7 +46,8 @@ from warhammer40k_arcade_ui.hud.runtime_data import (
     runtime_data_for_ergonomic_hud,
     theme_for_ergonomic_hud,
 )
-from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile
+from warhammer40k_arcade_ui.hud.toolkit import HudButtonHitRegion
+from warhammer40k_arcade_ui.hud.toolkit_render import render_composition_profile_with_hit_regions
 from warhammer40k_arcade_ui.hud.view_models import (
     ContextMenuAction,
     ContextMenuView,
@@ -193,6 +194,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._right_mouse_press_screen: tuple[float, float] | None = None
         self._right_mouse_drag_distance_px = 0.0
         self._fatal_exit_deadline_monotonic: float | None = None
+        self._hud_button_hit_regions: tuple[HudButtonHitRegion, ...] = ()
+        self._hovered_hud_button_id: str | None = None
         self._trace_writer = trace_writer or NoOpTraceWriter()
         self._crash_report_context = crash_report_context or CrashReportContext(
             runtime_mode="arcade_window",
@@ -279,6 +282,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         """Current viewer event cursor."""
 
         return self._event_cursor
+
+    @property
+    def hud_button_hit_regions(self) -> tuple[HudButtonHitRegion, ...]:
+        """Frame-local HUD button hit regions from the most recent draw."""
+
+        return self._hud_button_hit_regions
 
     @property
     def context_menu(self) -> ContextMenuView | None:
@@ -380,6 +389,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_log_lines=self._finite_state.event_log_lines,
             event_payloads=self._finite_state.event_payloads,
             pending_decision=self._pending_decision,
+            hovered_hud_button_id=self._hovered_hud_button_id,
         )
         world_primitives = build_world_primitives(
             self._battlefield_view,
@@ -416,12 +426,13 @@ class ArcadeWarhammerWindow(arcade.Window):
         hud_layout: HudLayoutView,
     ) -> tuple[RenderPrimitive, ...]:
         if self._hud_composition_profile is None:
+            self._hud_button_hit_regions = ()
             return _hud_composition_diagnostic_primitives(
                 diagnostics=self._hud_composition_diagnostics,
                 viewport_width_px=self.width,
                 viewport_height_px=self.height,
             )
-        return render_composition_profile(
+        result = render_composition_profile_with_hit_regions(
             self._hud_composition_profile,
             viewport_width_px=self.width,
             viewport_height_px=self.height,
@@ -430,6 +441,8 @@ class ArcadeWarhammerWindow(arcade.Window):
             hud_layout=hud_layout,
             include_background=False,
         )
+        self._hud_button_hit_regions = result.hit_regions
+        return result.primitives
 
     def on_resize(self, width: int, height: int) -> None:
         """Keep camera viewport dimensions aligned with the Arcade window."""
@@ -469,6 +482,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "movement_draft_active": self._movement_draft is not None,
             },
         )
+        self._update_hud_button_hover(float(x), float(y))
         if self._movement_draft is not None:
             self._movement_draft = self._movement_draft.with_cursor_preview(
                 view=self._battlefield_view,
@@ -496,6 +510,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._right_mouse_drag_distance_px = 0.0
             return
         if _mouse_button_name(button) != self._preferences.selection.default_mouse_button:
+            return
+        hud_button = self._hud_button_at(float(x), float(y))
+        if hud_button is not None:
+            self._handle_hud_button_press(hud_button)
             return
         selected_action = self._context_menu_action_at(self._mouse_world_position)
         if selected_action is not None:
@@ -767,6 +785,53 @@ class ArcadeWarhammerWindow(arcade.Window):
             },
         )
 
+    def _update_hud_button_hover(self, screen_x: float, screen_y: float) -> None:
+        hit_region = self._hud_button_at(screen_x, screen_y)
+        next_button_id = None if hit_region is None else hit_region.button_id
+        if next_button_id == self._hovered_hud_button_id:
+            return
+        self._hovered_hud_button_id = next_button_id
+        self._trace_event(
+            category="ui",
+            event_name="ui.hud_button_hover",
+            summary=_hud_button_summary(hit_region),
+        )
+
+    def _hud_button_at(self, screen_x: float, screen_y: float) -> HudButtonHitRegion | None:
+        for region in reversed(self._hud_button_hit_regions):
+            if region.contains(screen_x, screen_y):
+                return region
+        return None
+
+    def _handle_hud_button_press(self, hit_region: HudButtonHitRegion) -> None:
+        self._trace_event(
+            category="ui",
+            event_name="ui.hud_button_selected",
+            summary=_hud_button_summary(hit_region),
+        )
+        if not hit_region.enabled:
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="disabled_hud_button",
+                    message=hit_region.disabled_reason or "HUD button is disabled.",
+                    field="hud_button",
+                )
+            )
+            return
+        if hit_region.action_kind == "finite_option" and hit_region.option_id is not None:
+            self._set_finite_state(self._finite_state.highlight_option(hit_region.option_id))
+            return
+        self._trace_event(
+            category="ui",
+            event_name="ui.hud_button_ignored",
+            summary={
+                "component_id": hit_region.component_id,
+                "button_id": hit_region.button_id,
+                "command_id": hit_region.command_id,
+                "action_kind": hit_region.action_kind,
+            },
+        )
+
     def _submit_finite_option(self, selected_option_id: str | None) -> None:
         self._trace_event(
             category="ui",
@@ -780,6 +845,20 @@ class ArcadeWarhammerWindow(arcade.Window):
                 summary={"reason": "no_pending_decision"},
             )
             return
+        highlighted_option = self._finite_state.highlighted_option
+        submitted_option_id = selected_option_id
+        if submitted_option_id is None and highlighted_option is not None:
+            submitted_option_id = highlighted_option.option_id
+        if submitted_option_id is not None:
+            self._trace_event(
+                category="ui",
+                event_name="ui.hud_button_submitted",
+                summary={
+                    "command_id": "confirm",
+                    "request_id": self._finite_state.pending_decision.request_id,
+                    "option_id": submitted_option_id,
+                },
+            )
         if self._core_client is None:
             self._set_finite_state(
                 self._finite_state.with_local_invalid(
@@ -1203,6 +1282,20 @@ def _context_menu_action_at(
     if action_index < 0 or action_index >= len(menu.actions):
         return None
     return menu.actions[action_index]
+
+
+def _hud_button_summary(hit_region: HudButtonHitRegion | None) -> JsonObject:
+    if hit_region is None:
+        return {"button_id": None}
+    return {
+        "component_id": hit_region.component_id,
+        "button_id": hit_region.button_id,
+        "action_kind": hit_region.action_kind,
+        "command_id": hit_region.command_id,
+        "enabled": hit_region.enabled,
+        "option_id": hit_region.option_id,
+        "request_id": hit_region.request_id,
+    }
 
 
 def _pending_decision_summary(pending_decision: UiDecision | None) -> str:
