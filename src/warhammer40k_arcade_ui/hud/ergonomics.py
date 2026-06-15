@@ -72,6 +72,7 @@ def build_hud_ergonomics_view(
     hovered_hud_button_id: str | None = None,
     selected_unit_id: str | None = None,
     viewer_player_id: str | None = None,
+    unit_display_by_id: JsonObject | None = None,
 ) -> HudErgonomicsView:
     """Build a toolkit-backed HUD summary without adding rule semantics."""
 
@@ -93,6 +94,7 @@ def build_hud_ergonomics_view(
             selected_unit_id=selected_unit_id,
             hovered_hud_button_id=hovered_hud_button_id,
             placement_draft_panel=placement_draft_panel,
+            unit_display_by_id=unit_display_by_id,
         ),
         selected_unit_card=selected_unit_card,
         selected_unit_rows=_selected_unit_rows(unit_panel),
@@ -242,58 +244,145 @@ def _player_unit_buttons(
     selected_unit_id: str | None,
     hovered_hud_button_id: str | None,
     placement_draft_panel: PlacementDraftPanelView | None,
+    unit_display_by_id: JsonObject | None,
 ) -> tuple[HudButtonView, ...]:
     buttons: list[HudButtonView] = []
+    seen_unit_ids: set[str] = set()
     for unit in view.units:
         if viewer_player_id is not None and unit.player_id != viewer_player_id:
             continue
-        selected = unit.unit_id == selected_unit_id
-        button_id = f"player_unit_{unit.unit_id}"
-        placement_status = _placement_roster_status(unit.unit_id, placement_draft_panel)
-        if selected:
-            state: HudState = "selected"
-        elif button_id == hovered_hud_button_id:
-            state = "hover"
-        elif placement_status == "placed":
-            state = "active"
-        elif placement_status == "unplaced":
-            state = "warning"
-        else:
-            state = "normal"
-        color_role: HudColorRole = (
-            "selected"
-            if selected
-            else "active"
-            if placement_status == "placed"
-            else "warning"
-            if placement_status == "unplaced"
-            else "player"
-        )
         buttons.append(
-            HudButtonView(
-                component_id=f"player_unit_row_{len(buttons)}",
-                button_id=button_id,
-                command_id="select_unit",
-                action_kind="select_unit",
-                label=unit.label,
-                icon_id="entity.unit",
-                text_icon="UN",
-                state=state,
-                color_role=color_role,
-                selected=selected,
-                focused=selected,
-                enabled=True,
-                visual_role=color_role,
+            _player_unit_button(
+                index=len(buttons),
                 unit_id=unit.unit_id,
-                metadata={
-                    "unit_id": unit.unit_id,
-                    "player_id": unit.player_id,
-                    "model_count": len(unit.models),
-                    "placement_status": placement_status or "",
-                },
+                label=unit.label,
+                player_id=unit.player_id,
+                model_count=len(unit.models),
+                selected_unit_id=selected_unit_id,
+                hovered_hud_button_id=hovered_hud_button_id,
+                placement_draft_panel=placement_draft_panel,
+            )
+        )
+        seen_unit_ids.add(unit.unit_id)
+    for unit_payload in _unit_display_records(unit_display_by_id):
+        unit_id = _json_text(unit_payload.get("unit_instance_id"))
+        if not unit_id or unit_id in seen_unit_ids:
+            continue
+        player_id = _json_text(unit_payload.get("owner_player_id"))
+        if viewer_player_id is not None and player_id and player_id != viewer_player_id:
+            continue
+        model_ids = unit_payload.get("model_instance_ids")
+        model_count = len(model_ids) if type(model_ids) is list else 0
+        label = _json_text(unit_payload.get("unit_display_name")) or _unit_label_from_id(unit_id)
+        buttons.append(
+            _player_unit_button(
+                index=len(buttons),
+                unit_id=unit_id,
+                label=label,
+                player_id=player_id,
+                model_count=model_count,
+                selected_unit_id=selected_unit_id,
+                hovered_hud_button_id=hovered_hud_button_id,
+                placement_draft_panel=placement_draft_panel,
+            )
+        )
+        seen_unit_ids.add(unit_id)
+    if (
+        placement_draft_panel is not None
+        and placement_draft_panel.unit_id is not None
+        and placement_draft_panel.unit_id not in seen_unit_ids
+    ):
+        buttons.append(
+            _player_unit_button(
+                index=len(buttons),
+                unit_id=placement_draft_panel.unit_id,
+                label=_unit_label_from_id(placement_draft_panel.unit_id),
+                player_id="",
+                model_count=placement_draft_panel.total_model_count,
+                selected_unit_id=selected_unit_id,
+                hovered_hud_button_id=hovered_hud_button_id,
+                placement_draft_panel=placement_draft_panel,
             )
         )
     return tuple(buttons)
+
+
+def _player_unit_button(
+    *,
+    index: int,
+    unit_id: str,
+    label: str,
+    player_id: str,
+    model_count: int,
+    selected_unit_id: str | None,
+    hovered_hud_button_id: str | None,
+    placement_draft_panel: PlacementDraftPanelView | None,
+) -> HudButtonView:
+    placement_status = _placement_roster_status(unit_id, placement_draft_panel)
+    selected = unit_id == selected_unit_id or (
+        placement_draft_panel is not None and placement_draft_panel.unit_id == unit_id
+    )
+    button_id = f"player_unit_{unit_id}"
+    if selected:
+        state: HudState = "selected"
+    elif button_id == hovered_hud_button_id:
+        state = "hover"
+    elif placement_status == "placed":
+        state = "active"
+    elif placement_status == "unplaced":
+        state = "warning"
+    else:
+        state = "normal"
+    color_role: HudColorRole = (
+        "selected"
+        if selected
+        else "active"
+        if placement_status == "placed"
+        else "warning"
+        if placement_status == "unplaced"
+        else "player"
+    )
+    return HudButtonView(
+        component_id=f"player_unit_row_{index}",
+        button_id=button_id,
+        command_id="select_unit",
+        action_kind="select_unit",
+        label=label,
+        icon_id="entity.unit",
+        text_icon="UN",
+        state=state,
+        color_role=color_role,
+        selected=selected,
+        focused=selected,
+        enabled=True,
+        visual_role=color_role,
+        unit_id=unit_id,
+        metadata={
+            "unit_id": unit_id,
+            "player_id": player_id,
+            "model_count": model_count,
+            "placement_status": placement_status or "",
+        },
+    )
+
+
+def _unit_display_records(unit_display_by_id: JsonObject | None) -> tuple[JsonObject, ...]:
+    if not unit_display_by_id:
+        return ()
+    records: list[JsonObject] = []
+    for value in unit_display_by_id.values():
+        if type(value) is dict:
+            records.append(value)
+    return tuple(records)
+
+
+def _json_text(value: object) -> str:
+    return value if type(value) is str else ""
+
+
+def _unit_label_from_id(unit_id: str) -> str:
+    label = unit_id.rsplit(":", maxsplit=1)[-1].replace("_", " ").replace("-", " ")
+    return label.title() if label else unit_id
 
 
 def _current_action_view(
@@ -441,7 +530,7 @@ def _placement_action_buttons(
         _placement_action_button(
             index=1,
             action_kind="placement_next_model",
-            label="Next model",
+            label="Next",
             request_id=placement_draft_panel.request_id,
             selected=False,
             enabled=placement_draft_panel.total_model_count > 1 and not placement_draft_panel.ready,
@@ -488,7 +577,7 @@ def _placement_action_button(
         request_id=request_id,
         label=label,
         icon_id="action.confirm" if action_kind == "placement_submit" else "action.summary",
-        text_icon="PL",
+        text_icon=_placement_action_text_icon(label=label, action_kind=action_kind),
         tooltip=disabled_reason,
         state=state,
         color_role="selected" if selected else "disabled" if not enabled else "neutral",
@@ -499,6 +588,16 @@ def _placement_action_button(
         visual_role="selected" if selected else "disabled" if not enabled else "neutral",
         metadata={"placement_action": action_kind},
     )
+
+
+def _placement_action_text_icon(*, label: str, action_kind: HudButtonActionKind) -> str:
+    if action_kind == "placement_submit":
+        return "OK" if label == "Submit" else "RV"
+    if action_kind == "placement_next_model":
+        return "NX"
+    if action_kind == "placement_clear":
+        return "CL"
+    return "PL"
 
 
 def _finite_option_button(

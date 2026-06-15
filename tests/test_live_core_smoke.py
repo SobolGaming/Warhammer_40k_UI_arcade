@@ -67,7 +67,7 @@ def test_live_core_smoke_can_stop_at_deployment_placement_request() -> None:
         "army-beta:intercessor-unit-2:core-intercessor-like:004",
         "army-beta:intercessor-unit-2:core-intercessor-like:005",
     )
-    assert startup.viewer_player_id == "player-a"
+    assert startup.viewer_player_id == "player-b"
     assert startup.event_cursor > 0
     assert startup.battlefield_view.table.width == 60.0
     assert startup.battlefield_view.table.height == 44.0

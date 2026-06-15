@@ -165,7 +165,9 @@ uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase deployment --ui-
 
 This path still uses the real core session. It only pauses before the smoke harness would otherwise
 auto-submit the deployment placement payload. The current smoke mission follows the core deployment
-order, so the first paused deployment placement is currently for `player-b`.
+order, so the first paused deployment placement is currently for `player-b`; the UI launches from
+that actor's viewer perspective for this stop point. Place the requested unit in the matching
+`player-b deployment` zone before reviewing/submitting the draft.
 
 ## Forensic event traces
 

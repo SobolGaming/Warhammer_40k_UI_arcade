@@ -527,6 +527,50 @@ def test_game_view_represents_viewer_projection() -> None:
     assert view.pending_proposal is not None
     assert view.pending_proposal.request_id == "decision-request-000005"
     assert view.pending_proposal.proposal_kind == "normal_move"
+    assert view.unit_display_by_id == {}
+    assert view.model_display_by_id == {}
+
+
+def test_game_view_preserves_optional_display_maps() -> None:
+    view = UiGameView.from_payload(
+        {
+            "viewer_player_id": "player-a",
+            "game_id": "phase28-game",
+            "stage": "setup",
+            "battle_round": 1,
+            "active_player_id": None,
+            "current_setup_step": "deployment",
+            "current_battle_phase": None,
+            "player_ids": ["player-a", "player-b"],
+            "battlefield_state": None,
+            "mission_setup": None,
+            "public_secondary_mission_choices": [],
+            "public_secondary_mission_card_states": [],
+            "public_command_point_ledgers": [],
+            "public_victory_point_ledgers": [],
+            "public_stratagem_use_records": [],
+            "pending_decision": None,
+            "pending_proposal": None,
+            "event_count": 3,
+            "unit_display_by_id": {
+                "unit-1": {
+                    "unit_instance_id": "unit-1",
+                    "owner_player_id": "player-a",
+                    "unit_display_name": "Battleline Infantry",
+                    "model_instance_ids": ["model-1", "model-2"],
+                }
+            },
+            "model_display_by_id": {"model-1": {"model_instance_id": "model-1"}},
+        }
+    )
+
+    assert view.unit_display_by_id["unit-1"] == {
+        "unit_instance_id": "unit-1",
+        "owner_player_id": "player-a",
+        "unit_display_name": "Battleline Infantry",
+        "model_instance_ids": ["model-1", "model-2"],
+    }
+    assert view.model_display_by_id["model-1"] == {"model_instance_id": "model-1"}
 
 
 def test_game_view_pending_proposal_missing_request_id_fails_fast() -> None:

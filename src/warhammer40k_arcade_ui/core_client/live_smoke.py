@@ -96,8 +96,13 @@ def build_live_core_smoke_startup(
         else "select_movement_unit"
     )
     _assert_expected_pending_decision(status, expected_decision)
-    game_view = client.get_view(viewer_player_id)
-    event_delta = client.get_events_since(0, viewer_player_id)
+    effective_viewer_player_id = _smoke_viewer_player_id(
+        status=status,
+        stop_phase=stop_phase,
+        default_viewer_player_id=viewer_player_id,
+    )
+    game_view = client.get_view(effective_viewer_player_id)
+    event_delta = client.get_events_since(0, effective_viewer_player_id)
     try:
         battlefield_view = battlefield_view_from_game_view(game_view)
     except CoreProjectionRenderError as exc:
@@ -107,9 +112,20 @@ def build_live_core_smoke_startup(
         status=status,
         game_view=game_view,
         battlefield_view=battlefield_view,
-        viewer_player_id=viewer_player_id,
+        viewer_player_id=effective_viewer_player_id,
         event_cursor=event_delta.next_cursor,
     )
+
+
+def _smoke_viewer_player_id(
+    *,
+    status: UiClientStatus,
+    stop_phase: LiveCoreSmokeStopPhase,
+    default_viewer_player_id: str,
+) -> str:
+    if stop_phase != "deployment" or status.decision is None:
+        return default_viewer_player_id
+    return status.decision.actor_id or default_viewer_player_id
 
 
 def _submit_expected_finite(

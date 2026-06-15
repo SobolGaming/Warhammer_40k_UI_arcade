@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, Self, cast
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, JsonValue]
+
+
+def _empty_json_object() -> JsonObject:
+    return {}
 
 
 class UiClientProtocolError(ValueError):
@@ -613,6 +617,8 @@ class UiGameView:
     pending_decision: UiDecision | None
     pending_proposal: UiParameterizedProposalRequest | None
     event_count: int
+    unit_display_by_id: JsonObject = field(default_factory=_empty_json_object)
+    model_display_by_id: JsonObject = field(default_factory=_empty_json_object)
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -662,6 +668,8 @@ class UiGameView:
                 else UiParameterizedProposalRequest.from_payload(pending_proposal_payload)
             ),
             event_count=_required_int(view, "event_count"),
+            unit_display_by_id=_optional_json_object_value(view, "unit_display_by_id"),
+            model_display_by_id=_optional_json_object_value(view, "model_display_by_id"),
         )
 
 
@@ -898,6 +906,12 @@ def _required_string(payload: JsonObject, key: str) -> str:
 
 def _optional_string_value(payload: JsonObject, key: str) -> str | None:
     return _optional_string(key, payload.get(key))
+
+
+def _optional_json_object_value(payload: JsonObject, key: str) -> JsonObject:
+    if key not in payload or payload[key] is None:
+        return {}
+    return _json_object(key, payload[key])
 
 
 def _required_matching_string(

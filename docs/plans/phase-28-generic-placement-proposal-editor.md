@@ -256,20 +256,23 @@ Implemented in the Phase 28 PR:
   - `ESC`/cancel clears the local draft without submitting.
 - Added placement ghost-base primitives on the battlefield without text labels.
 - Added Current Action placement summary and local placement buttons.
-- Added Player Units placement metadata/status for the pending placement subject.
+- Added Player Units placement metadata/status for projected units, core unit-display-map units when
+  available, and the pending placement subject before it is projected onto the battlefield.
 - Added Assignment HUD placement rows for current, placed, and unplaced model poses.
 - Added `--stop-at-phase deployment` for `--live-core-smoke` so the real core smoke harness can
   pause at the first deployment placement proposal and expose the generic placement editor for
   manual GUI validation.
+- Updated deployment smoke launch to use the pending deployment actor as the viewer so the manual
+  tester sees the side that is currently being asked to deploy.
 
 Important limitations:
 
 - The editor does not perform local placement legality validation.
 - The editor does not yet support rotation/facing controls beyond preserving the default facing
   value in generated poses.
-- The Player Units panel currently reflects the single placement subject exposed by the pending
-  request. Multi-subject placement will require additional core exposure before the UI can safely
-  show richer eligible/unavailable roster states.
+- The Player Units panel can show core-provided undeployed unit display records when the installed
+  engine exposes them. Older engine installs still show the current placement request's subject as a
+  focused row, but cannot safely show a complete undeployed roster without additional core exposure.
 - Failed authoritative submissions keep the local draft only when the core returns an invalid
   status. If the core advances to a different request, the request ID remains the boundary for
   clearing local state.

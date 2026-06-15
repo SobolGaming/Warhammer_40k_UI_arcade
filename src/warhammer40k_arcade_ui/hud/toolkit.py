@@ -782,6 +782,7 @@ _WIDGET_ATTRIBUTES: dict[HudWidgetType, frozenset[str]] = {
             "button_gap",
             "button_height",
             "button_min_width",
+            "max_buttons_per_row",
             "button_shape",
             "cancel_hint",
             "confirm_hint",

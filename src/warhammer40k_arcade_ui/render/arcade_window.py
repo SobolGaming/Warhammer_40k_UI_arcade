@@ -167,6 +167,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         preferences_path: Path | None = None,
         pending_decision: UiDecision | None = None,
         initial_status: UiClientStatus | None = None,
+        initial_game_view: UiGameView | None = None,
         core_client: UiCoreClient | None = None,
         viewer_player_id: str = "player_1",
         event_cursor: int = 0,
@@ -200,6 +201,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         self.background_color = arcade.color.DARK_SLATE_GRAY
         self._battlefield_view = resolved_battlefield_view
+        self._last_game_view = initial_game_view
         self._preferences = resolved_preferences
         self._preference_diagnostics = preference_diagnostics
         self._preference_source_label = preference_source_label
@@ -467,6 +469,9 @@ class ArcadeWarhammerWindow(arcade.Window):
             hovered_hud_button_id=self._hovered_hud_button_id,
             selected_unit_id=self._selection_state.selected_unit_id,
             viewer_player_id=self._viewer_player_id,
+            unit_display_by_id=(
+                {} if self._last_game_view is None else self._last_game_view.unit_display_by_id
+            ),
         )
         world_primitives = build_world_primitives(
             self._battlefield_view,
@@ -1579,6 +1584,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         view: UiGameView,
         state: FiniteDecisionUiState,
     ) -> None:
+        self._last_game_view = view
         self._battlefield_view = self._battlefield_view.refreshed_from_projection(
             battlefield_state=view.battlefield_state,
             phase_label=view.current_battle_phase or view.stage,
