@@ -546,6 +546,43 @@ class TracedCoreClient:
         )
         return status
 
+    def submit_parameterized_payload(
+        self,
+        *,
+        request_id: str,
+        payload: JsonValue,
+        result_id: str,
+    ) -> UiClientStatus:
+        """Submit a generic parameterized payload and trace request/response."""
+
+        request_payload: JsonObject = {
+            "request_id": request_id,
+            "result_id": result_id,
+            "payload": payload,
+        }
+        self.trace_writer.write_event(
+            category="core_client",
+            event_name="core.submit_parameterized_payload.request",
+            summary={
+                "request_id": request_id,
+                "result_id": result_id,
+                "payload_keys": _json_payload_keys(payload),
+            },
+            payload=request_payload,
+            context=TraceContext(request_id=request_id),
+        )
+        status = self.inner.submit_parameterized_payload(
+            request_id=request_id,
+            payload=payload,
+            result_id=result_id,
+        )
+        self._trace_status_response(
+            event_name="core.submit_parameterized_payload.response",
+            status=status,
+            request_id=request_id,
+        )
+        return status
+
     def _trace_status_response(
         self,
         *,

@@ -978,6 +978,12 @@ def _button_action_kind(value: str) -> HudButtonActionKind:
         return "local_command"
     if value == "select_unit":
         return "select_unit"
+    if value == "placement_submit":
+        return "placement_submit"
+    if value == "placement_clear":
+        return "placement_clear"
+    if value == "placement_next_model":
+        return "placement_next_model"
     return "none"
 
 

@@ -11,6 +11,7 @@ from warhammer40k_arcade_ui.hud.toolkit import (
 )
 from warhammer40k_arcade_ui.hud.toolkit import (
     CurrentActionView,
+    HudButtonActionKind,
     HudButtonView,
     HudColorRole,
     HudState,
@@ -26,6 +27,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
     FiniteDecisionOptionView,
     FiniteDecisionPanelView,
     MovementDraftPanelView,
+    PlacementDraftPanelView,
     UnitPanelView,
 )
 from warhammer40k_arcade_ui.preferences.registries import command_registry
@@ -64,6 +66,7 @@ def build_hud_ergonomics_view(
     movement_draft_panel: MovementDraftPanelView | None,
     assignment_hud_panel: AssignmentHudPanelView | None,
     event_log_lines: tuple[str, ...],
+    placement_draft_panel: PlacementDraftPanelView | None = None,
     event_payloads: tuple[JsonObject, ...] = (),
     pending_decision: UiDecision | None = None,
     hovered_hud_button_id: str | None = None,
@@ -72,7 +75,11 @@ def build_hud_ergonomics_view(
 ) -> HudErgonomicsView:
     """Build a toolkit-backed HUD summary without adding rule semantics."""
 
-    diagnostic_lines = _diagnostic_lines(finite_decision_panel, movement_draft_panel)
+    diagnostic_lines = _diagnostic_lines(
+        finite_decision_panel,
+        movement_draft_panel,
+        placement_draft_panel,
+    )
     selected_unit_card = _selected_unit_card(unit_panel)
     return HudErgonomicsView(
         status_chips=_status_chips(
@@ -85,18 +92,21 @@ def build_hud_ergonomics_view(
             viewer_player_id=viewer_player_id,
             selected_unit_id=selected_unit_id,
             hovered_hud_button_id=hovered_hud_button_id,
+            placement_draft_panel=placement_draft_panel,
         ),
         selected_unit_card=selected_unit_card,
         selected_unit_rows=_selected_unit_rows(unit_panel),
         current_action=_current_action_view(
             finite_decision_panel=finite_decision_panel,
             movement_draft_panel=movement_draft_panel,
+            placement_draft_panel=placement_draft_panel,
             preferences=preferences,
             hovered_hud_button_id=hovered_hud_button_id,
         ),
         action_rows=_action_rows(
             finite_decision_panel=finite_decision_panel,
             movement_draft_panel=movement_draft_panel,
+            placement_draft_panel=placement_draft_panel,
             preferences=preferences,
         ),
         assignment_rows=_assignment_rows(assignment_hud_panel),
@@ -231,6 +241,7 @@ def _player_unit_buttons(
     viewer_player_id: str | None,
     selected_unit_id: str | None,
     hovered_hud_button_id: str | None,
+    placement_draft_panel: PlacementDraftPanelView | None,
 ) -> tuple[HudButtonView, ...]:
     buttons: list[HudButtonView] = []
     for unit in view.units:
@@ -238,12 +249,26 @@ def _player_unit_buttons(
             continue
         selected = unit.unit_id == selected_unit_id
         button_id = f"player_unit_{unit.unit_id}"
+        placement_status = _placement_roster_status(unit.unit_id, placement_draft_panel)
         if selected:
             state: HudState = "selected"
         elif button_id == hovered_hud_button_id:
             state = "hover"
+        elif placement_status == "placed":
+            state = "active"
+        elif placement_status == "unplaced":
+            state = "warning"
         else:
             state = "normal"
+        color_role: HudColorRole = (
+            "selected"
+            if selected
+            else "active"
+            if placement_status == "placed"
+            else "warning"
+            if placement_status == "unplaced"
+            else "player"
+        )
         buttons.append(
             HudButtonView(
                 component_id=f"player_unit_row_{len(buttons)}",
@@ -254,16 +279,17 @@ def _player_unit_buttons(
                 icon_id="entity.unit",
                 text_icon="UN",
                 state=state,
-                color_role="player",
+                color_role=color_role,
                 selected=selected,
                 focused=selected,
                 enabled=True,
-                visual_role="selected" if selected else "player",
+                visual_role=color_role,
                 unit_id=unit.unit_id,
                 metadata={
                     "unit_id": unit.unit_id,
                     "player_id": unit.player_id,
                     "model_count": len(unit.models),
+                    "placement_status": placement_status or "",
                 },
             )
         )
@@ -274,6 +300,7 @@ def _current_action_view(
     *,
     finite_decision_panel: FiniteDecisionPanelView,
     movement_draft_panel: MovementDraftPanelView | None,
+    placement_draft_panel: PlacementDraftPanelView | None,
     preferences: UiPreferences,
     hovered_hud_button_id: str | None,
 ) -> CurrentActionView:
@@ -284,17 +311,28 @@ def _current_action_view(
     status = _current_action_status(
         finite_decision_panel=finite_decision_panel,
         movement_draft_panel=movement_draft_panel,
+        placement_draft_panel=placement_draft_panel,
     )
-    buttons = tuple(
-        _finite_option_button(
-            option=option,
-            index=index,
-            request_id=finite_decision_panel.request_id,
+    buttons = (
+        _placement_action_buttons(
+            placement_draft_panel=placement_draft_panel,
             hovered_hud_button_id=hovered_hud_button_id,
         )
-        for index, option in enumerate(finite_decision_panel.options)
+        if placement_draft_panel is not None
+        else tuple(
+            _finite_option_button(
+                option=option,
+                index=index,
+                request_id=finite_decision_panel.request_id,
+                hovered_hud_button_id=hovered_hud_button_id,
+            )
+            for index, option in enumerate(finite_decision_panel.options)
+        )
     )
-    selected_action_id = next((button.option_id for button in buttons if button.selected), None)
+    selected_action_id = next(
+        ((button.option_id or button.button_id) for button in buttons if button.selected),
+        None,
+    )
     confirm_hint = _hotkey_for_command(preferences, "confirm")
     cancel_hint = _hotkey_for_command(preferences, "cancel")
     return CurrentActionView(
@@ -305,9 +343,14 @@ def _current_action_view(
         advisory_status=status,
         selected_action_id=selected_action_id,
         buttons=buttons,
-        confirm_hint=f"{confirm_hint}: submit selected option" if confirm_hint else "",
+        confirm_hint=_confirm_hint(
+            confirm_hint=confirm_hint,
+            placement_draft_panel=placement_draft_panel,
+        ),
         cancel_hint=f"{cancel_hint}: cancel/back" if cancel_hint else "",
-        source_kind="engine_parameterized"
+        source_kind="local_gui"
+        if placement_draft_panel is not None
+        else "engine_parameterized"
         if finite_decision_panel.proposal_kind is not None
         else "engine_finite"
         if finite_decision_panel.request_id is not None
@@ -337,7 +380,20 @@ def _current_action_status(
     *,
     finite_decision_panel: FiniteDecisionPanelView,
     movement_draft_panel: MovementDraftPanelView | None,
+    placement_draft_panel: PlacementDraftPanelView | None,
 ) -> str:
+    if placement_draft_panel is not None:
+        completeness = (
+            f"{placement_draft_panel.placed_model_count}/"
+            f"{placement_draft_panel.total_model_count} placed"
+        )
+        placement_parts = (
+            placement_draft_panel.status_line,
+            placement_draft_panel.placement_kind,
+            completeness,
+            "preview only until submitted",
+        )
+        return " | ".join(part for part in placement_parts if part)
     if movement_draft_panel is not None:
         assignment_summary = (
             f"{movement_draft_panel.assigned_model_count}/"
@@ -345,9 +401,104 @@ def _current_action_status(
             f"{movement_draft_panel.unchanged_model_count} no-op"
         )
         distance_summary = _movement_distance_summary(movement_draft_panel)
-        parts = (movement_draft_panel.status_line, assignment_summary, distance_summary)
-        return " | ".join(part for part in parts if part)
+        movement_parts = (movement_draft_panel.status_line, assignment_summary, distance_summary)
+        return " | ".join(part for part in movement_parts if part)
     return finite_decision_panel.status_line
+
+
+def _confirm_hint(
+    *,
+    confirm_hint: str | None,
+    placement_draft_panel: PlacementDraftPanelView | None,
+) -> str:
+    if not confirm_hint:
+        return ""
+    if placement_draft_panel is None:
+        return f"{confirm_hint}: submit selected option"
+    if placement_draft_panel.ready:
+        return f"{confirm_hint}: submit placement draft"
+    return f"{confirm_hint}: review placement draft"
+
+
+def _placement_action_buttons(
+    *,
+    placement_draft_panel: PlacementDraftPanelView,
+    hovered_hud_button_id: str | None,
+) -> tuple[HudButtonView, ...]:
+    return (
+        _placement_action_button(
+            index=0,
+            action_kind="placement_submit",
+            label="Submit" if placement_draft_panel.ready else "Review",
+            request_id=placement_draft_panel.request_id,
+            selected=True,
+            enabled=placement_draft_panel.unplaced_model_count == 0,
+            disabled_reason="Place every required model before reviewing."
+            if placement_draft_panel.unplaced_model_count
+            else "",
+            hovered_hud_button_id=hovered_hud_button_id,
+        ),
+        _placement_action_button(
+            index=1,
+            action_kind="placement_next_model",
+            label="Next model",
+            request_id=placement_draft_panel.request_id,
+            selected=False,
+            enabled=placement_draft_panel.total_model_count > 1 and not placement_draft_panel.ready,
+            disabled_reason="Placement draft is ready; clear or submit it before changing focus."
+            if placement_draft_panel.ready
+            else "",
+            hovered_hud_button_id=hovered_hud_button_id,
+        ),
+        _placement_action_button(
+            index=2,
+            action_kind="placement_clear",
+            label="Clear",
+            request_id=placement_draft_panel.request_id,
+            selected=False,
+            enabled=True,
+            disabled_reason="",
+            hovered_hud_button_id=hovered_hud_button_id,
+        ),
+    )
+
+
+def _placement_action_button(
+    *,
+    index: int,
+    action_kind: HudButtonActionKind,
+    label: str,
+    request_id: str | None,
+    selected: bool,
+    enabled: bool,
+    disabled_reason: str,
+    hovered_hud_button_id: str | None,
+) -> HudButtonView:
+    button_id = f"placement_action_{index}_{action_kind}"
+    state: HudState = "selected" if selected else "normal"
+    if not enabled:
+        state = "disabled"
+    elif hovered_hud_button_id == button_id and not selected:
+        state = "hover"
+    return HudButtonView(
+        component_id=f"placement_action_button_{index}",
+        button_id=button_id,
+        command_id=action_kind,
+        action_kind=action_kind,
+        request_id=request_id,
+        label=label,
+        icon_id="action.confirm" if action_kind == "placement_submit" else "action.summary",
+        text_icon="PL",
+        tooltip=disabled_reason,
+        state=state,
+        color_role="selected" if selected else "disabled" if not enabled else "neutral",
+        selected=selected,
+        focused=selected,
+        enabled=enabled,
+        disabled_reason=disabled_reason,
+        visual_role="selected" if selected else "disabled" if not enabled else "neutral",
+        metadata={"placement_action": action_kind},
+    )
 
 
 def _finite_option_button(
@@ -412,6 +563,7 @@ def _action_rows(
     *,
     finite_decision_panel: FiniteDecisionPanelView,
     movement_draft_panel: MovementDraftPanelView | None,
+    placement_draft_panel: PlacementDraftPanelView | None,
     preferences: UiPreferences,
 ) -> tuple[IconTextBarView, ...]:
     rows: list[IconTextBarView] = [
@@ -454,6 +606,21 @@ def _action_rows(
                 secondary_label=f"{movement_draft_panel.status_line}; {assignment_summary}",
                 value_text=distance_summary,
                 state="active" if movement_draft_panel.ready else "warning",
+            )
+        )
+    if placement_draft_panel is not None:
+        rows.append(
+            IconTextBarView(
+                component_id="placement_draft_row",
+                icon_id="action.summary",
+                primary_label="Placement",
+                secondary_label=(
+                    f"{placement_draft_panel.status_line}; "
+                    f"{placement_draft_panel.placed_model_count}/"
+                    f"{placement_draft_panel.total_model_count} placed"
+                ),
+                value_text=placement_draft_panel.placement_kind or "",
+                state="active" if placement_draft_panel.ready else "warning",
             )
         )
     return tuple(rows)
@@ -596,13 +763,29 @@ def _assignment_group_toolkit_state(state: AssignmentGroupState) -> HudState:
 def _diagnostic_lines(
     finite_decision_panel: FiniteDecisionPanelView,
     movement_draft_panel: MovementDraftPanelView | None,
+    placement_draft_panel: PlacementDraftPanelView | None,
 ) -> tuple[str, ...]:
     lines = list(finite_decision_panel.diagnostic_lines)
     if movement_draft_panel is not None:
         for line in movement_draft_panel.diagnostic_lines:
             if line not in lines:
                 lines.append(line)
+    if placement_draft_panel is not None:
+        for line in placement_draft_panel.diagnostic_lines:
+            if line not in lines:
+                lines.append(line)
     return tuple(lines)
+
+
+def _placement_roster_status(
+    unit_id: str,
+    placement_draft_panel: PlacementDraftPanelView | None,
+) -> str | None:
+    if placement_draft_panel is None or placement_draft_panel.unit_id != unit_id:
+        return None
+    if placement_draft_panel.unplaced_model_count == 0:
+        return "placed"
+    return "unplaced"
 
 
 def _filtered_event_lines(

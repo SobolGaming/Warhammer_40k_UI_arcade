@@ -952,6 +952,8 @@ def unsupported_parameterized_tool_label(pending_decision: UiDecision | None) ->
 
     if pending_decision is None or not pending_decision.is_parameterized:
         return None
+    if pending_decision.placement_proposal is not None:
+        return None
     proposal = pending_decision.parameterized_proposal
     if proposal is None:
         return pending_decision.decision_type

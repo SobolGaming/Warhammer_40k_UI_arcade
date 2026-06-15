@@ -56,6 +56,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
     build_finite_decision_panel,
     build_movement_draft_panel,
+    build_placement_draft_panel,
     build_unit_panel,
 )
 from warhammer40k_arcade_ui.input.commands import command_for_key
@@ -85,6 +86,11 @@ from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.movement_submission import (
     MovementSubmissionError,
     submit_movement_draft,
+)
+from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
+from warhammer40k_arcade_ui.state.placement_submission import (
+    PlacementSubmissionError,
+    submit_placement_draft,
 )
 from warhammer40k_arcade_ui.state.selection import (
     SelectionState,
@@ -129,7 +135,11 @@ OPTION_FOCUS_MODEL_ID_KEYS = (
 logger = logging.getLogger(__name__)
 
 type FatalGameEngineException = (
-    UiClientProtocolError | RenderViewModelError | MovementSubmissionError | KeyError
+    UiClientProtocolError
+    | RenderViewModelError
+    | MovementSubmissionError
+    | PlacementSubmissionError
+    | KeyError
 )
 
 
@@ -223,6 +233,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         self._mouse_world_position: WorldPoint | None = None
         self._movement_draft: MovementDraft | None = None
+        self._placement_draft: PlacementDraft | None = None
         self._action_summary_intensity: ActionSummaryIntensity = (
             self._preferences.hud.action_summary_default
         )
@@ -303,6 +314,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         return self._movement_draft
 
     @property
+    def placement_draft(self) -> PlacementDraft | None:
+        """Current local placement draft, if one is active."""
+
+        return self._placement_draft
+
+    @property
     def action_summary_intensity(self) -> ActionSummaryIntensity:
         """Current advisory action-summary display intensity."""
 
@@ -374,6 +391,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                     "camera_zoom": self._camera.zoom,
                     "unit_count": len(self._battlefield_view.units),
                     "movement_draft_active": self._movement_draft is not None,
+                    "placement_draft_active": self._placement_draft is not None,
                     "action_summary_intensity": self._action_summary_intensity,
                 },
             )
@@ -406,6 +424,12 @@ class ArcadeWarhammerWindow(arcade.Window):
             status_message=self._finite_state.status_message,
             diagnostics=self._finite_state.diagnostics,
         )
+        placement_draft_panel = build_placement_draft_panel(
+            placement_draft=self._placement_draft,
+            pending_decision=self._pending_decision,
+            status_message=self._finite_state.status_message,
+            diagnostics=self._finite_state.diagnostics,
+        )
         assignment_hud_panel = build_assignment_hud_panel(
             movement_draft=self._movement_draft,
             pending_decision=self._pending_decision,
@@ -415,6 +439,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             preferences=self._preferences,
             preference_source_label=self._preference_source_label,
             event_log_lines=self._finite_state.event_log_lines,
+            placement_draft=self._placement_draft,
         )
         action_summary = build_action_visual_summary(
             movement_draft=self._movement_draft,
@@ -434,6 +459,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             unit_panel=unit_panel,
             finite_decision_panel=finite_decision_panel,
             movement_draft_panel=movement_draft_panel,
+            placement_draft_panel=placement_draft_panel,
             assignment_hud_panel=assignment_hud_panel,
             event_log_lines=self._finite_state.event_log_lines,
             event_payloads=self._finite_state.event_payloads,
@@ -447,6 +473,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._selection_state,
             self._movement_draft,
             action_summary,
+            placement_draft=self._placement_draft,
         )
         overlay_primitives = build_screen_overlay_primitives(
             context_menu=context_menu,
@@ -535,6 +562,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "world_x": self._mouse_world_position[0],
                 "world_y": self._mouse_world_position[1],
                 "movement_draft_active": self._movement_draft is not None,
+                "placement_draft_active": self._placement_draft is not None,
             },
         )
         self._update_hud_button_hover(float(x), float(y))
@@ -542,6 +570,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft = self._movement_draft.with_cursor_preview(
                 view=self._battlefield_view,
                 world_point=self._mouse_world_position,
+            )
+        if self._placement_draft is not None:
+            self._placement_draft = self._placement_draft.with_cursor_preview(
+                self._mouse_world_position
             )
 
     def on_mouse_press(self, x: int, y: int, button: int, modifiers: int) -> None:
@@ -601,6 +633,18 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
             self._trace_movement_draft_event("ui.movement_draft_waypoint")
             return
+        if self._placement_draft is not None:
+            self._placement_draft = self._placement_draft.place_current_model(
+                self._mouse_world_position
+            )
+            selected_model_id = self._placement_draft.selected_model_id
+            self._selection_state = self._selection_state.select_model_id(
+                unit_id=self._placement_draft.selected_unit_id,
+                model_id=selected_model_id,
+                preferences=self._preferences,
+            )
+            self._trace_placement_draft_event("ui.placement_draft_model_placed")
+            return
         self._selection_state = self._selection_state.select_at(
             view=self._battlefield_view,
             world_point=self._mouse_world_position,
@@ -611,6 +655,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         self._pending_decision = self._finite_state.pending_decision
         self._sync_movement_draft()
+        self._sync_placement_draft()
 
     def on_mouse_drag(
         self,
@@ -647,6 +692,11 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft = self._movement_draft.with_cursor_preview(
                 view=self._battlefield_view,
                 world_point=self._mouse_world_position,
+            )
+        elif buttons & arcade.MOUSE_BUTTON_LEFT and self._placement_draft is not None:
+            self._mouse_world_position = self._camera.screen_to_world((float(x), float(y)))
+            self._placement_draft = self._placement_draft.with_cursor_preview(
+                self._mouse_world_position
             )
 
     def on_mouse_release(self, x: int, y: int, button: int, modifiers: int) -> None:
@@ -778,6 +828,14 @@ class ArcadeWarhammerWindow(arcade.Window):
                     view=self._battlefield_view
                 )
                 self._trace_movement_draft_event("ui.movement_draft_focus_cycle")
+            elif self._placement_draft is not None:
+                self._placement_draft = self._placement_draft.select_next_model()
+                self._selection_state = self._selection_state.select_model_id(
+                    unit_id=self._placement_draft.selected_unit_id,
+                    model_id=self._placement_draft.selected_model_id,
+                    preferences=self._preferences,
+                )
+                self._trace_placement_draft_event("ui.placement_draft_focus_cycle")
             elif self._mouse_world_position is not None:
                 self._selection_state = self._selection_state.cycle_existing_at(
                     view=self._battlefield_view,
@@ -842,10 +900,23 @@ class ArcadeWarhammerWindow(arcade.Window):
                         )
                     else:
                         self._trace_movement_draft_event("ui.movement_draft_preview")
+            elif self._placement_draft is not None:
+                if self._placement_draft.is_ready:
+                    self._submit_placement_draft()
+                else:
+                    self._placement_draft = self._placement_draft.mark_ready()
+                    if self._placement_draft.is_ready:
+                        self._trace_placement_draft_event(
+                            "ui.placement_draft_ready",
+                            payload=self._placement_draft.payload_preview,
+                        )
+                    else:
+                        self._trace_placement_draft_event("ui.placement_draft_preview")
             else:
                 self._submit_finite_option(None)
         elif invocation.command_id == "cancel":
             self._cancel_movement_draft()
+            self._cancel_placement_draft()
             self._selection_state = self._selection_state.close_context_menu()
             self._trace_event(
                 category="ui",
@@ -912,6 +983,22 @@ class ArcadeWarhammerWindow(arcade.Window):
             return
         if hit_region.action_kind == "select_unit" and hit_region.unit_id is not None:
             self._select_projected_unit_from_hud(hit_region.unit_id)
+            return
+        if hit_region.action_kind == "placement_submit":
+            self._handle_placement_submit_button()
+            return
+        if hit_region.action_kind == "placement_clear":
+            self._cancel_placement_draft()
+            return
+        if hit_region.action_kind == "placement_next_model":
+            if self._placement_draft is not None:
+                self._placement_draft = self._placement_draft.select_next_model()
+                self._selection_state = self._selection_state.select_model_id(
+                    unit_id=self._placement_draft.selected_unit_id,
+                    model_id=self._placement_draft.selected_model_id,
+                    preferences=self._preferences,
+                )
+                self._trace_placement_draft_event("ui.placement_draft_focus_cycle")
             return
         self._trace_event(
             category="ui",
@@ -1001,6 +1088,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._finite_state = self._finite_state.highlight_option_for_unit(unit_id)
         self._pending_decision = self._finite_state.pending_decision
         self._sync_movement_draft()
+        self._sync_placement_draft()
         self._trace_event(
             category="ui",
             event_name="ui.roster_unit_selected",
@@ -1118,6 +1206,8 @@ class ArcadeWarhammerWindow(arcade.Window):
             return self._fatal_game_engine_state(exc)
         except MovementSubmissionError as exc:
             return self._fatal_game_engine_state(exc)
+        except PlacementSubmissionError as exc:
+            return self._fatal_game_engine_state(exc)
         except KeyError as exc:
             return self._fatal_game_engine_state(exc)
 
@@ -1166,6 +1256,62 @@ class ArcadeWarhammerWindow(arcade.Window):
             },
         )
 
+    def _handle_placement_submit_button(self) -> None:
+        if self._placement_draft is None:
+            return
+        if self._placement_draft.is_ready:
+            self._submit_placement_draft()
+            return
+        self._placement_draft = self._placement_draft.mark_ready()
+        self._trace_placement_draft_event(
+            "ui.placement_draft_ready"
+            if self._placement_draft.is_ready
+            else "ui.placement_draft_preview",
+            payload=self._placement_draft.payload_preview,
+        )
+
+    def _submit_placement_draft(self) -> None:
+        self._trace_placement_draft_event("ui.placement_submission_attempt")
+        try:
+            result = submit_placement_draft(
+                state=self._finite_state,
+                placement_draft=self._placement_draft,
+                client=self._core_client,
+                viewer_player_id=self._viewer_player_id,
+            )
+        except UiClientProtocolError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        except RenderViewModelError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        except PlacementSubmissionError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        except KeyError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        if result.refreshed_view is not None:
+            try:
+                self._apply_refreshed_game_view(
+                    view=result.refreshed_view,
+                    state=result.finite_state,
+                )
+            except RenderViewModelError as exc:
+                self._set_finite_state(self._fatal_game_engine_state(exc))
+                return
+        if result.clear_placement_draft:
+            self._placement_draft = None
+        self._set_finite_state(result.finite_state)
+        self._trace_event(
+            category="ui",
+            event_name="ui.placement_submission_outcome",
+            summary={
+                "status_kind": self._finite_state.status_kind,
+                "placement_draft_active": self._placement_draft is not None,
+            },
+        )
+
     def _fatal_game_engine_state(
         self,
         exc: FatalGameEngineException,
@@ -1181,6 +1327,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         crash_report_path = self._write_fatal_crash_report(exc)
         self._movement_draft = None
+        self._placement_draft = None
         self._selection_state = self._selection_state.without_movement_draft_overlays(
             self._preferences
         )
@@ -1226,6 +1373,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             sync_movement_draft=False,
         )
         self._sync_movement_draft()
+        self._sync_placement_draft()
 
     def _sync_movement_draft(self) -> None:
         current = self._movement_draft
@@ -1257,6 +1405,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         if next_draft is not None:
             self._movement_draft = next_draft
+            self._placement_draft = None
             selected_model_id = (
                 next_draft.selected_model_ids[0]
                 if next_draft.selected_model_ids
@@ -1283,6 +1432,37 @@ class ArcadeWarhammerWindow(arcade.Window):
                 summary={"reason": "context_mismatch"},
             )
 
+    def _sync_placement_draft(self) -> None:
+        current = self._placement_draft
+        if current is not None and current.is_for(pending_decision=self._pending_decision):
+            self._placement_draft = current.with_recomputed_hints()
+            return
+        next_draft = PlacementDraft.start_for_pending(
+            view=self._battlefield_view,
+            selection=self._selection_state,
+            pending_decision=self._pending_decision,
+        )
+        if next_draft is not None:
+            self._movement_draft = None
+            self._selection_state = self._selection_state.without_movement_draft_overlays(
+                self._preferences
+            )
+            self._placement_draft = next_draft
+            self._selection_state = self._selection_state.select_model_id(
+                unit_id=next_draft.selected_unit_id,
+                model_id=next_draft.selected_model_id,
+                preferences=self._preferences,
+            )
+            self._trace_placement_draft_event("ui.placement_draft_started")
+            return
+        if current is not None:
+            self._placement_draft = None
+            self._trace_event(
+                category="ui",
+                event_name="ui.placement_draft_cleared",
+                summary={"reason": "context_mismatch"},
+            )
+
     def _cancel_movement_draft(self) -> None:
         if self._movement_draft is None:
             return
@@ -1299,6 +1479,16 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._trace_event(
             category="ui",
             event_name="ui.movement_draft_cancelled",
+            summary={"reason": "cancel_command"},
+        )
+
+    def _cancel_placement_draft(self) -> None:
+        if self._placement_draft is None:
+            return
+        self._placement_draft = None
+        self._trace_event(
+            category="ui",
+            event_name="ui.placement_draft_cancelled",
             summary={"reason": "cancel_command"},
         )
 
@@ -1455,18 +1645,60 @@ class ArcadeWarhammerWindow(arcade.Window):
             payload=payload,
         )
 
+    def _trace_placement_draft_event(
+        self,
+        event_name: str,
+        *,
+        payload: JsonObject | None = None,
+        extra_summary: JsonObject | None = None,
+    ) -> None:
+        draft = self._placement_draft
+        if draft is None:
+            summary: JsonObject = {"placement_draft_active": False}
+        else:
+            summary = {
+                "placement_draft_active": True,
+                "proposal_request_id": draft.proposal_request_id,
+                "proposal_kind": draft.proposal_kind,
+                "placement_kind": draft.placement_kind,
+                "selected_unit_id": draft.selected_unit_id,
+                "selected_model_id": draft.selected_model_id,
+                "placed_model_count": draft.placed_model_count,
+                "total_model_count": draft.total_model_count,
+                "ready": draft.is_ready,
+            }
+        if extra_summary is not None:
+            summary.update(extra_summary)
+        self._trace_event(
+            category="ui",
+            event_name=event_name,
+            summary=summary,
+            payload=payload,
+        )
+
     def _trace_context(self) -> TraceContext:
         movement_draft = self._movement_draft
+        placement_draft = self._placement_draft
         decision = self._pending_decision
-        proposal = None if decision is None else decision.movement_proposal
+        movement_proposal = None if decision is None else decision.movement_proposal
+        placement_proposal = None if decision is None else decision.placement_proposal
         request_id = None
         if movement_draft is not None:
             request_id = movement_draft.proposal_request_id
+        elif placement_draft is not None:
+            request_id = placement_draft.proposal_request_id
         elif decision is not None:
             request_id = decision.request_id
+        game_id = None
+        if placement_draft is not None:
+            game_id = placement_draft.game_id
+        elif placement_proposal is not None:
+            game_id = placement_proposal.game_id
+        elif movement_proposal is not None:
+            game_id = movement_proposal.game_id
         return TraceContext(
             viewer_player_id=self._viewer_player_id,
-            game_id=None if proposal is None else proposal.game_id,
+            game_id=game_id,
             request_id=request_id,
             status_kind=self._finite_state.status_kind,
             event_cursor=self._event_cursor,

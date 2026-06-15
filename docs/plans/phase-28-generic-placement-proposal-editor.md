@@ -1,6 +1,6 @@
 # Phase 28: Generic Placement Proposal Editor
 
-Status: Proposed
+Status: Implemented
 
 ## Purpose
 
@@ -236,3 +236,61 @@ uv run pre-commit run --all-files
 
 Review should focus on whether the editor is genuinely generic. Any proposal-kind branch should be
 limited to serialization of fields the engine already exposed, not a separate rules path.
+
+## Implementation Notes
+
+Implemented in the Phase 28 PR:
+
+- Added strict `UiPlacementProposalRequest` parsing for the current placement proposal families.
+- Added a generic `submit_parameterized_payload` UI core-client method and local-session bridge.
+- Added local `PlacementDraft` state keyed by proposal request ID.
+- Added reserve/arrival placement payload generation using `attempted_placement.model_placements`.
+- Added deployment/pre-battle placement payload generation using top-level `model_placements`.
+- Wired placement drafts into the Arcade window:
+  - placement proposal requests auto-open a local placement draft;
+  - left click places the current model ghost base and advances focus;
+  - `TAB` or the Current Action `Next model` button cycles placement-model focus;
+  - first `ENTER` marks a complete draft ready for review;
+  - second `ENTER` submits the payload through the generic parameterized client path;
+  - `ESC`/cancel clears the local draft without submitting.
+- Added placement ghost-base primitives on the battlefield without text labels.
+- Added Current Action placement summary and local placement buttons.
+- Added Player Units placement metadata/status for the pending placement subject.
+- Added Assignment HUD placement rows for current, placed, and unplaced model poses.
+
+Important limitations:
+
+- The editor does not perform local placement legality validation.
+- The editor does not yet support rotation/facing controls beyond preserving the default facing
+  value in generated poses.
+- The Player Units panel currently reflects the single placement subject exposed by the pending
+  request. Multi-subject placement will require additional core exposure before the UI can safely
+  show richer eligible/unavailable roster states.
+- Failed authoritative submissions keep the local draft only when the core returns an invalid
+  status. If the core advances to a different request, the request ID remains the boundary for
+  clearing local state.
+
+## Verification
+
+Automated checks run:
+
+```bash
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff check src tests
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests
+env UV_CACHE_DIR=/tmp/uv-cache uv run pyright
+env UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/
+env UV_CACHE_DIR=/tmp/uv-cache PRE_COMMIT_HOME=/tmp/pre-commit-cache uv run pre-commit run --all-files
+```
+
+Manual reviewer focus:
+
+- Reach a core or fixture scenario that exposes `submit_placement_proposal` with
+  `reinforcement_placement`.
+- Confirm the Current Action panel shows placement progress and local placement buttons.
+- Confirm the Player Units row for the requested unit is selected/focused when the draft starts.
+- Click battlefield locations for each model and confirm ghost bases appear without text labels.
+- Press `ENTER` once after all models are placed and confirm the Current Action/Assignment state
+  moves to ready/review.
+- Press `ENTER` again and confirm the UI submits via the core parameterized path or displays the
+  authoritative invalid diagnostic.

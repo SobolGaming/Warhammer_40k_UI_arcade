@@ -23,12 +23,14 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 from warhammer40k_arcade_ui.hud.view_models import (
     build_assignment_hud_panel,
     build_movement_draft_panel,
+    build_placement_draft_panel,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState, submit_finite_option
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.movement_submission import prepare_movement_submission
+from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "phase21a_core_requests.json"
@@ -74,7 +76,6 @@ def test_phase21a_pending_proposal_metadata_is_required(missing_key: str) -> Non
         ("pile_in", "pile_in"),
         ("consolidate", "consolidate"),
         ("heroic_intervention_charge_move", "charge_move"),
-        ("placement_reinforcement", "reinforcement_placement"),
         ("melee_declaration", "melee_declaration"),
         ("stratagem_counteroffensive", "stratagem_target_binding"),
     ],
@@ -115,6 +116,46 @@ def test_phase21a_unsupported_parameterized_requests_render_without_draft(
     assert assignment_panel.advisory_lines == (
         "Visible request only; no local assignment payload will be built.",
     )
+
+
+def test_phase28_placement_reinforcement_opens_local_placement_draft() -> None:
+    decision = _parameterized_decision("placement_reinforcement")
+    view = default_battlefield_view()
+    selection = _selected_intercessors()
+
+    movement_draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+    )
+    placement_draft = PlacementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+    )
+    placement_panel = build_placement_draft_panel(
+        placement_draft=placement_draft,
+        pending_decision=decision,
+    )
+    assignment_panel = build_assignment_hud_panel(
+        movement_draft=movement_draft,
+        placement_draft=placement_draft,
+        pending_decision=decision,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=default_preferences(),
+        preference_source_label="default.yaml",
+    )
+
+    assert movement_draft is None
+    assert placement_draft is not None
+    assert placement_draft.proposal_kind == "reinforcement_placement"
+    assert placement_draft.placement_kind == "reinforcement"
+    assert placement_panel is not None
+    assert placement_panel.status_line == "Placement draft preview"
+    assert assignment_panel is not None
+    assert assignment_panel.operation_kind == "placement"
+    assert assignment_panel.proposal_kind == "reinforcement_placement"
 
 
 @pytest.mark.parametrize(

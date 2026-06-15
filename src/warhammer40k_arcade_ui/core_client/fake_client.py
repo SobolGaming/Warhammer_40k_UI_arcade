@@ -31,11 +31,24 @@ class SubmittedMovementPayload:
     result_id: str
 
 
+@dataclass(frozen=True, slots=True)
+class SubmittedParameterizedPayload:
+    """Generic parameterized payload submission recorded by `FakeCoreClient`."""
+
+    request_id: str
+    payload: JsonValue
+    result_id: str
+
+
 def _new_finite_submissions() -> list[SubmittedFiniteDecision]:
     return []
 
 
 def _new_movement_submissions() -> list[SubmittedMovementPayload]:
+    return []
+
+
+def _new_parameterized_submissions() -> list[SubmittedParameterizedPayload]:
     return []
 
 
@@ -51,6 +64,9 @@ class FakeCoreClient:
     )
     movement_submissions: list[SubmittedMovementPayload] = field(
         default_factory=_new_movement_submissions
+    )
+    parameterized_submissions: list[SubmittedParameterizedPayload] = field(
+        default_factory=_new_parameterized_submissions
     )
     advance_call_count: int = 0
     movement_status: UiClientStatus | None = None
@@ -113,4 +129,20 @@ class FakeCoreClient:
             self.view = self.movement_view
         if self.movement_event_delta is not None:
             self.event_delta = self.movement_event_delta
+        return self.status
+
+    def submit_parameterized_payload(
+        self,
+        *,
+        request_id: str,
+        payload: JsonValue,
+        result_id: str,
+    ) -> UiClientStatus:
+        self.parameterized_submissions.append(
+            SubmittedParameterizedPayload(
+                request_id=request_id,
+                payload=payload,
+                result_id=result_id,
+            )
+        )
         return self.status

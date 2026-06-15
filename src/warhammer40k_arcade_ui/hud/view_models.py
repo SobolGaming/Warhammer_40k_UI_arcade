@@ -21,6 +21,7 @@ from warhammer40k_arcade_ui.state.movement_draft import (
     movement_proposal_context_diagnostic_line,
     unsupported_parameterized_tool_label,
 )
+from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
 from warhammer40k_arcade_ui.state.selection import (
     SelectionState,
     selected_model,
@@ -101,6 +102,24 @@ class MovementDraftPanelView:
     synthetic_witness_model_ids: tuple[str, ...]
     synthetic_witness_point_count: int
     payload_witness_lines: tuple[str, ...]
+    ready: bool
+    hint_lines: tuple[str, ...]
+    diagnostic_lines: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PlacementDraftPanelView:
+    """HUD display model for the local placement draft preview."""
+
+    status_line: str
+    request_id: str | None
+    unit_id: str | None
+    proposal_kind: str | None
+    placement_kind: str | None
+    selected_model_id: str | None
+    placed_model_count: int
+    total_model_count: int
+    unplaced_model_count: int
     ready: bool
     hint_lines: tuple[str, ...]
     diagnostic_lines: tuple[str, ...] = ()
@@ -438,6 +457,56 @@ def build_movement_draft_panel(
     )
 
 
+def build_placement_draft_panel(
+    *,
+    placement_draft: PlacementDraft | None,
+    pending_decision: UiDecision | None,
+    status_message: str | None = None,
+    diagnostics: tuple[UiInvalidDiagnostic, ...] = (),
+) -> PlacementDraftPanelView | None:
+    """Build placement draft HUD content without treating previews as authoritative."""
+
+    if placement_draft is not None:
+        status_line = (
+            status_message
+            if diagnostics and status_message is not None
+            else "Placement draft ready"
+            if placement_draft.is_ready
+            else "Placement draft preview"
+        )
+        return PlacementDraftPanelView(
+            status_line=status_line,
+            request_id=placement_draft.proposal_request_id,
+            unit_id=placement_draft.selected_unit_id,
+            proposal_kind=placement_draft.proposal_kind,
+            placement_kind=placement_draft.placement_kind,
+            selected_model_id=placement_draft.selected_model_id,
+            placed_model_count=placement_draft.placed_model_count,
+            total_model_count=placement_draft.total_model_count,
+            unplaced_model_count=placement_draft.unplaced_model_count,
+            ready=placement_draft.is_ready,
+            hint_lines=placement_draft.local_hint_lines,
+            diagnostic_lines=_diagnostic_lines(diagnostics),
+        )
+    proposal = None if pending_decision is None else pending_decision.placement_proposal
+    if proposal is None:
+        return None
+    return PlacementDraftPanelView(
+        status_line=status_message or "Placement proposal pending",
+        request_id=proposal.request_id,
+        unit_id=proposal.unit_instance_id,
+        proposal_kind=proposal.proposal_kind,
+        placement_kind=proposal.placement_kind,
+        selected_model_id=None,
+        placed_model_count=0,
+        total_model_count=len(proposal.required_model_ids),
+        unplaced_model_count=len(proposal.required_model_ids),
+        ready=False,
+        hint_lines=("Select the requested unit to begin placement drafting.",),
+        diagnostic_lines=_diagnostic_lines(diagnostics),
+    )
+
+
 def build_assignment_hud_panel(
     *,
     movement_draft: MovementDraft | None,
@@ -448,6 +517,7 @@ def build_assignment_hud_panel(
     preferences: UiPreferences,
     preference_source_label: str,
     event_log_lines: tuple[str, ...] = (),
+    placement_draft: PlacementDraft | None = None,
 ) -> AssignmentHudPanelView | None:
     """Build the generic request-scoped assignment HUD without adding rules semantics."""
 
@@ -457,6 +527,15 @@ def build_assignment_hud_panel(
     if movement_draft is not None:
         return _movement_assignment_hud_panel(
             movement_draft=movement_draft,
+            pending_decision=pending_decision,
+            diagnostic_lines=diagnostic_lines,
+            preferences=preferences,
+            preference_source_label=preference_source_label,
+            chain_lines=_chain_lines(preferences, event_log_lines),
+        )
+    if placement_draft is not None:
+        return _placement_assignment_hud_panel(
+            placement_draft=placement_draft,
             pending_decision=pending_decision,
             diagnostic_lines=diagnostic_lines,
             preferences=preferences,
@@ -506,6 +585,68 @@ def build_assignment_hud_panel(
             chain_lines=_chain_lines(preferences, event_log_lines),
         )
     return None
+
+
+def _placement_assignment_hud_panel(
+    *,
+    placement_draft: PlacementDraft,
+    pending_decision: UiDecision | None,
+    diagnostic_lines: tuple[str, ...],
+    preferences: UiPreferences,
+    preference_source_label: str | None,
+    chain_lines: tuple[str, ...],
+) -> AssignmentHudPanelView:
+    assignment_views = placement_draft.assignment_views()
+    placed_ref_keys = tuple(
+        f"model:{assignment.model_id}"
+        for assignment in assignment_views
+        if assignment.state == "placed"
+    )
+    unplaced_ref_keys = tuple(
+        f"model:{assignment.model_id}"
+        for assignment in assignment_views
+        if assignment.state == "unplaced"
+    )
+    active_ref_keys = tuple(
+        f"model:{assignment.model_id}"
+        for assignment in assignment_views
+        if assignment.state == "current"
+    )
+    groups = tuple(
+        AssignmentHudGroupView(
+            group_id=f"placement:{assignment.model_id}",
+            label=f"{assignment.model_id}: {assignment.state}",
+            state=_placement_assignment_state(assignment.state),
+            source_ref_keys=(f"model:{assignment.model_id}",),
+            target_ref_keys=(),
+            summary_lines=(
+                "Draft pose assigned."
+                if assignment.position is not None
+                else "No draft pose assigned yet.",
+            ),
+        )
+        for assignment in assignment_views[:5]
+    )
+    return AssignmentHudPanelView(
+        request_id=placement_draft.proposal_request_id,
+        decision_type=None if pending_decision is None else pending_decision.decision_type,
+        actor_id=None if pending_decision is None else pending_decision.actor_id,
+        operation_kind="placement",
+        proposal_kind=placement_draft.proposal_kind,
+        active_layer="model",
+        active_selection_ref_keys=active_ref_keys,
+        assigned_ref_keys=placed_ref_keys,
+        unassigned_ref_keys=unplaced_ref_keys,
+        readiness_state=_placement_readiness_state(placement_draft, diagnostic_lines),
+        groups=groups,
+        advisory_lines=placement_draft.local_hint_lines,
+        diagnostic_lines=diagnostic_lines,
+        display_mode=preferences.hud.assignment_hud_mode,
+        warning_markers_visible=preferences.hud.show_assignment_warning_markers,
+        chain_breadcrumbs_visible=preferences.hud.show_chain_breadcrumbs,
+        chain_lines=chain_lines,
+        preference_source_label=preference_source_label,
+    )
 
 
 def build_context_menu(
@@ -905,6 +1046,27 @@ def _movement_readiness_state(
     return "empty"
 
 
+def _placement_readiness_state(
+    placement_draft: PlacementDraft,
+    diagnostic_lines: tuple[str, ...],
+) -> AssignmentReadinessState:
+    if diagnostic_lines:
+        return "invalid"
+    if placement_draft.is_ready:
+        return "ready"
+    if placement_draft.placed_model_count:
+        return "incomplete"
+    return "empty"
+
+
+def _placement_assignment_state(state: str) -> AssignmentGroupState:
+    if state == "current":
+        return "active"
+    if state == "placed":
+        return "assigned"
+    return "unassigned"
+
+
 def _missing_movement_proposal_unit_diagnostic_line(
     *,
     view: BattlefieldView | None,
@@ -1010,6 +1172,9 @@ def decision_targets_unit(decision: UiDecision, unit_id: str) -> bool:
 
     proposal = decision.movement_proposal
     if proposal is not None and proposal.unit_instance_id == unit_id:
+        return True
+    placement_proposal = decision.placement_proposal
+    if placement_proposal is not None and placement_proposal.unit_instance_id == unit_id:
         return True
     return _payload_targets_unit(decision.payload, unit_id)
 

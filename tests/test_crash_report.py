@@ -211,3 +211,13 @@ class FailingCoreClient:
     ) -> UiClientStatus:
         del request_id, payload, result_id
         raise AssertionError("submit_movement_payload should not be called.")
+
+    def submit_parameterized_payload(
+        self,
+        *,
+        request_id: str,
+        payload: JsonValue,
+        result_id: str,
+    ) -> UiClientStatus:
+        del request_id, payload, result_id
+        raise AssertionError("submit_parameterized_payload should not be called.")

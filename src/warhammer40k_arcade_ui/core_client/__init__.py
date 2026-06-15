@@ -4,6 +4,7 @@ from warhammer40k_arcade_ui.core_client.fake_client import (
     FakeCoreClient,
     SubmittedFiniteDecision,
     SubmittedMovementPayload,
+    SubmittedParameterizedPayload,
 )
 from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
 from warhammer40k_arcade_ui.core_client.protocol import (
@@ -19,6 +20,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiInvalidDiagnostic,
     UiMovementProposalRequest,
     UiParameterizedProposalRequest,
+    UiPlacementProposalRequest,
 )
 
 __all__ = [
@@ -28,6 +30,7 @@ __all__ = [
     "LocalSessionClient",
     "SubmittedFiniteDecision",
     "SubmittedMovementPayload",
+    "SubmittedParameterizedPayload",
     "UiClientProtocolError",
     "UiClientStatus",
     "UiCoreClient",
@@ -38,4 +41,5 @@ __all__ = [
     "UiInvalidDiagnostic",
     "UiMovementProposalRequest",
     "UiParameterizedProposalRequest",
+    "UiPlacementProposalRequest",
 ]
