@@ -12,9 +12,10 @@ projection data, collects intent, submits engine requests, and displays diagnost
 
 1. [Phase 25: Legacy UI Cleanup](phase-25-legacy-ui-cleanup.md)
 2. [Phase 26: Generic Finite Decision Workbench Polish](phase-26-generic-finite-decision-workbench.md)
-3. [Phase 27: Generic Placement Proposal Editor](phase-27-generic-placement-proposal-editor.md)
-4. [Phase 28: Movement Proposal Family Generalization](phase-28-movement-proposal-family-generalization.md)
-5. [Phase 29: Generic Assignment Proposal Editors](phase-29-generic-assignment-proposal-editors.md)
+3. [Phase 27: Current Action View And Clickable HUD Buttons](phase-27-current-action-view-and-clickable-hud-buttons.md)
+4. [Phase 28: Generic Placement Proposal Editor](phase-28-generic-placement-proposal-editor.md)
+5. [Phase 29: Movement Proposal Family Generalization](phase-29-movement-proposal-family-generalization.md)
+6. [Phase 30: Generic Assignment Proposal Editors](phase-30-generic-assignment-proposal-editors.md)
 
 ## Preliminary Setup-Flow Plans
 
