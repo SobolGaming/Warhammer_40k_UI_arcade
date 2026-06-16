@@ -623,25 +623,25 @@ def test_player_units_roster_scroll_region_consumes_wheel_without_zooming() -> N
 
 _LIVE_SMOKE_DEPLOYMENT_POINTS: dict[str, tuple[tuple[float, float], ...]] = {
     "army-beta:scout-redeploy-unit": (
-        (40.0, 9.0),
-        (40.0, 10.8),
-        (40.0, 12.6),
-        (38.4, 9.0),
-        (38.4, 10.8),
+        (8.0, 4.0),
+        (8.0, 5.8),
+        (8.0, 7.6),
+        (9.6, 4.0),
+        (9.6, 5.8),
     ),
     "army-alpha:deep-strike-unit": (
-        (4.0, 34.0),
-        (4.0, 35.8),
-        (4.0, 37.6),
+        (4.0, 40.8),
+        (5.5, 40.8),
+        (4.0, 42.3),
     ),
     "army-alpha:scout-redeploy-unit": (
-        (4.0, 39.0),
-        (4.0, 40.8),
-        (4.0, 42.6),
-        (5.6, 39.0),
-        (5.6, 40.8),
+        (8.0, 40.8),
+        (9.5, 40.8),
+        (8.0, 42.3),
+        (9.5, 42.3),
+        (11.0, 40.8),
     ),
-    "army-alpha:strategic-reserve-unit": ((11.0, 39.0),),
+    "army-alpha:strategic-reserve-unit": ((14.0, 42.6),),
 }
 
 

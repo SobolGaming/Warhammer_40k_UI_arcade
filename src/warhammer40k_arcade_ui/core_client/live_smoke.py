@@ -61,8 +61,8 @@ from warhammer40k_arcade_ui.render.view_models import BattlefieldView
 
 LIVE_CORE_SMOKE_VIEWER_PLAYER_ID = "player-a"
 LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID = "fixed:assassination:bring_it_down"
-_LIVE_CORE_SMOKE_MISSION_POOL_ENTRY_ID = "mission-take-and-hold-vs-take-and-hold-layout-3"
-_LIVE_CORE_SMOKE_TERRAIN_LAYOUT_ID = "take-and-hold-vs-take-and-hold-layout-3"
+_LIVE_CORE_SMOKE_MISSION_POOL_ENTRY_ID = "mission-take-and-hold-vs-take-and-hold-layout-1"
+_LIVE_CORE_SMOKE_TERRAIN_LAYOUT_ID = "take-and-hold-vs-take-and-hold-layout-1"
 type LiveCoreSmokeStopPhase = Literal[
     "setup",
     "secondary-missions",
@@ -673,7 +673,7 @@ def _smoke_deployment_pose(
     facing_degrees = 0.0 if x_direction > 0.0 else 180.0
     return Pose.at(
         origin_x + (row * 1.6 * x_direction),
-        origin_y + (column * 1.8),
+        origin_y + (column * _deployment_y_step(request_context)),
         0.0,
         facing_degrees=facing_degrees,
     )
@@ -688,8 +688,14 @@ def _deployment_origin_for_unit(
     width = max_x - min_x
     margin = min(max(width - 2.0, 1.5), max(_deployment_x_margin_for_unit(unit_instance_id), 1.5))
     x = min_x + margin if _deployment_x_direction(request_context) > 0.0 else max_x - margin
-    preferred_y = min_y + _deployment_y_offset_for_unit(unit_instance_id)
-    y = min(max(preferred_y, min_y + 2.0), max_y - 2.0)
+    preferred_y = min_y + _deployment_y_offset_for_unit(
+        unit_instance_id,
+        zone_min_y=min_y,
+    )
+    y = min(
+        max(preferred_y, min_y + _deployment_y_lower_margin_for_unit(unit_instance_id, min_y)),
+        max_y - 2.0,
+    )
     return (x, y)
 
 
@@ -710,19 +716,46 @@ def _deployment_x_direction(request_context: _SmokePlacementRequest) -> float:
     return 1.0 if zone_mid_x <= table_mid_x else -1.0
 
 
-def _deployment_y_offset_for_unit(unit_instance_id: str) -> float:
+def _deployment_y_offset_for_unit(
+    unit_instance_id: str,
+    *,
+    zone_min_y: float,
+) -> float:
+    if zone_min_y >= 40.0:
+        if "strategic-reserve-unit" in unit_instance_id:
+            return 2.6
+        return 0.8
     if "deep-strike-unit" in unit_instance_id:
         return 4.0
     if "scout-redeploy-unit" in unit_instance_id:
-        return 9.0
+        return 4.0
     if "strategic-reserve-unit" in unit_instance_id:
         return 9.0
-    return 9.0
+    return 4.0
+
+
+def _deployment_y_step(request_context: _SmokePlacementRequest) -> float:
+    _, min_y, _, _ = _deployment_zone_bounds(request_context)
+    if min_y >= 40.0:
+        return 1.27
+    return 1.8
+
+
+def _deployment_y_lower_margin_for_unit(unit_instance_id: str, zone_min_y: float) -> float:
+    if zone_min_y >= 40.0:
+        if "strategic-reserve-unit" in unit_instance_id:
+            return 2.6
+        return 0.8
+    return 2.0
 
 
 def _deployment_x_margin_for_unit(unit_instance_id: str) -> float:
+    if "deep-strike-unit" in unit_instance_id:
+        return 4.0
+    if "scout-redeploy-unit" in unit_instance_id:
+        return 8.0
     if "strategic-reserve-unit" in unit_instance_id:
-        return 11.0
+        return 14.0
     return 4.0
 
 
@@ -741,7 +774,7 @@ def _smoke_redeploy_pose(
     x_direction = _deployment_x_direction(request_context)
     return Pose.at(
         origin_x + (row * 1.8 * x_direction),
-        origin_y + (column * 1.8),
+        origin_y + (column * _deployment_y_step(request_context)),
         0.0,
         facing_degrees=0.0 if x_direction > 0.0 else 180.0,
     )
