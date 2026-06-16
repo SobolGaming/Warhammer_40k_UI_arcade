@@ -11,6 +11,13 @@ displays authoritative results or diagnostics returned by the core engine.
 
 Target Python version: **3.14.5**.
 
+Supported core engine revision: `Warhammer_40k_AI`
+`f01293fb4d83249482ecee1c304e21f18e57055e` (`Remove unvalidated terrain and
+add deployment-zone layout helpers`). The package lock currently resolves
+`warhammer40k-core-v2` to this commit. When updating the core dependency, update
+this line and review the active plans under `docs/plans/` for adapter or
+projection drift.
+
 From a clean clone of this repository:
 
 ```bash

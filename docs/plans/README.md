@@ -14,10 +14,17 @@ projection data, collects intent, submits engine requests, and displays diagnost
 2. [Phase 26: Generic Finite Decision Workbench Polish](finished/phase-26-generic-finite-decision-workbench.md)
 3. [Phase 27: Current Action View And Clickable HUD Buttons](finished/phase-27-current-action-view-and-clickable-hud-buttons.md)
 4. [Phase 28: Generic Placement Proposal Editor](finished/phase-28-generic-placement-proposal-editor.md)
-5. [Phase 29: Movement Proposal Family Generalization](phase-29-movement-proposal-family-generalization.md)
+5. [Phase 29: Movement Proposal Family Generalization](finished/phase-29-movement-proposal-family-generalization.md)
 6. [Phase 30: Generic Assignment Proposal Editors](phase-30-generic-assignment-proposal-editors.md)
-7. [Phase 31: Scrollable Player Units Roster](phase-31-scrollable-player-units-roster.md)
+7. [Phase 31: Scrollable Player Units Roster](finished/phase-31-scrollable-player-units-roster.md)
 8. [Phase 32: Opportunity Window And Interface Intent Tray](phase-32-opportunity-window-and-interface-intent-tray.md)
+9. [Phase 33: Typed Terrain Area Projection Adaptation](phase-33-typed-terrain-area-projection-adaptation.md)
+
+## Core Drift Adaptation
+
+Phase 33 is a projection-drift adaptation introduced after reviewing `Warhammer_40k_AI`
+`f01293fb4d83249482ecee1c304e21f18e57055e`. It should be handled before more
+gameplay-editor work if the current live core layouts need visual terrain parity.
 
 ## Preliminary Setup-Flow Plans
 

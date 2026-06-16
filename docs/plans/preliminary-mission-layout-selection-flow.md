@@ -14,6 +14,13 @@ Mission and table setup data can be configuration-driven. The UI renders the eng
 receives, but should not choose mission or terrain layout through a private path unless the core
 emits a request requiring that user choice.
 
+Reviewed against `Warhammer_40k_AI`
+`f01293fb4d83249482ecee1c304e21f18e57055e` on 2026-06-16. The core now projects
+validated layout terrain as typed `mission_setup.terrain_areas` and may project
+`objective_terrain_areas` links, but mission/layout choice itself is still configuration-driven in
+the reviewed core state. Rendering those typed projection fields is concrete UI drift and is tracked
+as Phase 33; this preliminary plan remains about future user-facing setup selection decisions.
+
 ## Core Dependency
 
 Concretize this plan only after the core exposes one or more setup `DecisionRequest` surfaces for:
@@ -21,6 +28,8 @@ Concretize this plan only after the core exposes one or more setup `DecisionRequ
 - mission pack or mission selection;
 - deployment map selection;
 - terrain layout selection;
+- typed terrain-area layout preview selection if the core exposes it as a choice rather than only a
+  projection;
 - objective layout selection;
 - any roll-off or randomization result the engine owns.
 
