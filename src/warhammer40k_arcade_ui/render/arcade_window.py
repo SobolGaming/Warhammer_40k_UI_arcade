@@ -1580,6 +1580,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             view=self._battlefield_view,
             selection=self._selection_state,
             pending_decision=self._pending_decision,
+            model_display_by_id=self._known_model_display_by_id,
         )
         if next_draft is not None:
             self._movement_draft = None

@@ -16,6 +16,9 @@ from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, ModelBaseView, UnitView
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
+_MM_PER_INCH = 25.4
+_DEFAULT_PRESENTATION_BASE_RADIUS_INCHES = 0.75
+
 PLACEMENT_PROPOSAL_DECISION_TYPES = frozenset(
     (
         "submit_placement_proposal",
@@ -204,6 +207,7 @@ class PlacementDraft:
         view: BattlefieldView,
         selection: SelectionState,
         pending_decision: UiDecision | None,
+        model_display_by_id: JsonObject | None = None,
     ) -> PlacementDraft | None:
         """Create a placement draft for the current placement proposal."""
 
@@ -221,7 +225,11 @@ class PlacementDraft:
         model_poses = tuple(
             PlacementModelPose(
                 model_id=model_id,
-                base_radius=_model_base_radius(models_by_id.get(model_id)),
+                base_radius=_model_base_radius(
+                    models_by_id.get(model_id),
+                    model_id=model_id,
+                    model_display_by_id=model_display_by_id,
+                ),
                 position=None,
             )
             for model_id in model_ids
@@ -549,8 +557,42 @@ def _models_by_id(unit: UnitView | None) -> dict[str, ModelBaseView]:
     return {model.model_id: model for model in unit.models}
 
 
-def _model_base_radius(model: ModelBaseView | None) -> float:
-    return 0.75 if model is None else model.base_radius
+def _model_base_radius(
+    model: ModelBaseView | None,
+    *,
+    model_id: str,
+    model_display_by_id: JsonObject | None,
+) -> float:
+    if model is not None:
+        return model.base_radius
+    display = _optional_model_display(
+        model_id=model_id,
+        model_display_by_id=model_display_by_id,
+    )
+    if display is None:
+        return _DEFAULT_PRESENTATION_BASE_RADIUS_INCHES
+    base_size = _json_object("model_display.base_size", display.get("base_size"))
+    kind = _non_empty_string("model_display.base_size.kind", base_size.get("kind"))
+    if kind == "circular":
+        return _positive_float_field(base_size, "diameter_mm") / _MM_PER_INCH / 2.0
+    if kind == "oval":
+        length = _positive_float_field(base_size, "length_mm")
+        width = _positive_float_field(base_size, "width_mm")
+        return max(length, width) / _MM_PER_INCH / 2.0
+    raise PlacementDraftError(f"model_display base_size kind is unsupported: {kind}.")
+
+
+def _optional_model_display(
+    *,
+    model_id: str,
+    model_display_by_id: JsonObject | None,
+) -> JsonObject | None:
+    if model_display_by_id is None:
+        return None
+    display_value = model_display_by_id.get(model_id)
+    if display_value is None:
+        return None
+    return _json_object("model_display", display_value)
 
 
 def _army_id_from_unit_instance_id(unit_instance_id: str, player_id: str) -> str:
@@ -582,6 +624,17 @@ def _validate_positive(field_name: str, value: float) -> None:
     _validate_finite(field_name, value)
     if value <= 0.0:
         raise PlacementDraftError(f"{field_name} must be positive.")
+
+
+def _positive_float_field(payload: JsonObject, key: str) -> float:
+    try:
+        value = payload[key]
+    except KeyError as exc:
+        raise PlacementDraftError(f"{key} is required.") from exc
+    number = _validate_finite(key, value)
+    if number <= 0.0:
+        raise PlacementDraftError(f"{key} must be positive.")
+    return number
 
 
 def _validate_finite(field_name: str, value: object) -> float:
