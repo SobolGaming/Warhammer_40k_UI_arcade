@@ -219,9 +219,13 @@ Phase 23 also reserves named HUD presentation groups for runtime view-model outp
 Not every reserved group is populated by every current runtime screen. The renderer treats missing
 data as absent display data, not as a gameplay fallback.
 
-The current live selected-unit datasheet binding reserves the standard stat labels `M`, `T`, `SV`,
-`W`, `LD`, and `OC`. If the engine projection does not expose those values yet, the live HUD renders
-`?` placeholders so the card keeps the same shape as previews and future real datasheets.
+The live selected-unit datasheet binding uses the core engine's viewer-safe display projection.
+When a unit is selected, `selected_unit.stats` is populated from
+`model_display_by_id[model_instance_id].current_characteristics` for the standard stat labels `M`,
+`T`, `SV`, `W`, `LD`, and `OC`. The widget uses the engine-provided `display_value` strings, so the
+HUD can show values such as `3+`, `6+`, or `-` without recomputing rules. Static fixtures or older
+core projections that do not expose model display records still render `?` placeholders so the card
+keeps the same shape as previews.
 
 ## Available Icons
 

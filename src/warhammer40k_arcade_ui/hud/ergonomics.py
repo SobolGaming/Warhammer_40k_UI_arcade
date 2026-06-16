@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
 from warhammer40k_arcade_ui.hud.dice_tray import DiceTrayView, build_dice_tray_view
@@ -34,6 +35,8 @@ from warhammer40k_arcade_ui.preferences.registries import command_registry
 from warhammer40k_arcade_ui.preferences.schema import HotkeyBinding, UiPreferences
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView
 
+_DATASHEET_STAT_KEYS = ("M", "T", "SV", "W", "LD", "OC")
+
 
 @dataclass(frozen=True, slots=True)
 class HudErgonomicsView:
@@ -42,6 +45,7 @@ class HudErgonomicsView:
     status_chips: tuple[StatusChipView, ...]
     player_unit_buttons: tuple[HudButtonView, ...]
     selected_unit_card: UnitRailCardView | None
+    selected_unit_stats: JsonObject
     selected_unit_rows: tuple[IconTextBarView, ...]
     current_action: CurrentActionView
     action_rows: tuple[IconTextBarView, ...]
@@ -73,6 +77,7 @@ def build_hud_ergonomics_view(
     selected_unit_id: str | None = None,
     viewer_player_id: str | None = None,
     unit_display_by_id: JsonObject | None = None,
+    model_display_by_id: JsonObject | None = None,
 ) -> HudErgonomicsView:
     """Build a toolkit-backed HUD summary without adding rule semantics."""
 
@@ -81,7 +86,14 @@ def build_hud_ergonomics_view(
         movement_draft_panel,
         placement_draft_panel,
     )
-    selected_unit_card = _selected_unit_card(unit_panel)
+    selected_unit_display = _selected_unit_display(
+        unit_panel=unit_panel,
+        unit_display_by_id=unit_display_by_id,
+    )
+    selected_unit_card = _selected_unit_card(
+        unit_panel=unit_panel,
+        unit_display=selected_unit_display,
+    )
     return HudErgonomicsView(
         status_chips=_status_chips(
             view=view,
@@ -97,7 +109,15 @@ def build_hud_ergonomics_view(
             unit_display_by_id=unit_display_by_id,
         ),
         selected_unit_card=selected_unit_card,
-        selected_unit_rows=_selected_unit_rows(unit_panel),
+        selected_unit_stats=_selected_unit_stats(
+            unit_panel=unit_panel,
+            unit_display=selected_unit_display,
+            model_display_by_id=model_display_by_id,
+        ),
+        selected_unit_rows=_selected_unit_rows(
+            unit_panel=unit_panel,
+            unit_display=selected_unit_display,
+        ),
         current_action=_current_action_view(
             finite_decision_panel=finite_decision_panel,
             movement_draft_panel=movement_draft_panel,
@@ -177,28 +197,39 @@ def _status_chips(
     return tuple(chips)
 
 
-def _selected_unit_card(unit_panel: UnitPanelView | None) -> UnitRailCardView | None:
+def _selected_unit_card(
+    *,
+    unit_panel: UnitPanelView | None,
+    unit_display: JsonObject | None,
+) -> UnitRailCardView | None:
     if unit_panel is None:
         return None
+    display_name = _unit_display_name(unit_display) or unit_panel.unit_label
+    short_label = _json_text(unit_display.get("datasheet_id")) if unit_display is not None else ""
     return UnitRailCardView(
         component_id="selected_unit_card",
-        unit_label=unit_panel.unit_label,
-        short_label=unit_panel.unit_id,
+        unit_label=display_name,
+        short_label=short_label or unit_panel.unit_id,
         model_count_summary=f"{unit_panel.model_count} model(s)",
         activation_state="selected",
         color_role="player",
     )
 
 
-def _selected_unit_rows(unit_panel: UnitPanelView | None) -> tuple[IconTextBarView, ...]:
+def _selected_unit_rows(
+    *,
+    unit_panel: UnitPanelView | None,
+    unit_display: JsonObject | None,
+) -> tuple[IconTextBarView, ...]:
     if unit_panel is None:
         return ()
+    display_name = _unit_display_name(unit_display) or unit_panel.unit_label
     rows = [
         IconTextBarView(
             component_id="selected_unit_header",
             icon_id="entity.unit",
             primary_label="Selected unit",
-            secondary_label=unit_panel.unit_label,
+            secondary_label=display_name,
             value_text=f"{unit_panel.model_count} model(s)",
             state="selected",
         ),
@@ -235,6 +266,98 @@ def _selected_unit_rows(unit_panel: UnitPanelView | None) -> tuple[IconTextBarVi
             )
         )
     return tuple(rows)
+
+
+def _selected_unit_display(
+    *,
+    unit_panel: UnitPanelView | None,
+    unit_display_by_id: JsonObject | None,
+) -> JsonObject | None:
+    if unit_panel is None or unit_display_by_id is None:
+        return None
+    value = unit_display_by_id.get(unit_panel.unit_id)
+    if type(value) is dict:
+        return value
+    return None
+
+
+def _selected_unit_stats(
+    *,
+    unit_panel: UnitPanelView | None,
+    unit_display: JsonObject | None,
+    model_display_by_id: JsonObject | None,
+) -> JsonObject:
+    if unit_panel is None or model_display_by_id is None:
+        return {}
+    model_display = _selected_model_display(
+        unit_panel=unit_panel,
+        unit_display=unit_display,
+        model_display_by_id=model_display_by_id,
+    )
+    if model_display is None:
+        return {}
+    characteristics = model_display.get("current_characteristics")
+    if type(characteristics) is not dict:
+        return {}
+    stats: JsonObject = {}
+    for key in _DATASHEET_STAT_KEYS:
+        value = _characteristic_display_value(characteristics.get(key))
+        if value:
+            stats[key] = value
+    return stats
+
+
+def _selected_model_display(
+    *,
+    unit_panel: UnitPanelView,
+    unit_display: JsonObject | None,
+    model_display_by_id: JsonObject,
+) -> JsonObject | None:
+    for model_id in _selected_model_display_ids(unit_panel=unit_panel, unit_display=unit_display):
+        value = model_display_by_id.get(model_id)
+        if type(value) is dict:
+            return value
+    for value in model_display_by_id.values():
+        if type(value) is dict and _json_text(value.get("unit_instance_id")) == unit_panel.unit_id:
+            return value
+    return None
+
+
+def _selected_model_display_ids(
+    *,
+    unit_panel: UnitPanelView,
+    unit_display: JsonObject | None,
+) -> tuple[str, ...]:
+    ids: list[str] = []
+    if unit_panel.selected_model_id is not None:
+        ids.append(unit_panel.selected_model_id)
+    if unit_display is not None:
+        model_instance_ids = unit_display.get("model_instance_ids")
+        if type(model_instance_ids) is list:
+            ids.extend(item for item in model_instance_ids if type(item) is str and item not in ids)
+    return tuple(ids)
+
+
+def _characteristic_display_value(value: object) -> str:
+    if type(value) is not dict:
+        return ""
+    characteristic = cast(JsonObject, value)
+    display_value = characteristic.get("display_value")
+    if type(display_value) is str and display_value:
+        return display_value
+    final = characteristic.get("final")
+    if type(final) in (int, float):
+        return str(final)
+    raw = characteristic.get("raw")
+    if type(raw) in (int, float, str):
+        return str(raw)
+    return ""
+
+
+def _unit_display_name(unit_display: JsonObject | None) -> str:
+    if unit_display is None:
+        return ""
+    return _json_text(unit_display.get("unit_display_name"))
 
 
 def _player_unit_buttons(

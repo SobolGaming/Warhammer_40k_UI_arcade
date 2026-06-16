@@ -156,7 +156,6 @@ def test_core_projection_preserves_terrain_and_deployment_layout_labels() -> Non
             _terrain_feature(
                 center=(10.0, 20.0),
                 size=(6.0, 4.0),
-                source_id="custom-terrain-source",
             )
         )
     )

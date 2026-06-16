@@ -209,6 +209,9 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._known_unit_display_by_id: JsonObject = (
             {} if initial_game_view is None else dict(initial_game_view.unit_display_by_id)
         )
+        self._known_model_display_by_id: JsonObject = (
+            {} if initial_game_view is None else dict(initial_game_view.model_display_by_id)
+        )
         self._preferences = resolved_preferences
         self._preference_diagnostics = preference_diagnostics
         self._preference_source_label = preference_source_label
@@ -491,6 +494,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             selected_unit_id=self._hud_selected_unit_id(),
             viewer_player_id=self._viewer_player_id,
             unit_display_by_id=self._known_unit_display_by_id,
+            model_display_by_id=self._known_model_display_by_id,
         )
         world_primitives = build_world_primitives(
             self._battlefield_view,
@@ -1689,6 +1693,10 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._known_unit_display_by_id = {
             **self._known_unit_display_by_id,
             **view.unit_display_by_id,
+        }
+        self._known_model_display_by_id = {
+            **self._known_model_display_by_id,
+            **view.model_display_by_id,
         }
         event_log_lines = _hud_event_lines(
             current_lines=self._battlefield_view.hud.event_log_lines,
