@@ -105,7 +105,65 @@ def test_submit_finite_option_records_client_submission_and_refreshes_events() -
         ),
     )
 
-    next_state = submit_finite_option(
+    result = submit_finite_option(
+        state=FiniteDecisionUiState(
+            pending_decision=_finite_decision(),
+            event_cursor=3,
+            event_log_lines=("ready",),
+        ),
+        client=fake,
+        selected_option_id="normal_move",
+        viewer_player_id="player-a",
+    )
+    next_state = result.finite_state
+
+    assert fake.finite_submissions[0].request_id == "decision-request-000004"
+    assert fake.finite_submissions[0].selected_option_id == "normal_move"
+    assert fake.finite_submissions[0].result_id == "ui-result-000001"
+    assert result.viewer_player_id == "player-a"
+    assert next_state.pending_decision is not None
+    assert next_state.pending_decision.is_parameterized is True
+    assert next_state.status_message == "Proposal required: normal_move"
+    assert next_state.event_cursor == 4
+    assert next_state.event_log_lines[-1] == "decision_recorded: player-a"
+
+
+def test_submit_finite_option_refreshes_next_actor_view_for_hidden_options() -> None:
+    next_decision = _secondary_mission_decision_for_player_b()
+    redacted_next_decision = _secondary_mission_decision_for_player_b(options=())
+    fake = FakeCoreClient(
+        status=UiClientStatus(
+            stage="battle",
+            status_kind="waiting_for_decision",
+            decision=next_decision,
+            payload=None,
+        ),
+        view_by_player_id={
+            "player-a": _game_view(
+                pending_decision=redacted_next_decision,
+                viewer_player_id="player-a",
+            ),
+            "player-b": _game_view(
+                pending_decision=next_decision,
+                viewer_player_id="player-b",
+            ),
+        },
+        event_delta_by_player_id={
+            "player-b": UiEventDelta(
+                viewer_player_id="player-b",
+                cursor=3,
+                next_cursor=4,
+                events=(
+                    {
+                        "event_type": "decision_requested",
+                        "payload": {"player_id": "player-b"},
+                    },
+                ),
+            )
+        },
+    )
+
+    result = submit_finite_option(
         state=FiniteDecisionUiState(
             pending_decision=_finite_decision(),
             event_cursor=3,
@@ -116,14 +174,13 @@ def test_submit_finite_option_records_client_submission_and_refreshes_events() -
         viewer_player_id="player-a",
     )
 
-    assert fake.finite_submissions[0].request_id == "decision-request-000004"
-    assert fake.finite_submissions[0].selected_option_id == "normal_move"
-    assert fake.finite_submissions[0].result_id == "ui-result-000001"
-    assert next_state.pending_decision is not None
-    assert next_state.pending_decision.is_parameterized is True
-    assert next_state.status_message == "Proposal required: normal_move"
-    assert next_state.event_cursor == 4
-    assert next_state.event_log_lines[-1] == "decision_recorded: player-a"
+    assert result.viewer_player_id == "player-b"
+    assert fake.view_requests == ["player-b"]
+    assert fake.event_delta_requests == [(3, "player-b")]
+    assert result.finite_state.pending_decision == next_decision
+    assert result.finite_state.highlighted_option is not None
+    assert result.finite_state.highlighted_option.option_id == "assassination"
+    assert result.finite_state.event_log_lines[-1] == "decision_requested: player-b"
 
 
 def test_submit_finite_option_does_not_call_client_for_parameterized_request() -> None:
@@ -138,12 +195,13 @@ def test_submit_finite_option_does_not_call_client_for_parameterized_request() -
         ),
     )
 
-    next_state = submit_finite_option(
+    result = submit_finite_option(
         state=FiniteDecisionUiState(pending_decision=_parameterized_decision()),
         client=fake,
         selected_option_id=None,
         viewer_player_id="player-a",
     )
+    next_state = result.finite_state
 
     assert fake.finite_submissions == []
     assert next_state.status_kind == "invalid"
@@ -303,13 +361,43 @@ def _parameterized_decision() -> UiDecision:
     )
 
 
-def _game_view(pending_decision: UiDecision | None) -> UiGameView:
+def _secondary_mission_decision_for_player_b(
+    *,
+    options: tuple[UiFiniteOption, ...] | None = None,
+) -> UiDecision:
+    visible_options = (
+        UiFiniteOption(
+            option_id="assassination",
+            label="Assassination",
+            payload={"secondary_mission_id": "assassination"},
+        ),
+        UiFiniteOption(
+            option_id="cleanse",
+            label="Cleanse",
+            payload={"secondary_mission_id": "cleanse"},
+        ),
+    )
+    return UiDecision(
+        request_id="decision-request-000006",
+        decision_type="select_secondary_missions",
+        actor_id="player-b",
+        payload={"secondary_mission_count": 2},
+        options=visible_options if options is None else options,
+        is_parameterized=False,
+    )
+
+
+def _game_view(
+    pending_decision: UiDecision | None,
+    *,
+    viewer_player_id: str = "player-a",
+) -> UiGameView:
     return UiGameView(
-        viewer_player_id="player-a",
+        viewer_player_id=viewer_player_id,
         game_id="phase6-game",
         stage="battle",
         battle_round=1,
-        active_player_id="player-a",
+        active_player_id=viewer_player_id,
         current_setup_step=None,
         current_battle_phase="movement",
         player_ids=("player-a", "player-b"),

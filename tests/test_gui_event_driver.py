@@ -190,6 +190,70 @@ def test_finite_submission_transition_focuses_new_highlighted_unit() -> None:
         driver.close()
 
 
+def test_finite_submission_actor_handoff_refreshes_with_next_actor_view() -> None:
+    follow_up_decision = replace(
+        _guardian_first_unit_selection_decision(),
+        actor_id="player_2",
+    )
+    redacted_follow_up_decision = replace(follow_up_decision, options=())
+    core_client = FakeCoreClient(
+        status=UiClientStatus(
+            stage="battle",
+            status_kind="waiting_for_decision",
+            decision=follow_up_decision,
+            payload=None,
+        ),
+        view_by_player_id={
+            "player_1": _game_view(
+                redacted_follow_up_decision,
+                viewer_player_id="player_1",
+            ),
+            "player_2": _game_view(
+                follow_up_decision,
+                viewer_player_id="player_2",
+            ),
+        },
+        event_delta_by_player_id={
+            "player_2": UiEventDelta(
+                viewer_player_id="player_2",
+                cursor=0,
+                next_cursor=1,
+                events=(
+                    {
+                        "event_type": "decision_requested",
+                        "payload": {"player_id": "player_2"},
+                    },
+                ),
+            )
+        },
+    )
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+        pending_decision=_unit_selection_decision(),
+        core_client=core_client,
+        viewer_player_id="player_1",
+    )
+    driver = GuiTestDriver(window=window, core_client=core_client)
+    try:
+        driver.click_world((7.0, 18.0))
+
+        assert driver.selected_unit_id == "intercessor_squad"
+        assert driver.highlighted_finite_option_id == "intercessor"
+
+        driver.press_key(arcade.key.ENTER)
+
+        assert driver.window.viewer_player_id == "player_2"
+        assert core_client.view_requests == ["player_2"]
+        assert core_client.event_delta_requests == [(0, "player_2")]
+        assert driver.highlighted_finite_option_id == "guardian"
+        assert driver.selected_unit_id == "guardian_squad"
+        assert driver.selected_model_id is None
+    finally:
+        driver.close()
+
+
 def test_fake_fixture_confirm_without_pending_decision_is_noop() -> None:
     window = ArcadeWarhammerWindow(
         config=AppConfig(window_width=1280, window_height=800, resizable=False),
@@ -570,13 +634,17 @@ def _guardian_first_unit_selection_decision() -> UiDecision:
     )
 
 
-def _game_view(pending_decision: UiDecision | None) -> UiGameView:
+def _game_view(
+    pending_decision: UiDecision | None,
+    *,
+    viewer_player_id: str = "player_1",
+) -> UiGameView:
     return UiGameView(
-        viewer_player_id="player_1",
+        viewer_player_id=viewer_player_id,
         game_id="finite-focus-test-game",
         stage="battle",
         battle_round=1,
-        active_player_id="player_1",
+        active_player_id=viewer_player_id,
         current_setup_step=None,
         current_battle_phase="movement",
         player_ids=("player_1", "player_2"),

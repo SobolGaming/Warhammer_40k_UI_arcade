@@ -29,6 +29,24 @@ class FiniteDecisionSubmission:
 
 
 @dataclass(frozen=True, slots=True)
+class SubmissionRefreshResult:
+    """Viewer-aware status, projection, and event refresh after an engine submission."""
+
+    finite_state: FiniteDecisionUiState
+    refreshed_view: UiGameView
+    viewer_player_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class FiniteDecisionSubmissionResult:
+    """State returned after attempting to submit a finite decision option."""
+
+    finite_state: FiniteDecisionUiState
+    refreshed_view: UiGameView | None = None
+    viewer_player_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class FiniteDecisionUiState:
     """Local finite-decision focus, status, result-ID, and event cursor state."""
 
@@ -289,22 +307,65 @@ def submit_finite_option(
     client: UiCoreClient,
     selected_option_id: str | None,
     viewer_player_id: str,
-) -> FiniteDecisionUiState:
+) -> FiniteDecisionSubmissionResult:
     """Submit a selected finite option and refresh status, view, and viewer events."""
 
     prepared_state, submission = state.prepare_submission(selected_option_id)
     if submission is None:
-        return prepared_state
+        return FiniteDecisionSubmissionResult(finite_state=prepared_state)
     submitted_status = client.submit_finite(
         request_id=submission.request_id,
         selected_option_id=submission.selected_option_id,
         result_id=submission.result_id,
     )
-    refreshed_state = prepared_state.apply_status(submitted_status)
-    refreshed_view = client.get_view(viewer_player_id)
+    refresh = refresh_submission_projection(
+        state=prepared_state,
+        status=submitted_status,
+        client=client,
+        fallback_viewer_player_id=viewer_player_id,
+    )
+    return FiniteDecisionSubmissionResult(
+        finite_state=refresh.finite_state,
+        refreshed_view=refresh.refreshed_view,
+        viewer_player_id=refresh.viewer_player_id,
+    )
+
+
+def refresh_submission_projection(
+    *,
+    state: FiniteDecisionUiState,
+    status: UiClientStatus,
+    client: UiCoreClient,
+    fallback_viewer_player_id: str,
+) -> SubmissionRefreshResult:
+    """Refresh status, projection, and events for the actor who owns the next request."""
+
+    refreshed_state = state.apply_status(status)
+    refresh_viewer_player_id = refresh_viewer_player_id_for_status(
+        status=status,
+        fallback_viewer_player_id=fallback_viewer_player_id,
+    )
+    refreshed_view = client.get_view(refresh_viewer_player_id)
     refreshed_state = refreshed_state.apply_view(refreshed_view)
-    event_delta = client.get_events_since(refreshed_state.event_cursor, viewer_player_id)
-    return refreshed_state.apply_event_delta(event_delta)
+    event_delta = client.get_events_since(refreshed_state.event_cursor, refresh_viewer_player_id)
+    refreshed_state = refreshed_state.apply_event_delta(event_delta)
+    return SubmissionRefreshResult(
+        finite_state=refreshed_state,
+        refreshed_view=refreshed_view,
+        viewer_player_id=refresh_viewer_player_id,
+    )
+
+
+def refresh_viewer_player_id_for_status(
+    *,
+    status: UiClientStatus,
+    fallback_viewer_player_id: str,
+) -> str:
+    """Return the viewer whose projection should be loaded after a status transition."""
+
+    if status.decision is None or status.decision.actor_id is None:
+        return fallback_viewer_player_id
+    return status.decision.actor_id
 
 
 def _option_by_id(

@@ -257,12 +257,13 @@ def test_phase21a_finite_completion_and_decline_options_submit_exact_ids(
         ),
     )
 
-    next_state = submit_finite_option(
+    result = submit_finite_option(
         state=FiniteDecisionUiState(pending_decision=decision),
         client=fake,
         selected_option_id=option_id,
         viewer_player_id="player_1",
     )
+    next_state = result.finite_state
 
     assert fake.finite_submissions[0].request_id == decision.request_id
     assert fake.finite_submissions[0].selected_option_id == option_id
