@@ -276,6 +276,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 ],
             },
         )
+        self._sync_selection_to_highlighted_option(source="initial_state")
 
     @property
     def camera(self) -> WorldCamera:
@@ -383,6 +384,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         """Display label for the active UI preferences source."""
 
         return self._preference_source_label
+
+    @property
+    def viewer_player_id(self) -> str:
+        """Return the currently active viewer player for HUD and projection refreshes."""
+
+        return self._viewer_player_id
 
     def on_draw(self) -> None:
         """Render the battlefield and fixed HUD."""
@@ -1407,25 +1414,63 @@ class ArcadeWarhammerWindow(arcade.Window):
             ),
         )
         self._battlefield_view = replace(self._battlefield_view, hud=hud)
-        self._focus_entity_for_highlighted_option(
-            source=focus_source,
-            sync_movement_draft=False,
-        )
+        self._sync_selection_to_highlighted_option(source=focus_source)
         self._sync_movement_draft()
         self._sync_placement_draft()
 
     def _hud_selected_unit_id(self) -> str | None:
+        highlighted_unit_id = self._highlighted_option_hud_unit_id()
+        if highlighted_unit_id is not None:
+            return highlighted_unit_id
         if self._selection_state.selected_unit_id is not None:
             return self._selection_state.selected_unit_id
-        highlighted_option = self._finite_state.highlighted_option
-        if highlighted_option is not None:
-            return _option_hud_unit_id(
-                option_id=highlighted_option.option_id,
-                payload=highlighted_option.payload,
-                view=self._battlefield_view,
-                unit_display_by_id=self._known_unit_display_by_id,
-            )
         return None
+
+    def _highlighted_option_hud_unit_id(self) -> str | None:
+        highlighted_option = self._finite_state.highlighted_option
+        if highlighted_option is None:
+            return None
+        return _option_hud_unit_id(
+            option_id=highlighted_option.option_id,
+            payload=highlighted_option.payload,
+            view=self._battlefield_view,
+            unit_display_by_id=self._known_unit_display_by_id,
+        )
+
+    def _sync_selection_to_highlighted_option(self, *, source: str) -> None:
+        if self._focus_entity_for_highlighted_option(
+            source=source,
+            sync_movement_draft=False,
+        ):
+            return
+        self._focus_hud_unit_for_highlighted_option(source=source)
+
+    def _focus_hud_unit_for_highlighted_option(self, *, source: str) -> bool:
+        unit_id = self._highlighted_option_hud_unit_id()
+        if unit_id is None:
+            return False
+        if (
+            self._selection_state.selected_unit_id == unit_id
+            and self._selection_state.selected_model_id is None
+        ):
+            return False
+        self._selection_state = self._selection_state.select_model_id(
+            unit_id=unit_id,
+            model_id=None,
+            preferences=self._preferences,
+        )
+        self._trace_event(
+            category="ui",
+            event_name="ui.finite_option_hud_unit_focused",
+            summary={
+                "source": source,
+                "unit_id": unit_id,
+                "option_id": None
+                if self._finite_state.highlighted_option is None
+                else self._finite_state.highlighted_option.option_id,
+            },
+        )
+        return True
 
     def _sync_movement_draft(self) -> None:
         current = self._movement_draft

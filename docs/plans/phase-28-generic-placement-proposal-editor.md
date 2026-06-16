@@ -280,6 +280,9 @@ Implemented in the Phase 28 PR:
   tester sees the side that is currently being asked to deploy.
 - Updated Player Units roster selection so unprojected deployment units can focus matching finite
   options without requiring a battlefield projection first.
+- Updated finite-option transitions so when the engine advances from one deployment placement to
+  the next unit-selection request, the Player Units roster starts highlighted on the same unit as
+  the Current Action option without requiring a mouse or keyboard refresh first.
 
 Important limitations:
 

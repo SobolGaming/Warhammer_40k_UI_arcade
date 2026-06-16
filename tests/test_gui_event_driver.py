@@ -272,7 +272,7 @@ def test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_dra
     driver = GuiTestDriver.launch(core_mode="live_core_smoke")
     try:
         assert driver.core_mode == "live_core_smoke"
-        assert driver.viewer_player_id == "player-a"
+        assert driver.window.viewer_player_id == "player-a"
         assert driver.pending_decision_type == "select_movement_unit"
         assert driver.battlefield_unit_ids == (
             "army-alpha:intercessor-unit-1",
@@ -357,6 +357,7 @@ def test_player_units_roster_button_selects_undeployed_finite_unit_option() -> N
         assert driver.viewer_player_id == "player-b"
         assert driver.pending_decision_type == "select_deployment_unit"
         assert driver.highlighted_finite_option_id == "deploy:army-beta:intercessor-unit-2"
+        assert driver.selected_unit_id == "army-beta:intercessor-unit-2"
 
         driver.window.on_draw()
         roster_button = next(
@@ -384,6 +385,54 @@ def test_player_units_roster_button_selects_undeployed_finite_unit_option() -> N
         )
         assert driver.window.placement_draft is not None
         assert driver.window.placement_draft.selected_unit_id == "army-beta:intercessor-unit-4"
+    finally:
+        driver.close()
+
+
+def test_next_deployment_roster_starts_synced_to_current_action_option() -> None:
+    driver = GuiTestDriver.live_core_smoke(stop_at_phase="deployment")
+    try:
+        assert driver.pending_decision_type == "select_deployment_unit"
+        assert driver.highlighted_finite_option_id == "deploy:army-beta:intercessor-unit-2"
+        assert driver.selected_unit_id == "army-beta:intercessor-unit-2"
+
+        driver.press_key(arcade.key.ENTER)
+
+        assert driver.pending_decision_type == "submit_deployment_placement"
+        assert driver.window.placement_draft is not None
+
+        for point in (
+            (56.0, 7.0),
+            (56.0, 8.6),
+            (56.0, 10.2),
+            (54.4, 7.8),
+            (54.4, 9.4),
+        ):
+            driver.click_world(point)
+
+        assert driver.window.placement_draft is not None
+        assert driver.window.placement_draft.unplaced_model_count == 0
+
+        driver.press_key(arcade.key.ENTER)
+
+        assert driver.window.placement_draft is not None
+        assert driver.window.placement_draft.is_ready
+
+        driver.press_key(arcade.key.ENTER)
+
+        assert driver.window.viewer_player_id == "player-a"
+        assert driver.pending_decision_type == "select_deployment_unit"
+        assert driver.highlighted_finite_option_id == "deploy:army-alpha:intercessor-unit-1"
+        assert driver.selected_unit_id == "army-alpha:intercessor-unit-1"
+
+        driver.window.on_draw()
+        selected_roster_button = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == "select_unit"
+            and region.unit_id == "army-alpha:intercessor-unit-1"
+        )
+        assert selected_roster_button.unit_id == driver.selected_unit_id
     finally:
         driver.close()
 
