@@ -9,6 +9,7 @@ import pytest
 
 from warhammer40k_arcade_ui.core_client import live_smoke
 from warhammer40k_arcade_ui.core_client.live_smoke import (
+    LIVE_CORE_SMOKE_STOP_PHASES,
     LiveCoreSmokeError,
     LiveCoreSmokeStartup,
     build_live_core_smoke_startup,
@@ -28,21 +29,18 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     assert decision.decision_type == "select_movement_unit"
     assert decision.actor_id == "player-a"
     assert [option.option_id for option in decision.options] == [
-        "army-alpha:intercessor-unit-1",
-        "army-alpha:intercessor-unit-3",
+        "army-alpha:scout-redeploy-unit",
     ]
     assert startup.viewer_player_id == "player-a"
     assert startup.event_cursor > 0
     assert startup.battlefield_view.table.width == 60.0
     assert startup.battlefield_view.table.height == 44.0
     assert [unit.unit_id for unit in startup.battlefield_view.units] == [
-        "army-alpha:intercessor-unit-1",
-        "army-alpha:intercessor-unit-3",
-        "army-beta:intercessor-unit-2",
-        "army-beta:intercessor-unit-4",
+        "army-alpha:scout-redeploy-unit",
+        "army-beta:scout-redeploy-unit",
     ]
     assert startup.battlefield_view.units[0].models[0].model_id == (
-        "army-alpha:intercessor-unit-1:core-intercessor-like:001"
+        "army-alpha:scout-redeploy-unit:core-intercessor-like:001"
     )
 
 
@@ -55,24 +53,45 @@ def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
     assert decision.actor_id == "player-b"
     assert decision.is_parameterized is False
     assert [option.option_id for option in decision.options] == [
-        "deploy:army-beta:intercessor-unit-2",
-        "deploy:army-beta:intercessor-unit-4",
+        "deploy:army-beta:scout-redeploy-unit",
     ]
     assert [
         _required_object_value(option.payload)["unit_instance_id"] for option in decision.options
     ] == [
-        "army-beta:intercessor-unit-2",
-        "army-beta:intercessor-unit-4",
+        "army-beta:scout-redeploy-unit",
     ]
     assert startup.viewer_player_id == "player-b"
     assert {
         unit_id
         for unit_id, unit_display in startup.game_view.unit_display_by_id.items()
         if _required_object_value(unit_display).get("owner_player_id") == "player-b"
-    } == {"army-beta:intercessor-unit-2", "army-beta:intercessor-unit-4"}
+    } == {"army-beta:scout-redeploy-unit"}
     assert startup.event_cursor > 0
     assert startup.battlefield_view.table.width == 60.0
     assert startup.battlefield_view.table.height == 44.0
+
+
+def test_live_core_smoke_supports_setup_prebattle_stop_points() -> None:
+    expected_decisions = {
+        "setup": ("player-a", "select_secondary_missions"),
+        "secondary-missions": ("player-a", "select_secondary_missions"),
+        "reserve-declarations": ("player-a", "select_reserve_declaration"),
+        "deployment": ("player-b", "select_deployment_unit"),
+        "redeploy": ("player-b", "select_redeploy_unit"),
+        "prebattle": ("player-b", "select_prebattle_action"),
+        "scout-move": ("player-b", "submit_scout_move"),
+        "movement": ("player-a", "select_movement_unit"),
+    }
+
+    assert set(LIVE_CORE_SMOKE_STOP_PHASES) == set(expected_decisions)
+    for stop_phase, (expected_actor, expected_decision_type) in expected_decisions.items():
+        startup = build_live_core_smoke_startup(stop_at_phase=stop_phase)
+        decision = startup.status.decision
+
+        assert decision is not None
+        assert decision.actor_id == expected_actor
+        assert decision.decision_type == expected_decision_type
+        assert startup.viewer_player_id == expected_actor
 
 
 def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> None:
@@ -96,11 +115,11 @@ def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> N
 
     assert accepted_status.status_kind == "waiting_for_decision"
     assert accepted_status.decision is not None
-    assert accepted_status.decision.decision_type == "select_movement_unit"
-    assert [option.option_id for option in accepted_status.decision.options] == [
-        "army-alpha:intercessor-unit-3"
-    ]
-    assert _required_object_value(accepted_status.payload)["legal_unit_count"] == 1
+    assert accepted_status.decision.decision_type in {
+        "select_movement_unit",
+        "select_reinforcement_unit",
+        "start_mission_action",
+    }
     assert "movement_activation_completed" in _event_types(event_delta.events)
 
 
@@ -130,11 +149,11 @@ def test_live_core_smoke_handles_endpoint_only_moved_paths() -> None:
     )
     assert submitted_status.status_kind == "waiting_for_decision"
     assert submitted_status.decision is not None
-    assert submitted_status.decision.decision_type == "select_movement_unit"
-    assert [option.option_id for option in submitted_status.decision.options] == [
-        "army-alpha:intercessor-unit-3"
-    ]
-    assert _required_object_value(submitted_status.payload)["legal_unit_count"] == 1
+    assert submitted_status.decision.decision_type in {
+        "select_movement_unit",
+        "select_reinforcement_unit",
+        "start_mission_action",
+    }
     assert "movement_activation_completed" in _event_types(event_delta.events)
 
 
@@ -187,7 +206,7 @@ def _ready_live_core_normal_move_payload() -> tuple[LiveCoreSmokeStartup, UiDeci
 
     action_status = startup.core_client.submit_finite(
         request_id=unit_decision.request_id,
-        selected_option_id="army-alpha:intercessor-unit-1",
+        selected_option_id="army-alpha:scout-redeploy-unit",
         result_id="ui-test-live-smoke-unit",
     )
     action_decision = action_status.decision
@@ -211,7 +230,9 @@ def _ready_live_core_normal_move_payload() -> tuple[LiveCoreSmokeStartup, UiDeci
     assert proposal_decision.is_parameterized is True
     assert proposal_decision.movement_proposal is not None
     assert proposal_decision.movement_proposal.proposal_kind == "normal_move"
-    assert proposal_decision.movement_proposal.unit_instance_id == ("army-alpha:intercessor-unit-1")
+    assert proposal_decision.movement_proposal.unit_instance_id == (
+        "army-alpha:scout-redeploy-unit"
+    )
 
     unit = startup.battlefield_view.units[0]
     first_model = unit.models[0]

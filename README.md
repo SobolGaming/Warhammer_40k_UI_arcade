@@ -147,30 +147,50 @@ use the same YAML dialect plus placeholder `sample_data`. For a user-level guide
 bindings, sizing, overflow, and shape customization, see
 [docs/hud-customization.md](docs/hud-customization.md).
 
-## Live core smoke stop points
+## Live Smoke Test Options
 
-The normal live smoke path auto-answers setup and deployment decisions, then opens the UI at the
-first movement-unit decision:
+The live smoke path launches a real in-process core session using the engine's canonical
+setup/prebattle smoke fixture. It starts from the earliest currently exposed setup request and can
+auto-answer earlier smoke decisions to pause at a specific setup, prebattle, or battle decision.
+The default stop point is `movement`:
 
 ```bash
 uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
 ```
 
-To manually test the generic placement editor against the real local core, stop the same smoke
-scenario at the first deployment unit-selection request:
+Use `--stop-at-phase` to start the UI at one of the currently supported real core smoke checkpoints:
 
 ```bash
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase setup --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase secondary-missions --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase reserve-declarations --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase deployment --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase redeploy --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase prebattle --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase scout-move --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase movement --ui-prefs docs/preferences/default.yaml
 ```
 
-This path still uses the real core session. It only pauses before the smoke harness would otherwise
-auto-select and auto-place deployment units. The current smoke mission follows the core deployment
-order, so the first paused deployment choice is currently for `player-b`; the UI launches from that
-actor's viewer perspective for this stop point. Click a unit row in Player Units or the matching
-Current Action option to select the deployment unit, press `ENTER`, then place the requested models
-in the matching `player-b deployment` zone before reviewing/submitting the draft. The Player Units
-panel should show the current actor's full smoke-test army with current, placed, and unplaced rows
-distinguished.
+Stop points:
+
+- `setup` and `secondary-missions`: pause at the first `select_secondary_missions` request.
+- `reserve-declarations`: pause at `select_reserve_declaration` before the smoke harness declares
+  Strategic Reserves and Deep Strike units.
+- `deployment`: pause at `select_deployment_unit` for `player-b`, before the harness auto-selects
+  and places deployment units. Use this to test the placement editor against real deployment
+  requests.
+- `redeploy`: pause at `select_redeploy_unit` after ordinary deployment and before the harness
+  answers the redeploy placement branch.
+- `prebattle`: pause at `select_prebattle_action` after redeploy handling. This currently exposes
+  the smoke fixture's Scout action and completion option.
+- `scout-move`: pause at the parameterized `submit_scout_move` request so the movement-family draft
+  tool can be tested against a real Scout Move proposal.
+- `movement`: auto-answer setup and prebattle smoke decisions, including Scout Move, then pause at
+  the first battle-round `select_movement_unit` request.
+
+All scripted choices are submitted through the real local core session. They are only defaults for
+getting to the selected smoke checkpoint; after the Arcade window opens, reviewer actions go through
+the normal UI/client/core decision path.
 
 ## Forensic event traces
 

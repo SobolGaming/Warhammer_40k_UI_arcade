@@ -275,13 +275,11 @@ def test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_dra
         assert driver.window.viewer_player_id == "player-a"
         assert driver.pending_decision_type == "select_movement_unit"
         assert driver.battlefield_unit_ids == (
-            "army-alpha:intercessor-unit-1",
-            "army-alpha:intercessor-unit-3",
-            "army-beta:intercessor-unit-2",
-            "army-beta:intercessor-unit-4",
+            "army-alpha:scout-redeploy-unit",
+            "army-beta:scout-redeploy-unit",
         )
 
-        unit_id = "army-alpha:intercessor-unit-3"
+        unit_id = "army-alpha:scout-redeploy-unit"
         unit_position = driver.first_model_position_for_unit(unit_id)
         driver.click_world(unit_position)
 
@@ -322,7 +320,7 @@ def test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_dra
         assert driver.pending_proposal_kind == "normal_move"
         assert driver.selected_unit_id == unit_id
         assert driver.movement_selected_model_ids == (
-            "army-alpha:intercessor-unit-3:core-intercessor-like:001",
+            "army-alpha:scout-redeploy-unit:core-intercessor-like:001",
         )
         assert not driver.movement_draft_ready
     finally:
@@ -337,16 +335,16 @@ def test_player_units_roster_button_selects_matching_battlefield_unit() -> None:
             region
             for region in driver.hud_button_hit_regions
             if region.action_kind == "select_unit"
-            and region.unit_id == "army-alpha:intercessor-unit-3"
+            and region.unit_id == "army-alpha:scout-redeploy-unit"
         )
         center_x = round((roster_button.bounds[0] + roster_button.bounds[2]) / 2.0)
         center_y = round((roster_button.bounds[1] + roster_button.bounds[3]) / 2.0)
 
         driver.click_screen(center_x, center_y)
 
-        assert driver.selected_unit_id == "army-alpha:intercessor-unit-3"
+        assert driver.selected_unit_id == "army-alpha:scout-redeploy-unit"
         assert driver.selected_model_id is None
-        assert driver.highlighted_finite_option_id == "army-alpha:intercessor-unit-3"
+        assert driver.highlighted_finite_option_id == "army-alpha:scout-redeploy-unit"
     finally:
         driver.close()
 
@@ -356,24 +354,24 @@ def test_player_units_roster_button_selects_undeployed_finite_unit_option() -> N
     try:
         assert driver.viewer_player_id == "player-b"
         assert driver.pending_decision_type == "select_deployment_unit"
-        assert driver.highlighted_finite_option_id == "deploy:army-beta:intercessor-unit-2"
-        assert driver.selected_unit_id == "army-beta:intercessor-unit-2"
+        assert driver.highlighted_finite_option_id == "deploy:army-beta:scout-redeploy-unit"
+        assert driver.selected_unit_id == "army-beta:scout-redeploy-unit"
 
         driver.window.on_draw()
         roster_button = next(
             region
             for region in driver.hud_button_hit_regions
             if region.action_kind == "select_unit"
-            and region.unit_id == "army-beta:intercessor-unit-4"
+            and region.unit_id == "army-beta:scout-redeploy-unit"
         )
         center_x = round((roster_button.bounds[0] + roster_button.bounds[2]) / 2.0)
         center_y = round((roster_button.bounds[1] + roster_button.bounds[3]) / 2.0)
 
         driver.click_screen(center_x, center_y)
 
-        assert driver.selected_unit_id == "army-beta:intercessor-unit-4"
+        assert driver.selected_unit_id == "army-beta:scout-redeploy-unit"
         assert driver.selected_model_id is None
-        assert driver.highlighted_finite_option_id == "deploy:army-beta:intercessor-unit-4"
+        assert driver.highlighted_finite_option_id == "deploy:army-beta:scout-redeploy-unit"
 
         driver.press_key(arcade.key.ENTER)
 
@@ -381,10 +379,10 @@ def test_player_units_roster_button_selects_undeployed_finite_unit_option() -> N
         assert driver.window.pending_decision is not None
         assert driver.window.pending_decision.placement_proposal is not None
         assert driver.window.pending_decision.placement_proposal.unit_instance_id == (
-            "army-beta:intercessor-unit-4"
+            "army-beta:scout-redeploy-unit"
         )
         assert driver.window.placement_draft is not None
-        assert driver.window.placement_draft.selected_unit_id == "army-beta:intercessor-unit-4"
+        assert driver.window.placement_draft.selected_unit_id == "army-beta:scout-redeploy-unit"
     finally:
         driver.close()
 
@@ -393,8 +391,8 @@ def test_next_deployment_roster_starts_synced_to_current_action_option() -> None
     driver = GuiTestDriver.live_core_smoke(stop_at_phase="deployment")
     try:
         assert driver.pending_decision_type == "select_deployment_unit"
-        assert driver.highlighted_finite_option_id == "deploy:army-beta:intercessor-unit-2"
-        assert driver.selected_unit_id == "army-beta:intercessor-unit-2"
+        assert driver.highlighted_finite_option_id == "deploy:army-beta:scout-redeploy-unit"
+        assert driver.selected_unit_id == "army-beta:scout-redeploy-unit"
 
         driver.press_key(arcade.key.ENTER)
 
@@ -422,58 +420,31 @@ def test_next_deployment_roster_starts_synced_to_current_action_option() -> None
 
         assert driver.window.viewer_player_id == "player-a"
         assert driver.pending_decision_type == "select_deployment_unit"
-        assert driver.highlighted_finite_option_id == "deploy:army-alpha:intercessor-unit-1"
-        assert driver.selected_unit_id == "army-alpha:intercessor-unit-1"
+        assert driver.highlighted_finite_option_id == "deploy:army-alpha:scout-redeploy-unit"
+        assert driver.selected_unit_id == "army-alpha:scout-redeploy-unit"
 
         driver.window.on_draw()
         selected_roster_button = next(
             region
             for region in driver.hud_button_hit_regions
             if region.action_kind == "select_unit"
-            and region.unit_id == "army-alpha:intercessor-unit-1"
+            and region.unit_id == "army-alpha:scout-redeploy-unit"
         )
         assert selected_roster_button.unit_id == driver.selected_unit_id
     finally:
         driver.close()
 
 
-def test_manual_deployments_refresh_authoritative_projection_for_movement_clicks() -> None:
+def test_manual_deployments_refresh_authoritative_projection_before_prebattle() -> None:
     driver = GuiTestDriver.live_core_smoke(stop_at_phase="deployment")
     try:
         _deploy_all_live_smoke_units(driver)
 
-        assert driver.pending_decision_type == "select_movement_unit"
+        assert driver.pending_decision_type == "resolve_sequencing_order"
         assert driver.battlefield_unit_ids == (
-            "army-alpha:intercessor-unit-1",
-            "army-alpha:intercessor-unit-3",
-            "army-beta:intercessor-unit-2",
-            "army-beta:intercessor-unit-4",
+            "army-alpha:scout-redeploy-unit",
+            "army-beta:scout-redeploy-unit",
         )
-
-        unit_id = "army-alpha:intercessor-unit-1"
-        driver.click_world(driver.first_model_position_for_unit(unit_id))
-
-        assert driver.selected_unit_id == unit_id
-        assert driver.highlighted_finite_option_id == unit_id
-
-        driver.press_key(arcade.key.ENTER)
-
-        assert driver.pending_decision_type == "select_movement_action"
-        assert _pending_payload(driver)["unit_instance_id"] == unit_id
-
-        driver.press_key(arcade.key.TAB)
-
-        assert driver.highlighted_finite_option_id == "normal_move"
-
-        driver.press_key(arcade.key.ENTER)
-
-        assert driver.pending_decision_type == "submit_movement_proposal"
-        assert driver.pending_proposal_kind == "normal_move"
-        assert driver.selected_unit_id == unit_id
-        assert driver.movement_selected_model_ids == (
-            "army-alpha:intercessor-unit-1:core-intercessor-like:001",
-        )
-        assert driver.window.movement_draft is not None
         assert driver.finite_status_kind == "waiting_for_decision"
     finally:
         driver.close()
@@ -500,33 +471,19 @@ def test_player_units_roster_scroll_region_consumes_wheel_without_zooming() -> N
 
 
 _LIVE_SMOKE_DEPLOYMENT_POINTS: dict[str, tuple[tuple[float, float], ...]] = {
-    "army-beta:intercessor-unit-2": (
+    "army-beta:scout-redeploy-unit": (
         (56.0, 7.0),
         (56.0, 8.6),
         (56.0, 10.2),
         (54.4, 7.8),
         (54.4, 9.4),
     ),
-    "army-alpha:intercessor-unit-1": (
+    "army-alpha:scout-redeploy-unit": (
         (4.0, 7.0),
         (4.0, 8.6),
         (4.0, 10.2),
         (5.6, 7.8),
         (5.6, 9.4),
-    ),
-    "army-beta:intercessor-unit-4": (
-        (56.0, 25.0),
-        (56.0, 26.6),
-        (56.0, 28.2),
-        (54.4, 25.8),
-        (54.4, 27.4),
-    ),
-    "army-alpha:intercessor-unit-3": (
-        (4.0, 25.0),
-        (4.0, 26.6),
-        (4.0, 28.2),
-        (5.6, 25.8),
-        (5.6, 27.4),
     ),
 }
 
@@ -537,7 +494,7 @@ def _deploy_all_live_smoke_units(driver: GuiTestDriver) -> None:
         unit_id = driver.selected_unit_id
         assert unit_id is not None
         _deploy_current_live_smoke_unit(driver, unit_id)
-    assert driver.pending_decision_type == "select_movement_unit"
+    assert driver.pending_decision_type == "resolve_sequencing_order"
 
 
 def _deploy_current_live_smoke_unit(driver: GuiTestDriver, unit_id: str) -> None:

@@ -150,7 +150,7 @@ def test_headless_capture_renders_live_core_smoke_projection(tmp_path: Path) -> 
         )
         first_model_region = _region_around(
             driver.screen_for_world(
-                driver.first_model_position_for_unit("army-alpha:intercessor-unit-1")
+                driver.first_model_position_for_unit("army-alpha:scout-redeploy-unit")
             ),
             radius_px=40,
         )
