@@ -14,28 +14,25 @@ from warhammer40k_arcade_ui.render.core_projection import (
 )
 
 
-def test_core_projection_uses_source_rotated_terrain_footprint() -> None:
-    view = battlefield_view_from_game_view(
-        _game_view(
-            _terrain_feature(
-                center=(23.064466, 21.307107),
-                size=(7.071068, 7.071068),
-                source_id=(
-                    "gw-11e-chapter-approved-2025-26:layout-1:slot-09:"
-                    "ruin_rect_6x4_variant1:rotation-135.000000:origin-26.600-20.600"
-                ),
-            )
-        )
-    )
-
-    footprint = view.terrain[0].footprint
-
+def test_core_projection_uses_structured_terrain_display_geometry() -> None:
     expected_footprint = _rotated_rectangle_points(
         width=6.0,
         depth=4.0,
         rotation_degrees=135.0,
         origin=(26.6, 20.6),
     )
+    view = battlefield_view_from_game_view(
+        _game_view(
+            _terrain_feature(
+                center=(23.064466, 21.307107),
+                size=(7.071068, 7.071068),
+                display_footprint=expected_footprint,
+            )
+        )
+    )
+
+    footprint = view.terrain[0].footprint
+
     assert len(footprint) == len(expected_footprint)
     for actual_point, expected_point in zip(footprint, expected_footprint, strict=True):
         assert math.isclose(actual_point[0], expected_point[0], rel_tol=0.0, abs_tol=1.0e-9)
@@ -44,13 +41,50 @@ def test_core_projection_uses_source_rotated_terrain_footprint() -> None:
     assert not math.isclose(footprint[1][1], footprint[0][1], rel_tol=0.0, abs_tol=1.0e-9)
 
 
-def test_core_projection_falls_back_to_axis_aligned_terrain_footprint() -> None:
+def test_core_projection_rejects_missing_terrain_display_geometry() -> None:
+    terrain_feature = _terrain_feature(
+        center=(10.0, 20.0),
+        size=(6.0, 4.0),
+    )
+    del terrain_feature["display_geometry"]
+
+    with pytest.raises(
+        CoreProjectionRenderError,
+        match=r"terrain_feature\.display_geometry must be a JSON object",
+    ):
+        battlefield_view_from_game_view(_game_view(terrain_feature))
+
+
+def test_core_projection_rejects_malformed_terrain_display_geometry() -> None:
+    terrain_feature = _terrain_feature(
+        center=(10.0, 20.0),
+        size=(6.0, 4.0),
+    )
+    terrain_feature["display_geometry"] = {
+        "schema_version": "terrain-display-v1",
+        "coordinate_space": "battlefield_inches",
+        "display_template_id": "custom-template",
+        "footprint_kind": "circle",
+        "footprint_polygon": [
+            {"x_inches": 7.0, "y_inches": 18.0},
+            {"x_inches": 13.0, "y_inches": 18.0},
+            {"x_inches": 13.0, "y_inches": 22.0},
+        ],
+    }
+
+    with pytest.raises(
+        CoreProjectionRenderError,
+        match="terrain display geometry footprint_kind is unsupported",
+    ):
+        battlefield_view_from_game_view(_game_view(terrain_feature))
+
+
+def test_core_projection_uses_axis_aligned_display_geometry_when_provided() -> None:
     view = battlefield_view_from_game_view(
         _game_view(
             _terrain_feature(
                 center=(10.0, 20.0),
                 size=(6.0, 4.0),
-                source_id="custom-terrain-source",
             )
         )
     )
@@ -69,7 +103,6 @@ def test_core_projection_uses_structured_deployment_zone_shape() -> None:
             _terrain_feature(
                 center=(10.0, 20.0),
                 size=(6.0, 4.0),
-                source_id="custom-terrain-source",
             ),
             deployment_zones=[
                 {
@@ -107,7 +140,6 @@ def test_core_projection_allows_empty_unit_list_during_deployment() -> None:
             _terrain_feature(
                 center=(10.0, 20.0),
                 size=(6.0, 4.0),
-                source_id="custom-terrain-source",
             ),
             placed_armies=[],
         )
@@ -136,16 +168,18 @@ def test_core_projection_preserves_terrain_and_deployment_layout_labels() -> Non
 def test_core_projection_rejects_source_terrain_footprint_bound_mismatch() -> None:
     with pytest.raises(
         CoreProjectionRenderError,
-        match="terrain source footprint does not match projected footprint bounds",
+        match="terrain display footprint does not match projected footprint bounds",
     ):
         battlefield_view_from_game_view(
             _game_view(
                 _terrain_feature(
                     center=(22.0, 21.0),
                     size=(7.071068, 7.071068),
-                    source_id=(
-                        "gw-11e-chapter-approved-2025-26:layout-1:slot-09:"
-                        "ruin_rect_6x4_variant1:rotation-135.000000:origin-26.600-20.600"
+                    display_footprint=_rotated_rectangle_points(
+                        width=6.0,
+                        depth=4.0,
+                        rotation_degrees=135.0,
+                        origin=(26.6, 20.6),
                     ),
                 )
             )
@@ -236,8 +270,13 @@ def _terrain_feature(
     *,
     center: tuple[float, float],
     size: tuple[float, float],
-    source_id: str,
+    display_footprint: tuple[tuple[float, float], ...] | None = None,
 ) -> JsonObject:
+    footprint = (
+        _axis_aligned_rectangle_points(center=center, size=size)
+        if display_footprint is None
+        else display_footprint
+    )
     return cast(
         JsonObject,
         {
@@ -247,10 +286,34 @@ def _terrain_feature(
             "footprint_center_y_inches": center[1],
             "footprint_width_inches": size[0],
             "footprint_depth_inches": size[1],
+            "display_geometry": {
+                "schema_version": "terrain-display-v1",
+                "coordinate_space": "battlefield_inches",
+                "display_template_id": "test-terrain-template",
+                "footprint_kind": "polygon",
+                "footprint_polygon": [
+                    {"x_inches": point[0], "y_inches": point[1]} for point in footprint
+                ],
+            },
             "walls": [],
             "floors": [],
-            "source_id": source_id,
+            "source_id": "custom-terrain-source",
         },
+    )
+
+
+def _axis_aligned_rectangle_points(
+    *,
+    center: tuple[float, float],
+    size: tuple[float, float],
+) -> tuple[tuple[float, float], ...]:
+    half_width = size[0] / 2.0
+    half_height = size[1] / 2.0
+    return (
+        (center[0] - half_width, center[1] - half_height),
+        (center[0] + half_width, center[1] - half_height),
+        (center[0] + half_width, center[1] + half_height),
+        (center[0] - half_width, center[1] + half_height),
     )
 
 
