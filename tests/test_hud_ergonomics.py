@@ -88,7 +88,7 @@ def test_ergonomic_hud_view_summarizes_selected_unit_movement_and_hotkeys() -> N
     assert any(row.primary_label == "Movement" for row in ergonomics.action_rows)
     assert ergonomics.assignment_rows
     assert ergonomics.assignment_rows[0].operation_kind == "movement"
-    assert any(
+    assert not any(
         "Synthetic midpoint witness evidence" in row.secondary_label
         for row in ergonomics.assignment_notice_rows
     )

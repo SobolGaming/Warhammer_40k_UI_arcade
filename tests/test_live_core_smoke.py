@@ -80,7 +80,7 @@ def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> N
     witness = _required_object(payload_preview, "witness")
     model_paths = _required_list(witness, "model_paths")
     assert all(
-        len(_required_list(_required_object_value(model_path), "poses")) == 3
+        len(_required_list(_required_object_value(model_path), "poses")) >= 2
         for model_path in model_paths
     )
 

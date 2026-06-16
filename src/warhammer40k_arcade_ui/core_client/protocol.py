@@ -115,6 +115,12 @@ class UiMovementProposalRequest:
     movement_phase_action: str | None
     placement_kinds: tuple[str, ...]
     context: JsonObject
+    player_id: str | None = None
+    setup_step: str | None = None
+    action_kind: str | None = None
+    source_rule_id: str | None = None
+    ruleset_descriptor_hash: str | None = None
+    scout_distance_inches: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "request_id", _non_empty_string("request_id", self.request_id))
@@ -161,10 +167,63 @@ class UiMovementProposalRequest:
             tuple(_non_empty_string("placement_kind", kind) for kind in self.placement_kinds),
         )
         object.__setattr__(self, "context", _json_object("context", self.context))
+        object.__setattr__(self, "player_id", _optional_string("player_id", self.player_id))
+        object.__setattr__(self, "setup_step", _optional_string("setup_step", self.setup_step))
+        object.__setattr__(self, "action_kind", _optional_string("action_kind", self.action_kind))
+        object.__setattr__(
+            self,
+            "source_rule_id",
+            _optional_string("source_rule_id", self.source_rule_id),
+        )
+        object.__setattr__(
+            self,
+            "ruleset_descriptor_hash",
+            _optional_string("ruleset_descriptor_hash", self.ruleset_descriptor_hash),
+        )
+        if self.scout_distance_inches is not None:
+            scout_distance = self.scout_distance_inches
+            if type(scout_distance) is not int and type(scout_distance) is not float:
+                raise UiClientProtocolError("scout_distance_inches must be a number.")
+            if not math.isfinite(float(scout_distance)) or float(scout_distance) <= 0.0:
+                raise UiClientProtocolError("scout_distance_inches must be positive.")
+            object.__setattr__(self, "scout_distance_inches", float(scout_distance))
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
         proposal = _json_object("movement proposal request payload", payload)
+        if proposal.get("decision_type") == "submit_scout_move":
+            action_kind = _required_string(proposal, "action_kind")
+            return cls(
+                request_id=_required_string(proposal, "request_id"),
+                decision_type=_required_string(proposal, "decision_type"),
+                actor_id=_required_string(proposal, "actor_id"),
+                game_id=_required_string(proposal, "game_id"),
+                battle_round=_optional_int_value(proposal, "battle_round") or 1,
+                phase=_optional_string_value(proposal, "phase") or "setup",
+                unit_instance_id=_required_string(proposal, "unit_instance_id"),
+                proposal_kind=_required_string(proposal, "proposal_kind"),
+                source_decision_request_id=_required_string(
+                    proposal,
+                    "source_decision_request_id",
+                ),
+                source_decision_result_id=_required_string(
+                    proposal,
+                    "source_decision_result_id",
+                ),
+                movement_phase_action=_optional_string_value(
+                    proposal,
+                    "movement_phase_action",
+                )
+                or action_kind,
+                placement_kinds=(),
+                context=_json_object("proposal context", proposal["context"]),
+                player_id=_required_string(proposal, "player_id"),
+                setup_step=_required_string(proposal, "setup_step"),
+                action_kind=action_kind,
+                source_rule_id=_required_string(proposal, "source_rule_id"),
+                ruleset_descriptor_hash=_required_string(proposal, "ruleset_descriptor_hash"),
+                scout_distance_inches=_required_number(proposal, "scout_distance_inches"),
+            )
         return cls(
             request_id=_required_string(proposal, "request_id"),
             decision_type=_required_string(proposal, "decision_type"),
@@ -821,23 +880,45 @@ def _placement_proposal_from_parameterized(
 
 
 def _payload_has_movement_proposal_shape(payload: JsonObject) -> bool:
-    if payload.get("decision_type") != "submit_movement_proposal":
-        return False
-    required_keys = (
-        "request_id",
-        "decision_type",
-        "actor_id",
-        "game_id",
-        "battle_round",
-        "phase",
-        "unit_instance_id",
-        "proposal_kind",
-        "source_decision_request_id",
-        "source_decision_result_id",
-        "placement_kinds",
-        "context",
-    )
-    return all(key in payload for key in required_keys)
+    decision_type = payload.get("decision_type")
+    if decision_type == "submit_scout_move":
+        scout_required_keys: tuple[str, ...] = (
+            "request_id",
+            "decision_type",
+            "actor_id",
+            "game_id",
+            "setup_step",
+            "player_id",
+            "unit_instance_id",
+            "proposal_kind",
+            "action_kind",
+            "source_rule_id",
+            "ruleset_descriptor_hash",
+            "source_decision_request_id",
+            "source_decision_result_id",
+            "scout_distance_inches",
+            "context",
+        )
+        return payload.get("proposal_kind") == "scout_move" and all(
+            key in payload for key in scout_required_keys
+        )
+    if decision_type == "submit_movement_proposal":
+        movement_required_keys: tuple[str, ...] = (
+            "request_id",
+            "decision_type",
+            "actor_id",
+            "game_id",
+            "battle_round",
+            "phase",
+            "unit_instance_id",
+            "proposal_kind",
+            "source_decision_request_id",
+            "source_decision_result_id",
+            "placement_kinds",
+            "context",
+        )
+        return all(key in payload for key in movement_required_keys)
+    return False
 
 
 def _payload_has_placement_proposal_shape(payload: JsonObject) -> bool:
@@ -908,6 +989,15 @@ def _optional_string_value(payload: JsonObject, key: str) -> str | None:
     return _optional_string(key, payload.get(key))
 
 
+def _optional_int_value(payload: JsonObject, key: str) -> int | None:
+    if key not in payload or payload[key] is None:
+        return None
+    value = payload[key]
+    if type(value) is not int:
+        raise UiClientProtocolError(f"{key} must be an integer.")
+    return value
+
+
 def _optional_json_object_value(payload: JsonObject, key: str) -> JsonObject:
     if key not in payload or payload[key] is None:
         return {}
@@ -931,6 +1021,16 @@ def _required_int(payload: JsonObject, key: str) -> int:
     if type(value) is not int:
         raise UiClientProtocolError(f"{key} must be an integer.")
     return value
+
+
+def _required_number(payload: JsonObject, key: str) -> float:
+    value = _required_value(payload, key)
+    if type(value) is not int and type(value) is not float:
+        raise UiClientProtocolError(f"{key} must be a number.")
+    float_value = float(value)
+    if not math.isfinite(float_value):
+        raise UiClientProtocolError(f"{key} must be finite.")
+    return float_value
 
 
 def _required_bool(payload: JsonObject, key: str) -> bool:

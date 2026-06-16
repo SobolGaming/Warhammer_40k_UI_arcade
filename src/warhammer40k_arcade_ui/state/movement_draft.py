@@ -9,6 +9,7 @@ from typing import Literal, cast
 
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
+    JsonValue,
     UiDecision,
     UiMovementProposalRequest,
     validate_json_value,
@@ -24,10 +25,45 @@ from warhammer40k_arcade_ui.state.entity_selection import (
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
 MOVEMENT_PROPOSAL_DECISION_TYPE = "submit_movement_proposal"
+SCOUT_MOVE_DECISION_TYPE = "submit_scout_move"
 MOVEMENT_MODE_CONTEXT_KEY = "movement_mode"
 FALL_BACK_MODE_CONTEXT_KEY = "fall_back_mode"
 MOVEMENT_BUDGET_CONTEXT_KEY = "movement_budget_inches"
-SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS = frozenset(("normal_move", "advance", "fall_back"))
+MAXIMUM_DISTANCE_CONTEXT_KEY = "maximum_distance_inches"
+SCOUT_DISTANCE_CONTEXT_KEY = "scout_distance_inches"
+SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES = frozenset(
+    (
+        MOVEMENT_PROPOSAL_DECISION_TYPE,
+        SCOUT_MOVE_DECISION_TYPE,
+    )
+)
+SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS = frozenset(
+    (
+        "normal_move",
+        "advance",
+        "fall_back",
+        "surge_move",
+        "charge_move",
+        "pile_in",
+        "consolidate",
+        "scout_move",
+    )
+)
+SAMPLED_WITNESS_PROPOSAL_KINDS = frozenset(
+    (
+        "charge_move",
+        "pile_in",
+        "consolidate",
+        "scout_move",
+    )
+)
+NO_WITNESS_NO_MOVE_PROPOSAL_KINDS = frozenset(
+    (
+        "charge_move",
+        "pile_in",
+        "consolidate",
+    )
+)
 
 type MovementDraftMode = Literal["model_assignments"]
 type MovementAssignmentState = Literal["active", "assigned", "unassigned"]
@@ -50,6 +86,23 @@ class MovementProposalContextDiagnostic:
         """Return a compact HUD diagnostic line."""
 
         return f"{self.violation_code} [{self.field}]: {self.message}"
+
+
+@dataclass(frozen=True, slots=True)
+class MovementProposalProfile:
+    """Contract policy for one movement-shaped proposal family."""
+
+    proposal_kind: str
+    decision_type: str
+    requires_sampled_witness: bool
+    allows_no_witness_no_move: bool
+    distance_context_key: str | None
+
+    @property
+    def submits_through_generic_parameterized_client(self) -> bool:
+        """Return whether this request must bypass the movement-only client method."""
+
+        return self.decision_type != MOVEMENT_PROPOSAL_DECISION_TYPE
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,11 +142,14 @@ class MovementModelPath:
 
         return any(math.dist(start, end) > 0.0 for start, end in pairwise(self.points))
 
-    @property
-    def uses_synthetic_payload_midpoint(self) -> bool:
+    def uses_synthetic_payload_midpoint(self, *, requires_sampled_witness: bool) -> bool:
         """Return whether payload serialization inserts midpoint witness evidence."""
 
-        return len(self.points) == 2 and math.dist(self.points[0], self.points[1]) > 0.0
+        return (
+            requires_sampled_witness
+            and len(self.points) == 2
+            and math.dist(self.points[0], self.points[1]) > 0.0
+        )
 
     @property
     def path_length_inches(self) -> float:
@@ -101,12 +157,12 @@ class MovementModelPath:
 
         return _polyline_length(self.points)
 
-    def payload_points(self) -> tuple[WorldPoint, ...]:
+    def payload_points(self, *, requires_sampled_witness: bool) -> tuple[WorldPoint, ...]:
         """Return payload points, including explicit no-op start/end for unchanged models."""
 
         if len(self.points) == 1:
             return (self.points[0], self.points[0])
-        if self.uses_synthetic_payload_midpoint:
+        if self.uses_synthetic_payload_midpoint(requires_sampled_witness=requires_sampled_witness):
             # The engine needs non-endpoint path evidence even for straight moved segments.
             start, end = self.points
             midpoint = ((start[0] + end[0]) / 2.0, (start[1] + end[1]) / 2.0)
@@ -201,12 +257,22 @@ class MovementDraft:
 
     selected_unit_id: str
     proposal_request_id: str
+    decision_type: str
     proposal_kind: str
     movement_phase_action: str
     movement_mode: str | None
     fall_back_mode: str | None
+    game_id: str
+    phase: str
+    player_id: str | None
+    setup_step: str | None
+    action_kind: str | None
+    source_rule_id: str | None
+    ruleset_descriptor_hash: str | None
+    scout_distance_inches: float | None
     source_decision_request_id: str
     source_decision_result_id: str
+    proposal_context: JsonObject
     mode: MovementDraftMode
     entity_selection: EntitySelectionState
     model_paths: tuple[MovementModelPath, ...]
@@ -229,6 +295,13 @@ class MovementDraft:
         )
         object.__setattr__(
             self,
+            "decision_type",
+            _non_empty_string("decision_type", self.decision_type),
+        )
+        if self.decision_type not in SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES:
+            raise MovementDraftError("MovementDraft decision_type is unsupported.")
+        object.__setattr__(
+            self,
             "proposal_kind",
             _non_empty_string("proposal_kind", self.proposal_kind),
         )
@@ -247,7 +320,25 @@ class MovementDraft:
             "fall_back_mode",
             _optional_string("fall_back_mode", self.fall_back_mode),
         )
+        object.__setattr__(self, "game_id", _non_empty_string("game_id", self.game_id))
+        object.__setattr__(self, "phase", _non_empty_string("phase", self.phase))
+        object.__setattr__(self, "player_id", _optional_string("player_id", self.player_id))
+        object.__setattr__(self, "setup_step", _optional_string("setup_step", self.setup_step))
+        object.__setattr__(self, "action_kind", _optional_string("action_kind", self.action_kind))
+        object.__setattr__(
+            self,
+            "source_rule_id",
+            _optional_string("source_rule_id", self.source_rule_id),
+        )
+        object.__setattr__(
+            self,
+            "ruleset_descriptor_hash",
+            _optional_string("ruleset_descriptor_hash", self.ruleset_descriptor_hash),
+        )
+        if self.scout_distance_inches is not None:
+            _validate_positive("scout_distance_inches", self.scout_distance_inches)
         context_diagnostic = _movement_context_diagnostic(
+            decision_type=self.decision_type,
             proposal_kind=self.proposal_kind,
             movement_phase_action=self.movement_phase_action,
             movement_mode=self.movement_mode,
@@ -270,6 +361,11 @@ class MovementDraft:
                 "source_decision_result_id",
                 self.source_decision_result_id,
             ),
+        )
+        object.__setattr__(
+            self,
+            "proposal_context",
+            _json_object("proposal_context", self.proposal_context),
         )
         if self.mode != "model_assignments":
             raise MovementDraftError("Unsupported movement draft mode.")
@@ -326,7 +422,7 @@ class MovementDraft:
             return None
         if proposal.movement_phase_action is None:
             raise MovementDraftError("Movement proposal requires movement_phase_action.")
-        movement_mode = _context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY)
+        movement_mode = _proposal_movement_mode(proposal)
         fall_back_mode = _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY)
         if movement_proposal_context_diagnostic(proposal) is not None:
             return None
@@ -339,12 +435,22 @@ class MovementDraft:
         draft = cls(
             selected_unit_id=unit.unit_id,
             proposal_request_id=proposal.request_id,
+            decision_type=proposal.decision_type,
             proposal_kind=proposal.proposal_kind,
             movement_phase_action=proposal.movement_phase_action,
             movement_mode=movement_mode,
             fall_back_mode=fall_back_mode,
+            game_id=proposal.game_id,
+            phase=proposal.phase,
+            player_id=proposal.player_id,
+            setup_step=proposal.setup_step,
+            action_kind=proposal.action_kind,
+            source_rule_id=proposal.source_rule_id,
+            ruleset_descriptor_hash=proposal.ruleset_descriptor_hash,
+            scout_distance_inches=proposal.scout_distance_inches,
             source_decision_request_id=proposal.source_decision_request_id,
             source_decision_result_id=proposal.source_decision_result_id,
+            proposal_context=proposal.context,
             mode="model_assignments",
             entity_selection=entity_selection,
             model_paths=tuple(
@@ -356,10 +462,7 @@ class MovementDraft:
                 for model in unit.models
             ),
             cursor_preview_point=None,
-            movement_budget_inches=_context_positive_float(
-                proposal.context,
-                MOVEMENT_BUDGET_CONTEXT_KEY,
-            ),
+            movement_budget_inches=_proposal_movement_budget_inches(proposal),
             local_hint_lines=(),
         )
         return draft.with_recomputed_hints(view=view)
@@ -369,6 +472,15 @@ class MovementDraft:
         """Return whether the draft has a JSON-safe payload preview."""
 
         return self.ready_payload is not None
+
+    @property
+    def proposal_profile(self) -> MovementProposalProfile:
+        """Return the movement-family payload policy for this draft."""
+
+        return movement_proposal_profile(
+            decision_type=self.decision_type,
+            proposal_kind=self.proposal_kind,
+        )
 
     @property
     def has_assignments(self) -> bool:
@@ -398,8 +510,13 @@ class MovementDraft:
     def synthetic_witness_model_ids(self) -> tuple[str, ...]:
         """Return model IDs whose payload paths receive generated midpoint evidence."""
 
+        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
         return tuple(
-            path.model_id for path in self.model_paths if path.uses_synthetic_payload_midpoint
+            path.model_id
+            for path in self.model_paths
+            if path.uses_synthetic_payload_midpoint(
+                requires_sampled_witness=requires_sampled_witness
+            )
         )
 
     @property
@@ -415,15 +532,22 @@ class MovementDraft:
         if self.ready_payload is None:
             return ()
         lines: list[str] = []
+        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
         for path in self.model_paths:
             suffix = (
                 ", synthetic midpoint"
-                if path.uses_synthetic_payload_midpoint
+                if path.uses_synthetic_payload_midpoint(
+                    requires_sampled_witness=requires_sampled_witness
+                )
                 else ", no-op"
                 if not path.has_movement
                 else ""
             )
-            lines.append(f"{path.model_id}: {len(path.payload_points())} witness point(s){suffix}")
+            lines.append(
+                f"{path.model_id}: "
+                f"{len(path.payload_points(requires_sampled_witness=requires_sampled_witness))} "
+                f"witness point(s){suffix}"
+            )
         return tuple(lines)
 
     @property
@@ -495,12 +619,12 @@ class MovementDraft:
         proposal = None if pending_decision is None else pending_decision.movement_proposal
         return (
             proposal is not None
-            and proposal.decision_type == MOVEMENT_PROPOSAL_DECISION_TYPE
+            and proposal.decision_type == self.decision_type
             and proposal.unit_instance_id == self.selected_unit_id
             and proposal.request_id == self.proposal_request_id
             and proposal.proposal_kind == self.proposal_kind
             and proposal.movement_phase_action == self.movement_phase_action
-            and _context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY) == self.movement_mode
+            and _proposal_movement_mode(proposal) == self.movement_mode
             and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
         )
 
@@ -510,13 +634,13 @@ class MovementDraft:
         proposal = None if pending_decision is None else pending_decision.movement_proposal
         return (
             proposal is not None
-            and proposal.decision_type == MOVEMENT_PROPOSAL_DECISION_TYPE
+            and proposal.decision_type == self.decision_type
             and proposal.unit_instance_id == self.selected_unit_id
             and proposal.proposal_kind == self.proposal_kind
             and proposal.source_decision_request_id == self.source_decision_request_id
             and proposal.source_decision_result_id == self.source_decision_result_id
             and proposal.movement_phase_action == self.movement_phase_action
-            and _context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY) == self.movement_mode
+            and _proposal_movement_mode(proposal) == self.movement_mode
             and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
         )
 
@@ -703,6 +827,10 @@ class MovementDraft:
             else self
         )
         if not draft.has_assignments:
+            if draft.proposal_profile.allows_no_witness_no_move:
+                return replace(draft, ready_payload=draft.to_payload()).with_recomputed_hints(
+                    view=view
+                )
             return replace(
                 draft,
                 ready_payload=None,
@@ -762,6 +890,9 @@ class MovementDraft:
     def to_payload(self) -> JsonObject:
         """Build the JSON-safe movement proposal payload for the committed draft."""
 
+        if not self.has_assignments and self.proposal_profile.allows_no_witness_no_move:
+            return self._no_witness_no_move_payload()
+        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
         body: JsonObject = {
             "proposal_request_id": self.proposal_request_id,
             "proposal_kind": self.proposal_kind,
@@ -772,7 +903,12 @@ class MovementDraft:
                 "model_paths": [
                     {
                         "model_id": path.model_id,
-                        "poses": [_pose_payload(point) for point in path.payload_points()],
+                        "poses": [
+                            _pose_payload(point)
+                            for point in path.payload_points(
+                                requires_sampled_witness=requires_sampled_witness
+                            )
+                        ],
                     }
                     for path in self.model_paths
                 ],
@@ -780,12 +916,20 @@ class MovementDraft:
             "model_movements": [
                 {
                     "model_instance_id": path.model_id,
-                    "path": [_pose_payload(point) for point in path.payload_points()],
-                    "final_pose": _pose_payload(path.payload_points()[-1]),
+                    "path": [
+                        _pose_payload(point)
+                        for point in path.payload_points(
+                            requires_sampled_witness=requires_sampled_witness
+                        )
+                    ],
+                    "final_pose": _pose_payload(
+                        path.payload_points(requires_sampled_witness=requires_sampled_witness)[-1]
+                    ),
                 }
                 for path in self.model_paths
             ],
         }
+        self._add_family_payload_fields(body)
         if _requires_fall_back_mode(
             proposal_kind=self.proposal_kind,
             movement_phase_action=self.movement_phase_action,
@@ -794,6 +938,77 @@ class MovementDraft:
         elif self.fall_back_mode is not None:
             body["fall_back_mode"] = self.fall_back_mode
         return _json_object("movement proposal payload", body)
+
+    def _no_witness_no_move_payload(self) -> JsonObject:
+        body: JsonObject = {
+            "proposal_request_id": self.proposal_request_id,
+            "proposal_kind": self.proposal_kind,
+            "unit_instance_id": self.selected_unit_id,
+            "movement_phase_action": self.movement_phase_action,
+            "movement_mode": _non_empty_string("movement_mode", self.movement_mode),
+        }
+        self._add_family_payload_fields(body, no_move=True)
+        return _json_object("movement no-move payload", body)
+
+    def _add_family_payload_fields(self, body: JsonObject, *, no_move: bool = False) -> None:
+        if self.proposal_kind == "charge_move":
+            body["charge_target_unit_instance_ids"] = (
+                []
+                if no_move
+                else _first_non_empty_context_string_list(
+                    self.proposal_context,
+                    (
+                        "charge_target_unit_instance_ids",
+                        "reachable_target_unit_instance_ids",
+                    ),
+                )
+            )
+            if "stratagem_handler_id" in self.proposal_context:
+                body["stratagem_handler_id"] = self.proposal_context["stratagem_handler_id"]
+        elif self.proposal_kind == "pile_in":
+            body["pile_in_target_unit_instance_ids"] = (
+                []
+                if no_move
+                else _context_string_list(
+                    self.proposal_context,
+                    "legal_pile_in_target_unit_instance_ids",
+                )
+            )
+        elif self.proposal_kind == "consolidate":
+            body["consolidate_target_unit_instance_ids"] = (
+                []
+                if no_move
+                else _context_string_list(
+                    self.proposal_context,
+                    "legal_consolidate_target_unit_instance_ids",
+                )
+            )
+            if not no_move:
+                consolidation_mode = _first_context_string(
+                    self.proposal_context,
+                    "legal_consolidation_modes",
+                )
+                if consolidation_mode is not None:
+                    body["consolidation_mode"] = consolidation_mode
+        elif self.proposal_kind == "scout_move":
+            body.update(
+                {
+                    "game_id": self.game_id,
+                    "ruleset_descriptor_hash": _non_empty_string(
+                        "ruleset_descriptor_hash",
+                        self.ruleset_descriptor_hash,
+                    ),
+                    "setup_step": _non_empty_string("setup_step", self.setup_step),
+                    "player_id": _non_empty_string("player_id", self.player_id),
+                    "action_kind": _non_empty_string("action_kind", self.action_kind),
+                    "source_rule_id": _non_empty_string("source_rule_id", self.source_rule_id),
+                    "scout_distance_inches": _validated_finite_float(
+                        "scout_distance_inches",
+                        self.scout_distance_inches,
+                    ),
+                    "context": self.proposal_context,
+                }
+            )
 
     def _with_entity_selection(
         self,
@@ -850,7 +1065,7 @@ def movement_proposal_for_selected_unit(
     proposal = pending_decision.movement_proposal
     if proposal is None:
         return None
-    if proposal.decision_type != MOVEMENT_PROPOSAL_DECISION_TYPE:
+    if proposal.decision_type not in SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES:
         return None
     if proposal.proposal_kind not in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS:
         return None
@@ -867,9 +1082,10 @@ def movement_proposal_context_diagnostic(
     """Return a typed diagnostic when movement proposal mode context is incomplete."""
 
     return _movement_context_diagnostic(
+        decision_type=proposal.decision_type,
         proposal_kind=proposal.proposal_kind,
         movement_phase_action=proposal.movement_phase_action,
-        movement_mode=_context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY),
+        movement_mode=_proposal_movement_mode(proposal),
         fall_back_mode=_context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY),
     )
 
@@ -889,7 +1105,7 @@ def _draftable_movement_proposal(
     proposal = pending_decision.movement_proposal
     if proposal is None:
         return None
-    if proposal.decision_type != MOVEMENT_PROPOSAL_DECISION_TYPE:
+    if proposal.decision_type not in SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES:
         return None
     if proposal.proposal_kind not in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS:
         return None
@@ -900,11 +1116,21 @@ def _draftable_movement_proposal(
 
 def _movement_context_diagnostic(
     *,
+    decision_type: str,
     proposal_kind: str,
     movement_phase_action: str | None,
     movement_mode: str | None,
     fall_back_mode: str | None,
 ) -> MovementProposalContextDiagnostic | None:
+    if decision_type not in SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES:
+        return MovementProposalContextDiagnostic(
+            violation_code="unsupported_movement_decision_type",
+            field="decision_type",
+            message=(
+                "Movement proposal decision type is not supported for local drafting: "
+                f"{decision_type}."
+            ),
+        )
     if proposal_kind in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS and movement_mode is None:
         return MovementProposalContextDiagnostic(
             violation_code="movement_mode_missing_from_proposal_context",
@@ -940,6 +1166,61 @@ def _requires_fall_back_mode(
     return proposal_kind == "fall_back" or movement_phase_action == "fall_back"
 
 
+def movement_proposal_profile(
+    *,
+    decision_type: str,
+    proposal_kind: str,
+) -> MovementProposalProfile:
+    """Return payload policy for a supported movement-shaped proposal."""
+
+    if proposal_kind not in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS:
+        raise MovementDraftError(f"Unsupported movement proposal kind: {proposal_kind}.")
+    if decision_type not in SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES:
+        raise MovementDraftError(f"Unsupported movement decision type: {decision_type}.")
+    if proposal_kind == "scout_move" and decision_type != SCOUT_MOVE_DECISION_TYPE:
+        raise MovementDraftError("Scout Move drafts require submit_scout_move.")
+    if proposal_kind != "scout_move" and decision_type != MOVEMENT_PROPOSAL_DECISION_TYPE:
+        raise MovementDraftError(f"{proposal_kind} drafts require submit_movement_proposal.")
+    distance_key = {
+        "normal_move": MOVEMENT_BUDGET_CONTEXT_KEY,
+        "advance": MOVEMENT_BUDGET_CONTEXT_KEY,
+        "fall_back": MOVEMENT_BUDGET_CONTEXT_KEY,
+        "surge_move": MAXIMUM_DISTANCE_CONTEXT_KEY,
+        "charge_move": MAXIMUM_DISTANCE_CONTEXT_KEY,
+        "pile_in": MAXIMUM_DISTANCE_CONTEXT_KEY,
+        "consolidate": MAXIMUM_DISTANCE_CONTEXT_KEY,
+        "scout_move": SCOUT_DISTANCE_CONTEXT_KEY,
+    }.get(proposal_kind)
+    return MovementProposalProfile(
+        proposal_kind=proposal_kind,
+        decision_type=decision_type,
+        requires_sampled_witness=proposal_kind in SAMPLED_WITNESS_PROPOSAL_KINDS,
+        allows_no_witness_no_move=proposal_kind in NO_WITNESS_NO_MOVE_PROPOSAL_KINDS,
+        distance_context_key=distance_key,
+    )
+
+
+def _proposal_movement_budget_inches(proposal: UiMovementProposalRequest) -> float | None:
+    profile = movement_proposal_profile(
+        decision_type=proposal.decision_type,
+        proposal_kind=proposal.proposal_kind,
+    )
+    if proposal.proposal_kind == "scout_move":
+        return proposal.scout_distance_inches
+    if profile.distance_context_key is None:
+        return None
+    return _context_positive_float(proposal.context, profile.distance_context_key)
+
+
+def _proposal_movement_mode(proposal: UiMovementProposalRequest) -> str | None:
+    movement_mode = _context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY)
+    if movement_mode is not None:
+        return movement_mode
+    if proposal.proposal_kind == "scout_move":
+        return proposal.action_kind
+    return None
+
+
 def _unit_by_id(view: BattlefieldView, unit_id: str) -> UnitView | None:
     for unit in view.units:
         if unit.unit_id == unit_id:
@@ -960,7 +1241,7 @@ def unsupported_parameterized_tool_label(pending_decision: UiDecision | None) ->
     if pending_decision.movement_proposal is not None:
         movement = pending_decision.movement_proposal
         if (
-            movement.decision_type == MOVEMENT_PROPOSAL_DECISION_TYPE
+            movement.decision_type in SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES
             and movement.proposal_kind in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS
         ):
             return None
@@ -1084,6 +1365,39 @@ def _context_string(context: JsonObject, key: str) -> str | None:
     if value is None:
         return None
     return _non_empty_string(key, value)
+
+
+def _context_string_tuple(context: JsonObject, key: str) -> tuple[str, ...]:
+    value = context.get(key)
+    if value is None:
+        return ()
+    if type(value) is not list:
+        raise MovementDraftError(f"context.{key} must be a list.")
+    return tuple(_non_empty_string(f"context.{key}", item) for item in value)
+
+
+def _context_string_list(context: JsonObject, key: str) -> list[JsonValue]:
+    values: list[JsonValue] = []
+    values.extend(_context_string_tuple(context, key))
+    return values
+
+
+def _first_non_empty_context_string_list(
+    context: JsonObject,
+    keys: tuple[str, ...],
+) -> list[JsonValue]:
+    for key in keys:
+        values = _context_string_list(context, key)
+        if values:
+            return values
+    return []
+
+
+def _first_context_string(context: JsonObject, key: str) -> str | None:
+    values = _context_string_tuple(context, key)
+    if not values:
+        return None
+    return values[0]
 
 
 def _context_positive_float(context: JsonObject, key: str) -> float | None:

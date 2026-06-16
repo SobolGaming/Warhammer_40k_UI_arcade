@@ -16,6 +16,13 @@ from warhammer40k_arcade_ui.render.view_models import (
 from warhammer40k_arcade_ui.state.selection import unit_center
 
 MOVEMENT_PROPOSAL_DECISION_TYPE = "submit_movement_proposal"
+SCOUT_MOVE_DECISION_TYPE = "submit_scout_move"
+MOVEMENT_SHAPED_DECISION_TYPES = frozenset(
+    (
+        MOVEMENT_PROPOSAL_DECISION_TYPE,
+        SCOUT_MOVE_DECISION_TYPE,
+    )
+)
 
 type EntityLayer = Literal[
     "model",
@@ -695,10 +702,10 @@ def movement_entity_selection_profile(
     """Build a model-first profile for an engine movement proposal request."""
 
     proposal = decision.movement_proposal
-    if proposal is None or proposal.decision_type != MOVEMENT_PROPOSAL_DECISION_TYPE:
+    if proposal is None or proposal.decision_type not in MOVEMENT_SHAPED_DECISION_TYPES:
         return unsupported_entity_selection_profile(
             decision=decision,
-            reason="Decision is not a movement proposal request.",
+            reason="Decision is not a movement-shaped proposal request.",
         )
     unit = _unit_by_id(view, proposal.unit_instance_id)
     if unit is None:

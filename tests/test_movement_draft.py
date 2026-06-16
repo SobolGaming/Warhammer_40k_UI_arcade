@@ -143,11 +143,11 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     payload = draft.payload_preview
 
     assert payload is not None
-    assert draft.synthetic_witness_model_ids == ("intercessor_1",)
-    assert draft.synthetic_witness_point_count == 1
-    assert any("synthetic midpoint witness evidence" in hint for hint in draft.local_hint_lines)
+    assert draft.synthetic_witness_model_ids == ()
+    assert draft.synthetic_witness_point_count == 0
+    assert not any("synthetic midpoint witness evidence" in hint for hint in draft.local_hint_lines)
     assert draft.payload_witness_summary_lines == (
-        "intercessor_1: 3 witness point(s), synthetic midpoint",
+        "intercessor_1: 2 witness point(s)",
         "intercessor_2: 2 witness point(s), no-op",
         "intercessor_3: 2 witness point(s), no-op",
     )
@@ -173,7 +173,6 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     assert first_path["model_id"] == "intercessor_1"
     assert first_path["poses"] == [
         {"position": {"x": 7.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
-        {"position": {"x": 8.5, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
         {"position": {"x": 10.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
     ]
     assert second_path["model_id"] == "intercessor_2"
@@ -186,6 +185,74 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     assert type(second_poses) is list
     assert second_movement["path"] == second_poses
     assert second_movement["final_pose"] == second_poses[-1]
+
+
+def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
+    view = default_battlefield_view()
+    selection = _selected_intercessors()
+    decision = _movement_proposal_decision(
+        proposal_kind="charge_move",
+        movement_phase_action="charge_move",
+        context={
+            "movement_mode": "charge",
+            "maximum_distance_inches": 7.0,
+            "reachable_target_unit_instance_ids": ["guardian_squad"],
+        },
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+    )
+    assert draft is not None
+    ready = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
+
+    payload = ready.payload_preview
+
+    assert payload is not None
+    assert payload["proposal_kind"] == "charge_move"
+    assert payload["movement_mode"] == "charge"
+    assert payload["charge_target_unit_instance_ids"] == ["guardian_squad"]
+    assert ready.synthetic_witness_model_ids == ("intercessor_1",)
+    witness = payload["witness"]
+    assert type(witness) is dict
+    model_paths = witness["model_paths"]
+    assert type(model_paths) is list
+    first_path = model_paths[0]
+    assert type(first_path) is dict
+    assert first_path["poses"] == [
+        {"position": {"x": 7.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
+        {"position": {"x": 8.5, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
+        {"position": {"x": 10.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
+    ]
+
+
+def test_charge_move_no_move_payload_omits_witness() -> None:
+    view = default_battlefield_view()
+    decision = _movement_proposal_decision(
+        proposal_kind="charge_move",
+        movement_phase_action="charge_move",
+        context={
+            "movement_mode": "charge",
+            "maximum_distance_inches": 7.0,
+            "reachable_target_unit_instance_ids": ["guardian_squad"],
+        },
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+    assert draft is not None
+
+    ready = draft.mark_ready(view=view)
+    payload = ready.payload_preview
+
+    assert payload is not None
+    assert payload["proposal_kind"] == "charge_move"
+    assert payload["charge_target_unit_instance_ids"] == []
+    assert "witness" not in payload
+    assert "model_movements" not in payload
 
 
 def test_mouse_hover_preview_does_not_clear_ready_payload() -> None:

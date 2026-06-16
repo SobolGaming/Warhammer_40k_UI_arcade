@@ -110,6 +110,43 @@ def test_status_represents_movement_proposal_request() -> None:
     )
 
 
+def test_status_represents_scout_move_as_movement_proposal_request() -> None:
+    proposal_payload = _scout_move_proposal_request_payload()
+
+    status = UiClientStatus.from_payload(
+        {
+            "stage": "setup",
+            "status_kind": "waiting_for_decision",
+            "decision_request": {
+                "request_id": "decision-request-scout-001",
+                "decision_type": "submit_scout_move",
+                "actor_id": "player-a",
+                "payload": {"proposal_request": proposal_payload},
+                "is_parameterized": True,
+                "options": [
+                    {
+                        "option_id": "submit_parameterized_payload",
+                        "label": "Submit Parameterized Payload",
+                        "payload": {"submission_kind": "parameterized"},
+                    }
+                ],
+            },
+            "message": None,
+            "payload": None,
+        }
+    )
+
+    assert status.decision is not None
+    assert status.decision.is_parameterized is True
+    assert status.decision.movement_proposal == UiMovementProposalRequest.from_payload(
+        proposal_payload
+    )
+    assert status.decision.movement_proposal is not None
+    assert status.decision.movement_proposal.proposal_kind == "scout_move"
+    assert status.decision.movement_proposal.movement_phase_action == "scout_move"
+    assert status.decision.movement_proposal.scout_distance_inches == 6.0
+
+
 def test_status_represents_generic_parameterized_request_without_movement_shape() -> None:
     status = UiClientStatus.from_payload(
         {
@@ -677,6 +714,32 @@ def _movement_proposal_request_payload() -> dict[str, object]:
             "source_selected_option_id": "normal_move",
             "movement_mode": "normal",
         },
+    }
+
+
+def _scout_move_proposal_request_payload() -> dict[str, object]:
+    return {
+        "request_id": "decision-request-scout-001",
+        "decision_type": "submit_scout_move",
+        "actor_id": "player-a",
+        "game_id": "phase29-scout-game",
+        "setup_step": "resolve_prebattle_actions",
+        "player_id": "player-a",
+        "unit_instance_id": "unit-1",
+        "component_unit_instance_ids": ["unit-1"],
+        "model_instance_ids": ["model-1", "model-2"],
+        "proposal_kind": "scout_move",
+        "action_kind": "scout_move",
+        "source_rule_id": "core:scouts",
+        "placement_kind": None,
+        "scout_distance_inches": 6.0,
+        "deployment_zone_ids": ["deployment-zone-a"],
+        "legal_deployment_zones": [],
+        "mission_setup": {},
+        "ruleset_descriptor_hash": "ruleset-phase29",
+        "source_decision_request_id": "decision-request-prebattle-001",
+        "source_decision_result_id": "ui-result-prebattle-001",
+        "context": {"source_selected_option_id": "scout_move:unit-1"},
     }
 
 
