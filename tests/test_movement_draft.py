@@ -49,6 +49,29 @@ def test_movement_proposal_for_selected_unit_activates_model_assignment_draft() 
     assert all(path.points == (path.points[0],) for path in draft.model_paths)
 
 
+def test_movement_draft_seed_from_unit_selection_expands_to_all_models() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_model_id(
+        unit_id="intercessor_squad",
+        model_id=None,
+        preferences=preferences,
+    )
+
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=_movement_proposal_decision(),
+    )
+
+    assert draft is not None
+    assert draft.selected_model_ids == (
+        "intercessor_1",
+        "intercessor_2",
+        "intercessor_3",
+    )
+
+
 def test_movement_draft_does_not_start_for_unrelated_selected_unit() -> None:
     view = default_battlefield_view()
     preferences = default_preferences()

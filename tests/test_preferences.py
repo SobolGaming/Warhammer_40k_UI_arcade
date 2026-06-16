@@ -202,6 +202,7 @@ def test_assignment_hud_preferences_round_trip() -> None:
     assert result.preferences.hud.show_assignment_warning_markers is True
     assert result.preferences.hud.action_summary_default == "dim"
     assert result.preferences.hud.action_summary_max_labels == 6
+    assert result.preferences.hud.movement_budget_ring_mode == "total"
     assert result.preferences.hud.show_chain_breadcrumbs is True
 
 
@@ -215,6 +216,18 @@ def test_invalid_assignment_hud_mode_is_diagnostic() -> None:
 
     assert result.preferences is not None
     assert "invalid_assignment_hud_mode" in _codes(result.diagnostics)
+
+
+def test_invalid_movement_budget_ring_mode_is_diagnostic() -> None:
+    payload = default_preferences().to_payload()
+    hud = payload["hud"]
+    assert type(hud) is dict
+    hud["movement_budget_ring_mode"] = "maximum"
+
+    result = parse_preferences_payload(payload)
+
+    assert result.preferences is not None
+    assert "invalid_movement_budget_ring_mode" in _codes(result.diagnostics)
 
 
 def test_invalid_action_summary_preferences_are_diagnostic() -> None:

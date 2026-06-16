@@ -21,6 +21,7 @@ from warhammer40k_arcade_ui.state.entity_selection import (
     EntitySelectionState,
     build_entity_selection_profile,
     entity_ref_for_model,
+    unit_entity_ref,
 )
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
@@ -29,6 +30,8 @@ SCOUT_MOVE_DECISION_TYPE = "submit_scout_move"
 MOVEMENT_MODE_CONTEXT_KEY = "movement_mode"
 FALL_BACK_MODE_CONTEXT_KEY = "fall_back_mode"
 MOVEMENT_BUDGET_CONTEXT_KEY = "movement_budget_inches"
+BASE_MOVEMENT_BUDGET_CONTEXT_KEY = "base_movement_budget_inches"
+BASE_MOVEMENT_CONTEXT_KEY = "base_movement_inches"
 MAXIMUM_DISTANCE_CONTEXT_KEY = "maximum_distance_inches"
 SCOUT_DISTANCE_CONTEXT_KEY = "scout_distance_inches"
 SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES = frozenset(
@@ -278,6 +281,7 @@ class MovementDraft:
     model_paths: tuple[MovementModelPath, ...]
     cursor_preview_point: WorldPoint | None
     movement_budget_inches: float | None
+    base_movement_budget_inches: float | None
     local_hint_lines: tuple[str, ...]
     ready_payload: JsonObject | None = None
     next_assignment_group_index: int = 1
@@ -383,6 +387,8 @@ class MovementDraft:
         )
         if self.movement_budget_inches is not None:
             _validate_positive("movement_budget_inches", self.movement_budget_inches)
+        if self.base_movement_budget_inches is not None:
+            _validate_positive("base_movement_budget_inches", self.base_movement_budget_inches)
         if type(self.local_hint_lines) is not tuple:
             raise MovementDraftError("MovementDraft local_hint_lines must be a tuple.")
         object.__setattr__(
@@ -465,6 +471,10 @@ class MovementDraft:
             ),
             cursor_preview_point=None,
             movement_budget_inches=_proposal_movement_budget_inches(proposal),
+            base_movement_budget_inches=_proposal_base_movement_budget_inches(
+                proposal=proposal,
+                unit=unit,
+            ),
             local_hint_lines=(),
         )
         return draft.with_recomputed_hints(view=view)
@@ -664,6 +674,11 @@ class MovementDraft:
             proposal_request_id=proposal.request_id,
             ready_payload=None,
             cursor_preview_point=None,
+            movement_budget_inches=_proposal_movement_budget_inches(proposal),
+            base_movement_budget_inches=_proposal_base_movement_budget_inches(
+                proposal=proposal,
+                unit=_unit_by_id(view, proposal.unit_instance_id),
+            ),
         ).with_recomputed_hints(view=view)
 
     def replace_model_selection(
@@ -1223,6 +1238,25 @@ def _proposal_movement_budget_inches(proposal: UiMovementProposalRequest) -> flo
     return _context_positive_float(proposal.context, profile.distance_context_key)
 
 
+def _proposal_base_movement_budget_inches(
+    *,
+    proposal: UiMovementProposalRequest,
+    unit: UnitView | None,
+) -> float | None:
+    for key in (BASE_MOVEMENT_BUDGET_CONTEXT_KEY, BASE_MOVEMENT_CONTEXT_KEY):
+        value = _context_positive_float(proposal.context, key)
+        if value is not None:
+            return value
+    if unit is None:
+        return None
+    movement_values = tuple(
+        model.base_movement_inches
+        for model in unit.models
+        if model.base_movement_inches is not None
+    )
+    return min(movement_values) if movement_values else None
+
+
 def _proposal_movement_mode(proposal: UiMovementProposalRequest) -> str | None:
     movement_mode = _context_string(proposal.context, MOVEMENT_MODE_CONTEXT_KEY)
     if movement_mode is not None:
@@ -1279,13 +1313,7 @@ def _seed_entity_selection(
         else None
     )
     if seed_ref is None:
-        seed_ref = entity_ref_for_model(
-            view=view,
-            unit_id=unit.unit_id,
-            model_id=unit.models[0].model_id,
-        )
-    if seed_ref is None:
-        return state
+        seed_ref = unit_entity_ref(unit)
     return state.replace_selection(seed_ref)
 
 

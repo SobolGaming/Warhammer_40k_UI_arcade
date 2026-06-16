@@ -17,12 +17,13 @@ from warhammer40k_arcade_ui.hud.view_models import (
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
-from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
+from warhammer40k_arcade_ui.state.movement_draft import MovementAssignmentView, MovementDraft
 from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState, selected_model, selected_unit
 
 type Color = tuple[int, int, int, int]
 type CoordinateSpace = Literal["world", "screen"]
+type MovementBudgetRingMode = Literal["total", "split"]
 type RenderPrimitive = PolygonPrimitive | CirclePrimitive | PolylinePrimitive | TextPrimitive
 
 PLAYER_1_COLOR: Color = (80, 155, 235, 255)
@@ -115,6 +116,7 @@ def build_world_primitives(
     action_summary: ActionVisualSummary | None = None,
     placement_draft: PlacementDraft | None = None,
     placement_history: tuple[PlacementDraft, ...] = (),
+    movement_budget_ring_mode: MovementBudgetRingMode = "total",
 ) -> tuple[RenderPrimitive, ...]:
     """Build deterministic world-space primitives from a battlefield view model."""
 
@@ -144,7 +146,13 @@ def build_world_primitives(
     if selection_state is not None:
         primitives.extend(_selection_primitives(view, selection_state))
         if movement_draft is not None:
-            primitives.extend(_movement_draft_primitives(selection_state, movement_draft))
+            primitives.extend(
+                _movement_draft_primitives(
+                    selection_state=selection_state,
+                    movement_draft=movement_draft,
+                    movement_budget_ring_mode=movement_budget_ring_mode,
+                )
+            )
     if placement_draft is not None:
         primitives.extend(_placement_draft_primitives(placement_draft))
     return tuple(primitives)
@@ -379,8 +387,10 @@ def _selection_primitives(
 
 
 def _movement_draft_primitives(
+    *,
     selection_state: SelectionState,
     movement_draft: MovementDraft,
+    movement_budget_ring_mode: MovementBudgetRingMode,
 ) -> tuple[RenderPrimitive, ...]:
     primitives: list[RenderPrimitive] = []
     warning = any("warning" in hint.lower() for hint in movement_draft.local_hint_lines)
@@ -441,18 +451,64 @@ def _movement_draft_primitives(
                     line_width=0.8,
                 )
             )
-    if (
-        "movement_budget" in selection_state.active_overlay_ids
-        and movement_draft.movement_budget_inches is not None
-    ):
-        for assignment in assignment_views:
-            if assignment.state != "active":
-                continue
+    if "movement_budget" in selection_state.active_overlay_ids:
+        primitives.extend(
+            _movement_budget_ring_primitives(
+                assignment_views=assignment_views,
+                movement_draft=movement_draft,
+                movement_budget_ring_mode=movement_budget_ring_mode,
+            )
+        )
+    return tuple(primitives)
+
+
+def _movement_budget_ring_primitives(
+    *,
+    assignment_views: tuple[MovementAssignmentView, ...],
+    movement_draft: MovementDraft,
+    movement_budget_ring_mode: MovementBudgetRingMode,
+) -> tuple[CirclePrimitive, ...]:
+    total_budget = movement_draft.movement_budget_inches
+    if total_budget is None:
+        return ()
+    base_budget = movement_draft.base_movement_budget_inches
+    use_split = (
+        movement_budget_ring_mode == "split"
+        and base_budget is not None
+        and base_budget < total_budget
+    )
+    primitives: list[CirclePrimitive] = []
+    for assignment in assignment_views:
+        if assignment.state != "active":
+            continue
+        if use_split:
+            assert base_budget is not None
+            primitives.append(
+                CirclePrimitive(
+                    layer="movement_base_budget_ring",
+                    center=assignment.points[0],
+                    radius=base_budget,
+                    fill_color=(0, 0, 0, 0),
+                    outline_color=MOVEMENT_PREVIEW,
+                    line_width=1.0,
+                )
+            )
+            primitives.append(
+                CirclePrimitive(
+                    layer="movement_enhanced_budget_ring",
+                    center=assignment.points[0],
+                    radius=total_budget,
+                    fill_color=(0, 0, 0, 0),
+                    outline_color=MOVEMENT_ACTIVE,
+                    line_width=1.1,
+                )
+            )
+        else:
             primitives.append(
                 CirclePrimitive(
                     layer="movement_budget_ring",
                     center=assignment.points[0],
-                    radius=movement_draft.movement_budget_inches,
+                    radius=total_budget,
                     fill_color=(0, 0, 0, 0),
                     outline_color=MOVEMENT_PREVIEW,
                     line_width=1.0,

@@ -21,6 +21,7 @@ type JsonObject = dict[str, JsonValue]
 type AssignmentHudMode = Literal["compact", "detailed"]
 type ActionSummaryDefault = Literal["hidden", "dim", "review"]
 type HudLayoutPreset = Literal["compass_ring", "command_bench"]
+type MovementBudgetRingMode = Literal["total", "split"]
 
 _VALID_MODIFIERS = frozenset(("ctrl", "alt", "shift", "meta"))
 _VALID_MOUSE_BUTTONS = frozenset(("left", "right", "middle"))
@@ -29,6 +30,7 @@ _VALID_ACTION_SUMMARY_DEFAULTS: frozenset[ActionSummaryDefault] = frozenset(
     ("hidden", "dim", "review")
 )
 _VALID_HUD_LAYOUT_PRESETS: frozenset[HudLayoutPreset] = frozenset(("compass_ring", "command_bench"))
+_VALID_MOVEMENT_BUDGET_RING_MODES: frozenset[MovementBudgetRingMode] = frozenset(("total", "split"))
 _HUD_ZONE_SIZE_LIMITS = {
     "top_ribbon": (40, 140),
     "left_rail": (120, 360),
@@ -170,6 +172,7 @@ class HudPreferences:
     show_assignment_warning_markers: bool
     action_summary_default: ActionSummaryDefault
     action_summary_max_labels: int
+    movement_budget_ring_mode: MovementBudgetRingMode
     show_chain_breadcrumbs: bool
     text_scale: float
     high_contrast: bool
@@ -190,6 +193,7 @@ class HudPreferences:
             "show_assignment_warning_markers": self.show_assignment_warning_markers,
             "action_summary_default": self.action_summary_default,
             "action_summary_max_labels": self.action_summary_max_labels,
+            "movement_budget_ring_mode": self.movement_budget_ring_mode,
             "show_chain_breadcrumbs": self.show_chain_breadcrumbs,
             "text_scale": self.text_scale,
             "high_contrast": self.high_contrast,
@@ -503,6 +507,7 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
                 "show_assignment_warning_markers",
                 "action_summary_default",
                 "action_summary_max_labels",
+                "movement_budget_ring_mode",
                 "show_chain_breadcrumbs",
                 "text_scale",
                 "high_contrast",
@@ -573,6 +578,12 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
             "hud",
         ),
         action_summary_max_labels=action_summary_max_labels,
+        movement_budget_ring_mode=_movement_budget_ring_mode(
+            section,
+            "movement_budget_ring_mode",
+            diagnostics,
+            "hud",
+        ),
         show_chain_breadcrumbs=_required_bool(
             section,
             "show_chain_breadcrumbs",
@@ -955,6 +966,28 @@ def _action_summary_default(
         )
     )
     return "hidden"
+
+
+def _movement_budget_ring_mode(
+    payload: dict[str, object],
+    key: str,
+    diagnostics: list[PreferenceDiagnostic],
+    prefix: str,
+) -> MovementBudgetRingMode:
+    field = f"{prefix}.{key}"
+    value = payload.get(key, "total")
+    if type(value) is str and value in _VALID_MOVEMENT_BUDGET_RING_MODES:
+        return value
+    diagnostics.append(
+        _diagnostic(
+            severity="error",
+            code="invalid_movement_budget_ring_mode",
+            field=field,
+            message="hud.movement_budget_ring_mode must be total or split.",
+            value=str(value),
+        )
+    )
+    return "total"
 
 
 def _string_list(

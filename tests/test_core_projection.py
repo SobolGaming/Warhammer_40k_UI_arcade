@@ -164,6 +164,44 @@ def test_core_projection_preserves_terrain_and_deployment_layout_labels() -> Non
     assert view.table.deployment_map_label == "Deployment map: deployment-map-a"
 
 
+def test_core_projection_uses_model_display_base_size_and_movement_hint() -> None:
+    view = battlefield_view_from_game_view(
+        _game_view(
+            _terrain_feature(
+                center=(10.0, 20.0),
+                size=(6.0, 4.0),
+            ),
+            model_display_by_id={
+                "unit-alpha:model-001": {
+                    "model_instance_id": "unit-alpha:model-001",
+                    "base_size": {
+                        "base_size_id": "base-size:core-vehicle-monster",
+                        "kind": "circular",
+                        "diameter_mm": 120.0,
+                        "length_mm": None,
+                        "width_mm": None,
+                    },
+                    "base_characteristics": {
+                        "M": {
+                            "label": "M",
+                            "characteristic": "movement",
+                            "final": 10,
+                            "base": 10,
+                            "raw": 10,
+                            "display_value": '10"',
+                        }
+                    },
+                }
+            },
+        )
+    )
+
+    model = view.units[0].models[0]
+
+    assert math.isclose(model.base_radius, 120.0 / 25.4 / 2.0)
+    assert model.base_movement_inches == 10.0
+
+
 def test_core_projection_rejects_source_terrain_footprint_bound_mismatch() -> None:
     with pytest.raises(
         CoreProjectionRenderError,
@@ -190,6 +228,7 @@ def _game_view(
     *,
     deployment_zones: list[JsonObject] | None = None,
     placed_armies: list[JsonObject] | None = None,
+    model_display_by_id: JsonObject | None = None,
 ) -> UiGameView:
     return UiGameView(
         viewer_player_id="player-a",
@@ -231,6 +270,7 @@ def _game_view(
         pending_decision=None,
         pending_proposal=None,
         event_count=1,
+        model_display_by_id={} if model_display_by_id is None else model_display_by_id,
     )
 
 

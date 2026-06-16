@@ -104,6 +104,7 @@ hud:
   show_assignment_warning_markers: true
   action_summary_default: review
   action_summary_max_labels: 10
+  movement_budget_ring_mode: total
   show_chain_breadcrumbs: true
   text_scale: 0.9
   high_contrast: true

@@ -41,6 +41,7 @@ Preferences YAML controls global UI choices:
 - zone sizes;
 - text scale;
 - high-contrast mode;
+- movement budget ring presentation;
 - local HUD feature toggles.
 
 HUD composition YAML controls presentation inside zones:
@@ -61,12 +62,22 @@ Example preferences reference:
 hud:
   layout_preset: compass_ring
   composition_profile: default-hud
+  movement_budget_ring_mode: total
   zones:
     right_inspector:
       visible: true
       size_px: 276
       collapsed: false
 ```
+
+`movement_budget_ring_mode` controls the world-space movement budget overlay when the
+`movement_budget` overlay is active:
+
+- `total` draws one ring at the total engine-projected movement budget for each active selected
+  model.
+- `split` draws a base movement ring plus a larger enhanced/total ring when the proposal or visible
+  datasheet data exposes a base movement hint and the total budget is larger than that base value.
+  If the UI cannot resolve a base movement hint, it falls back to the single total ring.
 
 The `composition_profile` value can be:
 
