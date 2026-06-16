@@ -18,6 +18,7 @@ uv python install 3.14.5
 uv lock
 uv sync
 uv run warhammer40k-arcade-ui
+uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml --event-trace payload --event-trace-file ./ui-trace.jsonl --event-trace-exclude ui.mouse_motion  --crash-report-dir /tmp/ui-crashes --stop-at-phase setup
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
