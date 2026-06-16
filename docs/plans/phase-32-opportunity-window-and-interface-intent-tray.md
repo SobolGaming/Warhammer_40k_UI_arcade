@@ -29,6 +29,13 @@ Warhammer_40k_AI revision `0531ebe` adds:
 This phase is the UI counterpart to `Warhammer_40k_AI/docs/TRIGGER_OPPORTUNITY_WINDOWS.md` and the
 Phase 18B additions in `ADAPTER_DECISION_CONTRACT.md`.
 
+Reviewed forward through `Warhammer_40k_AI`
+`f01293fb4d83249482ecee1c304e21f18e57055e` on 2026-06-16. The later core update
+adds typed terrain-area and objective-terrain projection fields but does not change the
+opportunity-window request model. Phase 32 should continue to target finite
+`submission_family: "opportunity_window"` requests; terrain projection drift is tracked separately
+in Phase 33.
+
 ## Scope
 
 In scope:

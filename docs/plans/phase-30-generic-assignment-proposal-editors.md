@@ -58,6 +58,12 @@ path is distinct from parameterized `stratagem_target_binding`: Phase 30 should 
 finite opportunity-window options into assignment rows. It should hand those requests to the
 current-action/finite workbench and the future Phase 32 opportunity-window tray.
 
+Reviewed against `Warhammer_40k_AI`
+`f01293fb4d83249482ecee1c304e21f18e57055e` on 2026-06-16. That update changes
+terrain/deployment-layout projection data, not the shooting, melee, or Stratagem assignment
+proposal families. Phase 30 remains focused on parameterized assignment requests and should not
+absorb the terrain-area projection work; see Phase 33 for that drift.
+
 ## UX Model
 
 The assignment workspace is the user's staging area for "this source applies this effect to that
