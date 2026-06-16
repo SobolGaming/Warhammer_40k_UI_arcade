@@ -447,6 +447,61 @@ def test_invalid_status_represents_proposal_diagnostics() -> None:
     assert diagnostic.field == "proposal_request_id"
 
 
+def test_invalid_status_represents_prebattle_resolution_violations() -> None:
+    status = UiClientStatus.from_payload(
+        {
+            "stage": "setup",
+            "status_kind": "invalid",
+            "decision_request": None,
+            "message": "Pre-battle proposal submission is invalid.",
+            "payload": {
+                "invalid_reason": "prebattle_proposal_invalid",
+                "request_id": "decision-request-000019",
+                "resolution": {
+                    "is_valid": False,
+                    "proposal": {
+                        "proposal_kind": "scout_move",
+                        "proposal_request_id": "decision-request-000019",
+                        "unit_instance_id": "army-alpha:scout-redeploy-unit",
+                    },
+                    "violations": [
+                        {
+                            "violation_code": "path_validation_failed",
+                            "message": "Path witness intersects terrain.",
+                            "field": "witness",
+                            "model_instance_id": (
+                                "army-alpha:scout-redeploy-unit:core-intercessor-like:001"
+                            ),
+                            "blocker_id": (
+                                "take-and-hold-vs-purge-the-foe-layout-3-"
+                                "upper-flank-ruin:ground-floor"
+                            ),
+                        },
+                        {
+                            "violation_code": "terrain_path_validation_failed",
+                            "message": (
+                                "Model cannot end within a terrain wall, floor, or other "
+                                "terrain volume."
+                            ),
+                            "field": "witness",
+                        },
+                    ],
+                },
+            },
+        }
+    )
+
+    assert len(status.invalid_diagnostics) == 2
+    first_diagnostic = status.invalid_diagnostics[0]
+    assert first_diagnostic.violation_code == "path_validation_failed"
+    assert first_diagnostic.message == "Path witness intersects terrain."
+    assert first_diagnostic.field == "witness"
+    assert first_diagnostic.proposal_request_id == "decision-request-000019"
+    assert first_diagnostic.proposal_kind == "scout_move"
+    second_diagnostic = status.invalid_diagnostics[1]
+    assert second_diagnostic.violation_code == "terrain_path_validation_failed"
+
+
 def test_invalid_status_without_payload_uses_message_diagnostic() -> None:
     status = UiClientStatus.from_payload(
         {

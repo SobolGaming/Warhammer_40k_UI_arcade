@@ -792,6 +792,9 @@ def invalid_diagnostics_from_status(
             )
             for violation in _json_list("proposal validation violations", validation["violations"])
         )
+    resolution = body.get("resolution")
+    if resolution is not None:
+        return _invalid_diagnostics_from_resolution(body=body, resolution=resolution)
     invalid_reason = body.get("invalid_reason")
     field = body.get("field")
     if invalid_reason is not None:
@@ -809,6 +812,41 @@ def invalid_diagnostics_from_status(
             violation_code="invalid_status",
             message=message,
         ),
+    )
+
+
+def _invalid_diagnostics_from_resolution(
+    *,
+    body: dict[str, JsonValue],
+    resolution: JsonValue,
+) -> tuple[UiInvalidDiagnostic, ...]:
+    resolution_payload = _json_object("proposal resolution", resolution)
+    proposal = _json_object("proposal resolution proposal", resolution_payload["proposal"])
+    proposal_request_id = (
+        _optional_string_value(proposal, "proposal_request_id")
+        or _optional_string_value(proposal, "request_id")
+        or _optional_string_value(body, "request_id")
+    )
+    if proposal_request_id is None:
+        raise UiClientProtocolError("proposal resolution must include proposal_request_id.")
+    proposal_kind = _optional_string_value(proposal, "proposal_kind") or _optional_string_value(
+        body,
+        "proposal_kind",
+    )
+    if proposal_kind is None:
+        raise UiClientProtocolError("proposal resolution must include proposal_kind.")
+    status = _optional_string_value(resolution_payload, "status") or "invalid"
+    return tuple(
+        _invalid_diagnostic_from_violation(
+            violation=violation,
+            proposal_request_id=proposal_request_id,
+            proposal_kind=proposal_kind,
+            status=status,
+        )
+        for violation in _json_list(
+            "proposal resolution violations",
+            resolution_payload["violations"],
+        )
     )
 
 
