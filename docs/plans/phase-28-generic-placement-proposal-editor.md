@@ -224,9 +224,18 @@ uv run pre-commit run --all-files
   `uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase deployment --ui-prefs docs/preferences/default.yaml`.
 - Select a placement subject from the Player Units panel if the core first emits a unit-selection or
   placement-subject request.
-- Confirm the selected Player Units row and battlefield unit highlight stay synchronized.
+- Confirm the Player Units panel lists all units for the current viewer/player army, including
+  unplaced units.
+- Confirm the selected/current Player Units row, placed rows, and unplaced rows use distinct visual
+  states.
+- Confirm the selected Player Units row and battlefield unit highlight stay synchronized where a
+  battlefield unit already exists.
 - Place each required model token.
 - Confirm Player Units row colors distinguish unplaced, current, and fully placed subjects.
+- Submit a placement, continue to the next placement request, and confirm the previous placement
+  remains visible as advisory ghost bases or authoritative projected units.
+- Confirm the board has placeholder `player-a side` / `player-b side` labels below the lower board
+  corners.
 - Confirm Current Action shows placement draft completeness and submit readiness.
 - Submit a valid-looking draft and verify the core either accepts it or returns an authoritative
   invalid diagnostic.
@@ -258,6 +267,10 @@ Implemented in the Phase 28 PR:
 - Added Current Action placement summary and local placement buttons.
 - Added Player Units placement metadata/status for projected units, core unit-display-map units when
   available, and the pending placement subject before it is projected onto the battlefield.
+- Added live-smoke display-map seeding so the Player Units panel shows the current actor's full
+  two-unit army during deployment even when the installed core package predates unit display maps.
+- Added persistent advisory placement ghost history for accepted local placement drafts.
+- Added placeholder side labels under the lower left and lower right board corners.
 - Added Assignment HUD placement rows for current, placed, and unplaced model poses.
 - Added `--stop-at-phase deployment` for `--live-core-smoke` so the real core smoke harness can
   pause at the first deployment placement proposal and expose the generic placement editor for

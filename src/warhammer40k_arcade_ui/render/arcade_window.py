@@ -202,6 +202,9 @@ class ArcadeWarhammerWindow(arcade.Window):
         self.background_color = arcade.color.DARK_SLATE_GRAY
         self._battlefield_view = resolved_battlefield_view
         self._last_game_view = initial_game_view
+        self._known_unit_display_by_id: JsonObject = (
+            {} if initial_game_view is None else dict(initial_game_view.unit_display_by_id)
+        )
         self._preferences = resolved_preferences
         self._preference_diagnostics = preference_diagnostics
         self._preference_source_label = preference_source_label
@@ -236,6 +239,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._mouse_world_position: WorldPoint | None = None
         self._movement_draft: MovementDraft | None = None
         self._placement_draft: PlacementDraft | None = None
+        self._placement_history: tuple[PlacementDraft, ...] = ()
         self._action_summary_intensity: ActionSummaryIntensity = (
             self._preferences.hud.action_summary_default
         )
@@ -469,9 +473,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             hovered_hud_button_id=self._hovered_hud_button_id,
             selected_unit_id=self._selection_state.selected_unit_id,
             viewer_player_id=self._viewer_player_id,
-            unit_display_by_id=(
-                {} if self._last_game_view is None else self._last_game_view.unit_display_by_id
-            ),
+            unit_display_by_id=self._known_unit_display_by_id,
         )
         world_primitives = build_world_primitives(
             self._battlefield_view,
@@ -479,6 +481,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft,
             action_summary,
             placement_draft=self._placement_draft,
+            placement_history=self._placement_history,
         )
         overlay_primitives = build_screen_overlay_primitives(
             context_menu=context_menu,
@@ -1296,6 +1299,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         except KeyError as exc:
             self._set_finite_state(self._fatal_game_engine_state(exc))
             return
+        if result.viewer_player_id is not None:
+            self._viewer_player_id = result.viewer_player_id
         if result.refreshed_view is not None:
             try:
                 self._apply_refreshed_game_view(
@@ -1306,6 +1311,8 @@ class ArcadeWarhammerWindow(arcade.Window):
                 self._set_finite_state(self._fatal_game_engine_state(exc))
                 return
         if result.clear_placement_draft:
+            if self._placement_draft is not None:
+                self._placement_history = (*self._placement_history, self._placement_draft)
             self._placement_draft = None
         self._set_finite_state(result.finite_state)
         self._trace_event(
@@ -1585,6 +1592,10 @@ class ArcadeWarhammerWindow(arcade.Window):
         state: FiniteDecisionUiState,
     ) -> None:
         self._last_game_view = view
+        self._known_unit_display_by_id = {
+            **self._known_unit_display_by_id,
+            **view.unit_display_by_id,
+        }
         self._battlefield_view = self._battlefield_view.refreshed_from_projection(
             battlefield_state=view.battlefield_state,
             phase_label=view.current_battle_phase or view.stage,

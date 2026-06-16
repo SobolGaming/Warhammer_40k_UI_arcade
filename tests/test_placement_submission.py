@@ -97,6 +97,48 @@ def test_submit_placement_draft_records_generic_parameterized_submission() -> No
     assert result.finite_state.status_message == "Placement accepted."
     assert result.finite_state.event_cursor == 4
     assert result.finite_state.event_log_lines[-1] == "placement_proposal_accepted: player_1"
+    assert result.viewer_player_id == "player_1"
+
+
+def test_submit_placement_draft_refreshes_next_actor_viewer() -> None:
+    decision = _placement_proposal_decision()
+    draft = _ready_draft(decision)
+    next_decision = UiDecision(
+        request_id="decision-request-placement-002",
+        decision_type="submit_deployment_placement",
+        actor_id="player_2",
+        payload={},
+        options=(),
+        is_parameterized=True,
+    )
+    accepted_status = UiClientStatus(
+        stage="battle",
+        status_kind="waiting_for_decision",
+        decision=next_decision,
+        message=None,
+        payload=None,
+    )
+    fake = FakeCoreClient(
+        status=accepted_status,
+        view=_game_view(pending_decision=next_decision, viewer_player_id="player_2"),
+        event_delta=UiEventDelta(
+            viewer_player_id="player_2",
+            cursor=3,
+            next_cursor=4,
+            events=(),
+        ),
+    )
+
+    result = submit_placement_draft(
+        state=FiniteDecisionUiState(pending_decision=decision, event_cursor=3),
+        placement_draft=draft,
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert result.viewer_player_id == "player_2"
+    assert result.refreshed_view is not None
+    assert result.refreshed_view.viewer_player_id == "player_2"
 
 
 def test_submit_placement_draft_without_core_client_returns_local_diagnostic() -> None:
@@ -164,9 +206,13 @@ def _placement_proposal_decision() -> UiDecision:
     )
 
 
-def _game_view(*, pending_decision: UiDecision | None) -> UiGameView:
+def _game_view(
+    *,
+    pending_decision: UiDecision | None,
+    viewer_player_id: str = "player_1",
+) -> UiGameView:
     return UiGameView(
-        viewer_player_id="player_1",
+        viewer_player_id=viewer_player_id,
         game_id="phase28-game",
         stage="battle",
         battle_round=1,

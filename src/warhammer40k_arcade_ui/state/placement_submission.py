@@ -35,6 +35,7 @@ class PlacementSubmissionResult:
     finite_state: FiniteDecisionUiState
     refreshed_view: UiGameView | None
     clear_placement_draft: bool
+    viewer_player_id: str | None = None
 
 
 class PlacementSubmissionError(ValueError):
@@ -203,15 +204,30 @@ def submit_placement_draft(
         else client.advance_until_decision_or_terminal()
     )
     refreshed_state = prepared_state.apply_status(authoritative_status)
-    refreshed_view = client.get_view(viewer_player_id)
+    refresh_viewer_player_id = _refresh_viewer_player_id(
+        status=authoritative_status,
+        fallback_viewer_player_id=viewer_player_id,
+    )
+    refreshed_view = client.get_view(refresh_viewer_player_id)
     refreshed_state = refreshed_state.apply_view(refreshed_view)
-    event_delta = client.get_events_since(refreshed_state.event_cursor, viewer_player_id)
+    event_delta = client.get_events_since(refreshed_state.event_cursor, refresh_viewer_player_id)
     refreshed_state = refreshed_state.apply_event_delta(event_delta)
     return PlacementSubmissionResult(
         finite_state=refreshed_state,
         refreshed_view=refreshed_view,
         clear_placement_draft=submitted_status.status_kind != "invalid",
+        viewer_player_id=refresh_viewer_player_id,
     )
+
+
+def _refresh_viewer_player_id(
+    *,
+    status: UiClientStatus,
+    fallback_viewer_player_id: str,
+) -> str:
+    if status.decision is None or status.decision.actor_id is None:
+        return fallback_viewer_player_id
+    return status.decision.actor_id
 
 
 def _local_invalid(

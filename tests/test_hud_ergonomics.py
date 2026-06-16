@@ -313,7 +313,58 @@ def test_player_units_roster_can_use_core_display_maps_for_undeployed_units() ->
 
     assert [button["unit_id"] for button in buttons] == ["army-alpha:intercessor-unit-1"]
     assert buttons[0]["label"] == "Alpha Intercessors"
+    assert buttons[0]["state"] == "normal"
+    assert buttons[0]["color_role"] == "neutral"
     assert metadata["model_count"] == 2
+    assert metadata["placement_status"] == "unplaced"
+
+
+def test_player_units_roster_distinguishes_placed_and_unplaced_display_map_units() -> None:
+    view = replace(default_battlefield_view(), units=(default_battlefield_view().units[0],))
+    preferences = default_preferences()
+    finite_panel = build_finite_decision_panel(
+        pending_decision=None,
+        highlighted_option_index=0,
+        status_message="Idle",
+        diagnostics=(),
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=None,
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+        viewer_player_id="player_1",
+        unit_display_by_id={
+            "intercessor_squad": {
+                "unit_instance_id": "intercessor_squad",
+                "owner_player_id": "player_1",
+                "unit_display_name": "Intercessors",
+                "model_instance_ids": ["intercessor_1", "intercessor_2", "intercessor_3"],
+            },
+            "reserve_squad": {
+                "unit_instance_id": "reserve_squad",
+                "owner_player_id": "player_1",
+                "unit_display_name": "Reserve Squad",
+                "model_instance_ids": ["reserve_1", "reserve_2"],
+            },
+        },
+    )
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    roster = cast(JsonObject, runtime["hud.player_units.roster"])
+    buttons = cast(list[JsonObject], roster["buttons"])
+    status_by_unit = {
+        cast(str, button["unit_id"]): cast(JsonObject, button["metadata"])["placement_status"]
+        for button in buttons
+    }
+    color_by_unit = {cast(str, button["unit_id"]): button["color_role"] for button in buttons}
+
+    assert [button["unit_id"] for button in buttons] == ["intercessor_squad", "reserve_squad"]
+    assert status_by_unit == {"intercessor_squad": "placed", "reserve_squad": "unplaced"}
+    assert color_by_unit == {"intercessor_squad": "active", "reserve_squad": "neutral"}
 
 
 def test_ergonomic_selected_unit_actions_mark_highlighted_option() -> None:

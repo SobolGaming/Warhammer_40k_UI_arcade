@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from warhammer40k_core.core.army_catalog import ArmyCatalog
@@ -36,7 +36,7 @@ from warhammer40k_arcade_ui.core_client.local_session_client import (
     LocalSessionClient,
     status_from_lifecycle,
 )
-from warhammer40k_arcade_ui.core_client.protocol import UiClientStatus, UiGameView
+from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiClientStatus, UiGameView
 from warhammer40k_arcade_ui.render.core_projection import (
     CoreProjectionRenderError,
     battlefield_view_from_game_view,
@@ -101,7 +101,7 @@ def build_live_core_smoke_startup(
         stop_phase=stop_phase,
         default_viewer_player_id=viewer_player_id,
     )
-    game_view = client.get_view(effective_viewer_player_id)
+    game_view = _with_live_smoke_display_maps(client.get_view(effective_viewer_player_id))
     event_delta = client.get_events_since(0, effective_viewer_player_id)
     try:
         battlefield_view = battlefield_view_from_game_view(game_view)
@@ -126,6 +126,40 @@ def _smoke_viewer_player_id(
     if stop_phase != "deployment" or status.decision is None:
         return default_viewer_player_id
     return status.decision.actor_id or default_viewer_player_id
+
+
+def _with_live_smoke_display_maps(view: UiGameView) -> UiGameView:
+    return replace(
+        view,
+        unit_display_by_id={
+            **_live_smoke_unit_display_by_id(),
+            **view.unit_display_by_id,
+        },
+    )
+
+
+def _live_smoke_unit_display_by_id() -> JsonObject:
+    units: JsonObject = {}
+    for player_id, army_id, unit_selection_ids in (
+        ("player-a", "army-alpha", ("intercessor-unit-1", "intercessor-unit-3")),
+        ("player-b", "army-beta", ("intercessor-unit-2", "intercessor-unit-4")),
+    ):
+        for unit_selection_id in unit_selection_ids:
+            unit_instance_id = f"{army_id}:{unit_selection_id}"
+            units[unit_instance_id] = {
+                "unit_instance_id": unit_instance_id,
+                "owner_player_id": player_id,
+                "visible_status": "visible",
+                "unit_display_name": _live_smoke_unit_display_name(unit_selection_id),
+                "model_instance_ids": [
+                    f"{unit_instance_id}:core-intercessor-like:{index:03d}" for index in range(1, 6)
+                ],
+            }
+    return units
+
+
+def _live_smoke_unit_display_name(unit_selection_id: str) -> str:
+    return unit_selection_id.replace("-", " ").title()
 
 
 def _submit_expected_finite(

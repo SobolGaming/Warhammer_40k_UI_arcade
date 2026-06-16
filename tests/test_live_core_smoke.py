@@ -68,6 +68,11 @@ def test_live_core_smoke_can_stop_at_deployment_placement_request() -> None:
         "army-beta:intercessor-unit-2:core-intercessor-like:005",
     )
     assert startup.viewer_player_id == "player-b"
+    assert {
+        unit_id
+        for unit_id, unit_display in startup.game_view.unit_display_by_id.items()
+        if _required_object_value(unit_display).get("owner_player_id") == "player-b"
+    } == {"army-beta:intercessor-unit-2", "army-beta:intercessor-unit-4"}
     assert startup.event_cursor > 0
     assert startup.battlefield_view.table.width == 60.0
     assert startup.battlefield_view.table.height == 44.0

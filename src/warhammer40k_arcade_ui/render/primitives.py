@@ -114,6 +114,7 @@ def build_world_primitives(
     movement_draft: MovementDraft | None = None,
     action_summary: ActionVisualSummary | None = None,
     placement_draft: PlacementDraft | None = None,
+    placement_history: tuple[PlacementDraft, ...] = (),
 ) -> tuple[RenderPrimitive, ...]:
     """Build deterministic world-space primitives from a battlefield view model."""
 
@@ -137,6 +138,8 @@ def build_world_primitives(
     primitives.extend(_unit_primitives(view))
     if action_summary is not None:
         primitives.extend(_action_visual_summary_primitives(action_summary))
+    for previous_placement in placement_history:
+        primitives.extend(_placement_draft_primitives(previous_placement, history=True))
     if selection_state is not None:
         primitives.extend(_selection_primitives(view, selection_state))
         if movement_draft is not None:
@@ -190,7 +193,38 @@ def _deployment_zone_primitives(view: BattlefieldView) -> tuple[RenderPrimitive,
                 anchor_y="center",
             )
         )
+    primitives.extend(_deployment_side_labels(view))
     return tuple(primitives)
+
+
+def _deployment_side_labels(view: BattlefieldView) -> tuple[TextPrimitive, ...]:
+    visible_zones = tuple(zone for zone in view.deployment_zones if zone.visible)
+    if not visible_zones:
+        return ()
+    left_zone = min(visible_zones, key=lambda zone: _centroid(zone.polygon)[0])
+    right_zone = max(visible_zones, key=lambda zone: _centroid(zone.polygon)[0])
+    return (
+        TextPrimitive(
+            layer="deployment_side_label",
+            text=f"{left_zone.player_id} side",
+            position=(0.0, -1.15),
+            color=_player_color(left_zone.player_id),
+            font_size=9.5,
+            coordinate_space="world",
+            anchor_x="left",
+            anchor_y="top",
+        ),
+        TextPrimitive(
+            layer="deployment_side_label",
+            text=f"{right_zone.player_id} side",
+            position=(view.table.width, -1.15),
+            color=_player_color(right_zone.player_id),
+            font_size=9.5,
+            coordinate_space="world",
+            anchor_x="right",
+            anchor_y="top",
+        ),
+    )
 
 
 def _objective_primitives(view: BattlefieldView) -> tuple[RenderPrimitive, ...]:
@@ -519,30 +553,38 @@ def _movement_assignment_color(state: str) -> Color:
 
 def _placement_draft_primitives(
     placement_draft: PlacementDraft,
+    *,
+    history: bool = False,
 ) -> tuple[RenderPrimitive, ...]:
     primitives: list[RenderPrimitive] = []
     for assignment in placement_draft.assignment_views():
         if assignment.position is None:
             continue
         color = _placement_assignment_color(assignment.state)
+        fill_color = (
+            (PLACEMENT_GHOST_FILL[0], PLACEMENT_GHOST_FILL[1], PLACEMENT_GHOST_FILL[2], 30)
+            if history
+            else PLACEMENT_GHOST_FILL
+        )
+        layer_prefix = "placement_history" if history else "placement"
         primitives.append(
             CirclePrimitive(
-                layer=f"placement_{assignment.state}_ghost_base",
+                layer=f"{layer_prefix}_{assignment.state}_ghost_base",
                 center=assignment.position,
                 radius=assignment.base_radius,
-                fill_color=PLACEMENT_GHOST_FILL,
+                fill_color=fill_color,
                 outline_color=color,
-                line_width=1.8 if assignment.state == "current" else 1.2,
+                line_width=1.0 if history else 1.8 if assignment.state == "current" else 1.2,
             )
         )
         primitives.append(
             CirclePrimitive(
-                layer=f"placement_{assignment.state}_focus_ring",
+                layer=f"{layer_prefix}_{assignment.state}_focus_ring",
                 center=assignment.position,
                 radius=assignment.base_radius + 0.22,
                 fill_color=(0, 0, 0, 0),
                 outline_color=color,
-                line_width=1.0,
+                line_width=0.8 if history else 1.0,
             )
         )
     return tuple(primitives)
@@ -557,6 +599,10 @@ def _placement_assignment_color(state: str) -> Color:
 
 
 def _player_color(player_id: str) -> Color:
+    if player_id == "player-a":
+        return PLAYER_1_COLOR
+    if player_id == "player-b":
+        return PLAYER_2_COLOR
     if player_id == "player_1":
         return PLAYER_1_COLOR
     if player_id == "player_2":

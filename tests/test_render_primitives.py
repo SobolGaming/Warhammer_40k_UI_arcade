@@ -78,6 +78,7 @@ def test_fixture_payload_builds_expected_world_primitives() -> None:
     assert circle_layers.count("unit_token") == 2
     assert circle_layers.count("model_base") == 4
     assert "unit_label" in text_layers
+    assert text_layers.count("deployment_side_label") == 2
 
 
 def test_selected_unit_builds_selection_overlay_primitives() -> None:
@@ -153,6 +154,25 @@ def test_placement_draft_builds_ghost_primitives_without_labels() -> None:
     assert "placement_placed_ghost_base" in circle_layers
     assert "placement_current_ghost_base" not in circle_layers
     assert not any(layer.startswith("placement_") for layer in text_layers)
+
+
+def test_placement_history_keeps_previous_advisory_ghosts() -> None:
+    view = default_battlefield_view()
+    draft = PlacementDraft.start_for_pending(
+        view=view,
+        selection=SelectionState.initial(default_preferences()),
+        pending_decision=_placement_proposal_decision(),
+    )
+    assert draft is not None
+    draft = draft.place_current_model((8.0, 18.0))
+
+    primitives = build_world_primitives(view, placement_history=(draft,))
+
+    circle_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is CirclePrimitive
+    ]
+    assert "placement_history_placed_ghost_base" in circle_layers
+    assert "placement_placed_ghost_base" not in circle_layers
 
 
 def test_action_visual_summary_builds_dim_path_and_ghost_primitives() -> None:

@@ -258,6 +258,7 @@ def _player_unit_buttons(
                 label=unit.label,
                 player_id=unit.player_id,
                 model_count=len(unit.models),
+                on_battlefield=True,
                 selected_unit_id=selected_unit_id,
                 hovered_hud_button_id=hovered_hud_button_id,
                 placement_draft_panel=placement_draft_panel,
@@ -269,7 +270,7 @@ def _player_unit_buttons(
         if not unit_id or unit_id in seen_unit_ids:
             continue
         player_id = _json_text(unit_payload.get("owner_player_id"))
-        if viewer_player_id is not None and player_id and player_id != viewer_player_id:
+        if viewer_player_id is not None and player_id != viewer_player_id:
             continue
         model_ids = unit_payload.get("model_instance_ids")
         model_count = len(model_ids) if type(model_ids) is list else 0
@@ -281,6 +282,7 @@ def _player_unit_buttons(
                 label=label,
                 player_id=player_id,
                 model_count=model_count,
+                on_battlefield=False,
                 selected_unit_id=selected_unit_id,
                 hovered_hud_button_id=hovered_hud_button_id,
                 placement_draft_panel=placement_draft_panel,
@@ -299,6 +301,7 @@ def _player_unit_buttons(
                 label=_unit_label_from_id(placement_draft_panel.unit_id),
                 player_id="",
                 model_count=placement_draft_panel.total_model_count,
+                on_battlefield=False,
                 selected_unit_id=selected_unit_id,
                 hovered_hud_button_id=hovered_hud_button_id,
                 placement_draft_panel=placement_draft_panel,
@@ -314,11 +317,14 @@ def _player_unit_button(
     label: str,
     player_id: str,
     model_count: int,
+    on_battlefield: bool,
     selected_unit_id: str | None,
     hovered_hud_button_id: str | None,
     placement_draft_panel: PlacementDraftPanelView | None,
 ) -> HudButtonView:
-    placement_status = _placement_roster_status(unit_id, placement_draft_panel)
+    placement_status = _placement_roster_status(unit_id, placement_draft_panel) or (
+        "placed" if on_battlefield else "unplaced"
+    )
     selected = unit_id == selected_unit_id or (
         placement_draft_panel is not None and placement_draft_panel.unit_id == unit_id
     )
@@ -329,18 +335,10 @@ def _player_unit_button(
         state = "hover"
     elif placement_status == "placed":
         state = "active"
-    elif placement_status == "unplaced":
-        state = "warning"
     else:
         state = "normal"
     color_role: HudColorRole = (
-        "selected"
-        if selected
-        else "active"
-        if placement_status == "placed"
-        else "warning"
-        if placement_status == "unplaced"
-        else "player"
+        "selected" if selected else "active" if placement_status == "placed" else "neutral"
     )
     return HudButtonView(
         component_id=f"player_unit_row_{index}",
