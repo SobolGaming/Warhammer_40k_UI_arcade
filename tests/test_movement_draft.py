@@ -89,6 +89,7 @@ def test_normal_move_budget_falls_back_to_datasheet_base_movement() -> None:
     assert draft is not None
     assert draft.movement_budget_inches == 6.0
     assert draft.base_movement_budget_inches == 6.0
+    assert any("movement budget is inferred" in hint for hint in draft.local_hint_lines)
 
 
 def test_advance_move_budget_uses_datasheet_base_movement_plus_advance_roll() -> None:
@@ -110,6 +111,7 @@ def test_advance_move_budget_uses_datasheet_base_movement_plus_advance_roll() ->
     assert draft is not None
     assert draft.movement_budget_inches == 12.0
     assert draft.base_movement_budget_inches == 6.0
+    assert any("movement budget is inferred" in hint for hint in draft.local_hint_lines)
 
 
 def test_movement_draft_does_not_start_for_unrelated_selected_unit() -> None:

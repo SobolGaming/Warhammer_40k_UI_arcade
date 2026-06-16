@@ -1367,6 +1367,11 @@ def _local_hint_lines(*, view: BattlefieldView, draft: MovementDraft) -> tuple[s
             "Preview note: "
             f"{draft.unchanged_model_count} unchanged model(s) remain explicit no-op paths."
         )
+    if _uses_inferred_movement_budget(draft):
+        hints.append(
+            "Preview note: movement budget is inferred from datasheet movement hints "
+            "and visible roll context; engine validation remains authoritative."
+        )
     if draft.movement_budget_inches is None:
         hints.append("Preview warning: movement budget is unavailable in the proposal context.")
     elif _has_over_budget_path(draft):
@@ -1376,6 +1381,17 @@ def _local_hint_lines(*, view: BattlefieldView, draft: MovementDraft) -> tuple[s
     if _has_self_overlap(draft):
         hints.append("Preview warning: final ghost bases overlap each other.")
     return tuple(hints)
+
+
+def _uses_inferred_movement_budget(draft: MovementDraft) -> bool:
+    if draft.movement_budget_inches is None:
+        return False
+    profile = draft.proposal_profile
+    if profile.distance_context_key is None:
+        return False
+    if _context_positive_float(draft.proposal_context, profile.distance_context_key) is not None:
+        return False
+    return draft.proposal_kind in ("normal_move", "advance", "fall_back")
 
 
 def _has_over_budget_path(draft: MovementDraft) -> bool:
