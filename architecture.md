@@ -34,30 +34,7 @@ under `docs/plans/`.
 
 | Phase | Status | Purpose | Plan |
 | --- | --- | --- | --- |
-| 0 | Complete | Repository bootstrap and quality baseline | [phase-00](docs/plans/phase-00-repository-bootstrap.md) |
-| 1 | Complete | Documentation foundation | [phase-01](docs/plans/phase-01-documentation-foundation.md) |
-| 2 | Complete | Core client adapter layer | [phase-02](docs/plans/phase-02-core-client-adapter.md) |
-| 3 | Complete | Arcade rendering foundation | [phase-03](docs/plans/phase-03-arcade-rendering-foundation.md) |
-| 4 | Complete | Shareable UI preferences framework | [phase-04](docs/plans/phase-04-shareable-ui-preferences.md) |
-| 5 | Complete | Selection and unit information HUD | [phase-05](docs/plans/phase-05-selection-unit-hud.md) |
-| 6 | Complete | Finite decision submission | [phase-06](docs/plans/phase-06-finite-decision-submission.md) |
-| 7 | Complete | Movement path drafting UI | [phase-07](docs/plans/phase-07-movement-path-drafting.md) |
-| 8 | Complete | Entity selection profile foundation | [phase-08](docs/plans/phase-08-entity-selection-profile-foundation.md) |
-| 9 | Complete | Movement draft model assignments | [phase-09](docs/plans/phase-09-movement-draft-model-assignments.md) |
-| 10 | Complete | Movement proposal submission and diagnostics | [phase-10](docs/plans/phase-10-movement-proposal-submission-diagnostics.md) |
-| 11 | Complete | Live core manual smoke path | [phase-11](docs/plans/phase-11-live-core-manual-smoke.md) |
-| 12 | Complete | GUI event test harness | [phase-12](docs/plans/phase-12-gui-event-test-harness.md) |
-| 13 | Complete | Headless render evidence | [phase-13](docs/plans/phase-13-headless-render-evidence.md) |
-| 14 | Complete | Forensic event trace | [phase-14](docs/plans/phase-14-forensic-event-trace.md) |
-| 15 | Complete | Crash diagnostic bundles | [phase-15](docs/plans/phase-15-crash-diagnostic-bundles.md) |
-| 16 | Complete | Generic assignment HUD | [phase-16](docs/plans/phase-16-generic-assignment-hud.md) |
-| 17 | Complete | HUD zone layout framework | [phase-17](docs/plans/phase-17-hud-zone-layout-framework.md) |
-| 18 | Complete | Action visual summary overlays | [phase-18](docs/plans/phase-18-action-visual-summary-overlays.md) |
-| 19 | Complete | HUD widget toolkit | [phase-19](docs/plans/phase-19-hud-widget-toolkit.md) |
-| 20 | Complete | HUD ergonomics pass | [phase-20](docs/plans/phase-20-hud-ergonomics.md) |
-| 21A | Complete | Core Phase 15D-15F adapter adaptation | [phase-21a](docs/plans/phase-21a-core-phase15d-15f-adaptation.md) |
-| 21 | Complete | Packaging, CI, and regression hardening | [phase-21](docs/plans/phase-21-packaging-ci-regression.md) |
-| 22 | Planned | HUD toolkit customizability and overflow tuning | [phase-22](docs/plans/phase-22-hud-toolkit-customizability.md) |
+
 
 ## Cross-cutting architectural rules
 
@@ -332,21 +309,6 @@ request IDs before constructing engine `DecisionResult` objects, and accepted su
 through `FiniteOptionSubmission` or `ParameterizedSubmission` into
 `GameLifecycle.submit_decision(...)`.
 
-## Movement flow target
-
-The first rules-facing vertical slice will be movement:
-
-```text
-finite movement action selection
-  -> movement proposal request
-  -> preserve movement action/mode context
-  -> request-scoped entity selection
-  -> per-model path assignment
-  -> aggregate PathWitness and optional model movement payload
-  -> proposal submission
-  -> accepted movement or authoritative invalid diagnostics
-```
-
 ## Testing strategy
 
 - Unit tests for immutable config and entry-point behavior.
@@ -393,69 +355,4 @@ finite movement action selection
 
 ## Decision log
 
-- 2026-05-31: Phase 0 targets Python 3.14.5 to match the current core-engine workflow.
-- 2026-05-31: Phase 0 starts with a blank Arcade window and no core-engine dependency. The
-  engine-facing boundary will be introduced in Phase 2 through `core_client`.
-- 2026-05-31: Phase 0 completed with a locked `uv` project, blank Arcade entry point, strict
-  typing/linting configuration, pre-commit hooks, and bootstrap tests.
-- 2026-05-31: Phase 1 completed with README and architecture documentation covering repository
-  relationships, first-run commands, UI/core boundaries, runtime modes, roadmap links, and deferred
-  work.
-- 2026-06-03: Added an initial later-phase plan for shareable JSON/YAML UI preferences covering
-  overlay defaults, hotkeys, selected-model/unit information affordances, and config diagnostics
-  while preserving the engine-authoritative decision boundary.
-- 2026-06-03: Phase 2 completed with a `core_client` protocol, local in-process session wrapper,
-  fake UI client, explicit request-ID submission boundary, core dependency declaration, and tests
-  covering pending decisions, movement proposal requests, invalid diagnostics, terminal status, and
-  stale request rejection.
-- 2026-06-03: Phase 3 completed with fixture-backed battlefield view models, pure render primitive
-  generation, camera pan/zoom coordinate transforms, `ArcadeWarhammerWindow`, HUD/debug coordinate
-  rendering, and tests for camera math plus fixture-to-primitive generation.
-- 2026-06-03: Pulled the shareable preferences framework forward to Phase 4 so upcoming overlay,
-  HUD, hotkey, and local behavior settings can be encoded, exported, swapped, and round-tripped
-  before selection and movement workflows consume them.
-- 2026-06-03: Phase 4 completed with a typed preferences package, JSON/YAML loaders and exporters,
-  command/overlay/planned-setting registries, built-in default/dense-debug/keyboard-heavy profiles,
-  documented example files, CLI export support, and tests covering schema diagnostics and
-  round-trips.
-- 2026-06-03: Phase 5 completed with local selection state, model-base hit detection, overlap
-  cycling, selected-unit/model overlays, selected-unit panel view models, context menu display from
-  engine-provided finite options, debug inspector view models, preference-backed hotkeys, and tests
-  covering state, HUD derivation, and render primitives.
-- 2026-06-03: Phase 6 completed with generic finite-decision focus/submission state, deterministic
-  UI result IDs, explicit request/option ID submission through `UiCoreClient`, parameterized
-  proposal display without finite submission, viewer-scoped event cursor refresh, visible
-  diagnostics, and a Tab regression fix that prevents hover-only selection.
-- 2026-06-04: Refreshed plans against `Warhammer_40k_AI` `main` at `16d0adf`. Movement plans remain
-  movement-only but now explicitly preserve engine-issued `movement_phase_action`,
-  `movement_mode`, and Fall Back `fall_back_mode` context. Placement, shooting declaration,
-  Stratagem target-binding, and ranged attack-resolution decisions are acknowledged as future UI
-  tools behind the same generic decision/proposal boundary.
-- 2026-06-04: Phase 7 completed with local movement draft state, movement proposal activation
-  gates, advisory path/measurement overlays, movement draft HUD content, payload preview generation,
-  active movement preference overlays, and tests covering draft transitions, payload shape, Fall
-  Back mode preservation, unsupported parameterized requests, HUD view models, and render
-  primitives. Engine submission remains a later movement phase.
-- 2026-06-04: Replanned post-Phase 7 movement work to insert a cross-cutting entity selection and
-  assignment workspace before movement submission. The updated flow makes per-model movement
-  assignment explicit, moves movement submission to Phase 10, adds a generic assignment HUD after
-  live-core smoke work, and keeps shooting/Stratagem assignment plans preliminary until their core
-  contracts stabilize.
-- 2026-06-04: Added action visual summary overlays so the assignment workspace can also
-  drive togglable battlefield summaries, such as dim/review movement paths, future shooting target
-  lines, and future Stratagem affected-unit markers.
-- 2026-06-05: Inserted Phase 11 live core manual smoke path so the Phase 10 movement submission UI
-  can be tested against the real local core before the generic assignment HUD and later polish
-  phases. GUI testability, render evidence, forensic tracing, and crash bundles now occupy Phases
-  12-15 before the Phase 16 generic assignment HUD.
-- 2026-06-05: Phase 16 completed with generic assignment HUD view models, compact/detailed
-  Assignment Review render primitives, preference-backed display settings, movement assignment
-  groups, unsupported Charge Move diagnostics, and finite fight activation/interrupt summaries.
-- 2026-06-05: Phase 11 completed with the `--live-core-smoke` launch mode, a real
-  `LocalSessionClient` smoke startup at core commit `603fb16`, core projection to render-view
-  conversion, CLI tests, real-core movement decision path tests, and an import-boundary regression.
-- 2026-06-07: Phase 19 and Phase 20 completed with a reusable HUD widget toolkit, YAML composition
-  profiles, HUD preview entrypoint, and ergonomic status/action/assignment HUD summaries.
-- 2026-06-07: Phase 21 completed with CI coverage thresholding, package build smoke coverage,
-  import-boundary audit script, pre-commit integration, expanded golden regression fixtures,
-  changelog, and ADRs for the UI/core boundary and CI quality gates.
+- 2026-06-16: Decision Log Reset
