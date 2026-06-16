@@ -331,6 +331,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         return self._placement_draft
 
     @property
+    def placement_history(self) -> tuple[PlacementDraft, ...]:
+        """Current local placement ghosts retained for advisory rendering."""
+
+        return self._placement_history
+
+    @property
     def action_summary_intensity(self) -> ActionSummaryIntensity:
         """Current advisory action-summary display intensity."""
 
@@ -1349,9 +1355,8 @@ class ArcadeWarhammerWindow(arcade.Window):
                 self._set_finite_state(self._fatal_game_engine_state(exc))
                 return
         if result.clear_placement_draft:
-            if self._placement_draft is not None:
-                self._placement_history = (*self._placement_history, self._placement_draft)
             self._placement_draft = None
+            self._placement_history = ()
         self._set_finite_state(result.finite_state)
         self._trace_event(
             category="ui",

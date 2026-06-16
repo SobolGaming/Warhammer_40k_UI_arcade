@@ -141,6 +141,42 @@ def test_submit_placement_draft_refreshes_next_actor_viewer() -> None:
     assert result.refreshed_view.viewer_player_id == "player_2"
 
 
+def test_submit_placement_draft_clears_submitted_draft_after_engine_invalid() -> None:
+    decision = _placement_proposal_decision()
+    draft = _ready_draft(decision)
+    invalid_status = UiClientStatus.invalid(
+        stage="battle",
+        violation_code="invalid_placement",
+        message="Placement rejected.",
+        field="payload",
+        payload={"invalid_reason": "invalid_placement", "field": "payload"},
+        decision=decision,
+    )
+    fake = FakeCoreClient(
+        status=invalid_status,
+        view=_game_view(pending_decision=decision),
+        event_delta=UiEventDelta(
+            viewer_player_id="player_1",
+            cursor=3,
+            next_cursor=4,
+            events=(),
+        ),
+    )
+
+    result = submit_placement_draft(
+        state=FiniteDecisionUiState(pending_decision=decision, event_cursor=3),
+        placement_draft=draft,
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert fake.parameterized_submissions[0].request_id == "decision-request-placement-001"
+    assert fake.advance_call_count == 0
+    assert result.clear_placement_draft is True
+    assert result.finite_state.status_kind == "invalid"
+    assert result.finite_state.diagnostics[0].violation_code == "invalid_placement"
+
+
 def test_submit_placement_draft_without_core_client_returns_local_diagnostic() -> None:
     decision = _placement_proposal_decision()
 

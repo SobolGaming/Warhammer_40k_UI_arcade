@@ -215,7 +215,7 @@ def submit_placement_draft(
     return PlacementSubmissionResult(
         finite_state=refreshed_state,
         refreshed_view=refreshed_view,
-        clear_placement_draft=submitted_status.status_kind != "invalid",
+        clear_placement_draft=True,
         viewer_player_id=refresh_viewer_player_id,
     )
 

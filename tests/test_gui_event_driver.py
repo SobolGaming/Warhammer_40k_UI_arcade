@@ -560,6 +560,8 @@ def _deploy_current_live_smoke_unit(driver: GuiTestDriver, unit_id: str) -> None
 
     driver.press_key(arcade.key.ENTER)
 
+    assert driver.window.placement_history == ()
+
 
 def _pending_payload(driver: GuiTestDriver) -> JsonObject:
     decision = driver.window.pending_decision
