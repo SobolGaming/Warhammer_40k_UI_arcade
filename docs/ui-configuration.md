@@ -120,7 +120,7 @@ hud:
       collapsed: false
     left_rail:
       visible: true
-      size_px: 224
+      size_px: 300
       collapsed: false
   show_phase: true
   show_active_player: true

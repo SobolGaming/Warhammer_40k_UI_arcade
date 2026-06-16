@@ -68,7 +68,7 @@ hud:
       collapsed: false
     left_rail:
       visible: true
-      size_px: 224
+      size_px: 300
       collapsed: false
     right_inspector:
       visible: true
@@ -99,6 +99,7 @@ hud:
   show_assignment_warning_markers: true
   action_summary_default: dim
   action_summary_max_labels: 6
+  movement_budget_ring_mode: total
   show_chain_breadcrumbs: true
   text_scale: 1.0
   high_contrast: false

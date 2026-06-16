@@ -46,7 +46,10 @@ def battlefield_view_from_game_view(view: UiGameView) -> BattlefieldView:
         deployment_zones=_deployment_zones_from_mission_setup(mission_setup),
         objectives=_objectives_from_mission_setup(mission_setup),
         terrain=_terrain_from_mission_setup(mission_setup),
-        units=_units_from_battlefield_state(battlefield_state),
+        units=_units_from_battlefield_state(
+            battlefield_state=battlefield_state,
+            model_display_by_id=view.model_display_by_id,
+        ),
         hud=HudView(
             phase_label=view.current_battle_phase or view.stage,
             active_player_id=view.active_player_id or "none",
@@ -149,7 +152,11 @@ def _terrain_from_mission_setup(mission_setup: JsonObject) -> tuple[TerrainFootp
     )
 
 
-def _units_from_battlefield_state(battlefield_state: JsonObject) -> tuple[UnitView, ...]:
+def _units_from_battlefield_state(
+    *,
+    battlefield_state: JsonObject,
+    model_display_by_id: JsonObject,
+) -> tuple[UnitView, ...]:
     units: list[UnitView] = []
     for placed_army_value in _required_list(battlefield_state, "placed_armies"):
         placed_army = _json_object("placed_army", placed_army_value)
@@ -162,7 +169,10 @@ def _units_from_battlefield_state(battlefield_state: JsonObject) -> tuple[UnitVi
                     player_id=_required_string(unit_placement, "player_id"),
                     label=_display_suffix(unit_id),
                     models=tuple(
-                        _model_from_placement(value)
+                        _model_from_placement(
+                            value=value,
+                            model_display_by_id=model_display_by_id,
+                        )
                         for value in _required_list(unit_placement, "model_placements")
                     ),
                 )
@@ -170,7 +180,11 @@ def _units_from_battlefield_state(battlefield_state: JsonObject) -> tuple[UnitVi
     return tuple(units)
 
 
-def _model_from_placement(value: JsonValue) -> ModelBaseView:
+def _model_from_placement(
+    *,
+    value: JsonValue,
+    model_display_by_id: JsonObject,
+) -> ModelBaseView:
     model_placement = _json_object("model_placement", value)
     model_id = _required_string(model_placement, "model_instance_id")
     pose = _json_object("pose", model_placement.get("pose"))
@@ -182,8 +196,72 @@ def _model_from_placement(value: JsonValue) -> ModelBaseView:
             _required_float(position, "x"),
             _required_float(position, "y"),
         ),
-        base_radius=_DEFAULT_PRESENTATION_BASE_RADIUS_INCHES,
+        base_radius=_model_base_radius_inches(
+            model_id=model_id,
+            model_display_by_id=model_display_by_id,
+        ),
+        base_movement_inches=_model_base_movement_inches(
+            model_id=model_id,
+            model_display_by_id=model_display_by_id,
+        ),
     )
+
+
+def _model_base_radius_inches(*, model_id: str, model_display_by_id: JsonObject) -> float:
+    display = _optional_model_display(model_id=model_id, model_display_by_id=model_display_by_id)
+    if display is None:
+        return _DEFAULT_PRESENTATION_BASE_RADIUS_INCHES
+    base_size = _json_object("model_display.base_size", display.get("base_size"))
+    kind = _required_string(base_size, "kind")
+    if kind == "circular":
+        return _required_positive_float(base_size, "diameter_mm") / _MM_PER_INCH / 2.0
+    if kind == "oval":
+        length = _required_positive_float(base_size, "length_mm")
+        width = _required_positive_float(base_size, "width_mm")
+        return max(length, width) / _MM_PER_INCH / 2.0
+    raise CoreProjectionRenderError(f"model_display base_size kind is unsupported: {kind}.")
+
+
+def _model_base_movement_inches(
+    *,
+    model_id: str,
+    model_display_by_id: JsonObject,
+) -> float | None:
+    display = _optional_model_display(model_id=model_id, model_display_by_id=model_display_by_id)
+    if display is None:
+        return None
+    return _movement_characteristic_inches(display.get("base_characteristics")) or (
+        _movement_characteristic_inches(display.get("current_characteristics"))
+    )
+
+
+def _optional_model_display(
+    *,
+    model_id: str,
+    model_display_by_id: JsonObject,
+) -> JsonObject | None:
+    display_value = model_display_by_id.get(model_id)
+    if display_value is None:
+        return None
+    return _json_object("model_display", display_value)
+
+
+def _movement_characteristic_inches(characteristics_value: JsonValue) -> float | None:
+    if characteristics_value is None:
+        return None
+    characteristics = _json_object("model_display.characteristics", characteristics_value)
+    movement_value = characteristics.get("M")
+    if movement_value is None:
+        return None
+    movement = _json_object("model_display.characteristics.M", movement_value)
+    for key in ("final", "base", "raw"):
+        value = movement.get(key)
+        if value is None:
+            continue
+        number = _number_to_float(f"model_display.characteristics.M.{key}", value)
+        if number > 0.0:
+            return number
+    return None
 
 
 def _pending_decision_summary(view: UiGameView) -> str:
@@ -341,15 +419,18 @@ def _required_string(payload: JsonObject, key: str) -> str:
 
 def _required_float(payload: JsonObject, key: str) -> float:
     value = payload.get(key)
-    if type(value) is int:
-        number = float(value)
-    elif type(value) is float:
-        number = value
-    else:
-        raise CoreProjectionRenderError(f"{key} must be a number.")
+    number = _number_to_float(key, value)
     if not math.isfinite(number):
         raise CoreProjectionRenderError(f"{key} must be finite.")
     return number
+
+
+def _number_to_float(name: str, value: object) -> float:
+    if type(value) is int:
+        return float(value)
+    if type(value) is float:
+        return value
+    raise CoreProjectionRenderError(f"{name} must be a number.")
 
 
 def _required_positive_float(payload: JsonObject, key: str) -> float:

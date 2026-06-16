@@ -504,6 +504,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             action_summary,
             placement_draft=self._placement_draft,
             placement_history=self._placement_history,
+            movement_budget_ring_mode=self._preferences.hud.movement_budget_ring_mode,
         )
         overlay_primitives = build_screen_overlay_primitives(
             context_menu=context_menu,
@@ -1579,6 +1580,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             view=self._battlefield_view,
             selection=self._selection_state,
             pending_decision=self._pending_decision,
+            model_display_by_id=self._known_model_display_by_id,
         )
         if next_draft is not None:
             self._movement_draft = None

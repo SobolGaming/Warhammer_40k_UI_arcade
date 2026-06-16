@@ -18,6 +18,7 @@ uv python install 3.14.5
 uv lock
 uv sync
 uv run warhammer40k-arcade-ui
+uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml --event-trace payload --event-trace-file ./ui-trace.jsonl --event-trace-exclude ui.mouse_motion  --crash-report-dir /tmp/ui-crashes --stop-at-phase setup
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/keyboard-heavy.yaml
 uv run warhammer40k-arcade-ui --ui-prefs docs/preferences/command-bench.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/default.yaml
@@ -174,19 +175,20 @@ uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase movement --ui-pr
 Stop points:
 
 - `setup` and `secondary-missions`: pause at the first `select_secondary_missions` request.
-- `reserve-declarations`: pause at `select_reserve_declaration` before the smoke harness declares
-  Strategic Reserves and Deep Strike units.
+- `reserve-declarations`: pause at `select_reserve_declaration` before the smoke harness completes
+  reserve declarations for later stop points.
 - `deployment`: pause at `select_deployment_unit` for `player-b`, before the harness auto-selects
   and places deployment units. Use this to test the placement editor against real deployment
   requests.
-- `redeploy`: pause at `select_redeploy_unit` after ordinary deployment and before the harness
-  answers the redeploy placement branch.
+- `redeploy`: pause at `select_redeploy_unit` after the harness completes reserve declarations and
+  places all smoke deployment units, before it answers the redeploy placement branch.
 - `prebattle`: pause at `select_prebattle_action` after redeploy handling. This currently exposes
   the smoke fixture's Scout action and completion option.
 - `scout-move`: pause at the parameterized `submit_scout_move` request so the movement-family draft
   tool can be tested against a real Scout Move proposal.
-- `movement`: auto-answer setup and prebattle smoke decisions, including Scout Move, then pause at
-  the first battle-round `select_movement_unit` request.
+- `movement`: auto-answer setup and prebattle smoke decisions, complete reserve declarations, deploy
+  all smoke units, resolve Scout Move, then pause at the first battle-round `select_movement_unit`
+  request.
 
 All scripted choices are submitted through the real local core session. They are only defaults for
 getting to the selected smoke checkpoint; after the Arcade window opens, reviewer actions go through

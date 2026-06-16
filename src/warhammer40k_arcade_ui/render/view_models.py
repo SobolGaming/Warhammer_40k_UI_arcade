@@ -142,12 +142,15 @@ class ModelBaseView:
     label: str
     position: Point
     base_radius: float
+    base_movement_inches: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "model_id", _non_empty_string("model_id", self.model_id))
         object.__setattr__(self, "label", _non_empty_string("label", self.label))
         object.__setattr__(self, "position", _validate_point("position", self.position))
         _validate_positive_float("base_radius", self.base_radius)
+        if self.base_movement_inches is not None:
+            _validate_positive_float("base_movement_inches", self.base_movement_inches)
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -157,6 +160,7 @@ class ModelBaseView:
             label=_required_string(model, "label"),
             position=_required_point(model, "position"),
             base_radius=_required_positive_float(model, "base_radius"),
+            base_movement_inches=_optional_positive_float(model, "base_movement_inches"),
         )
 
 
@@ -458,6 +462,15 @@ def _required_bool(payload: dict[str, object], key: str) -> bool:
 
 def _required_positive_float(payload: dict[str, object], key: str) -> float:
     value = _required_value(payload, key)
+    numeric_value = _numeric_to_float(key, value)
+    _validate_positive_float(key, numeric_value)
+    return numeric_value
+
+
+def _optional_positive_float(payload: dict[str, object], key: str) -> float | None:
+    value = payload.get(key)
+    if value is None:
+        return None
     numeric_value = _numeric_to_float(key, value)
     _validate_positive_float(key, numeric_value)
     return numeric_value

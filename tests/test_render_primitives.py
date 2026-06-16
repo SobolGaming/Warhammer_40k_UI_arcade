@@ -164,6 +164,52 @@ def test_movement_draft_builds_path_waypoint_ghost_and_budget_primitives() -> No
     assert "movement_waypoint_label" not in text_layers
 
 
+def test_movement_draft_split_budget_rings_render_for_each_selected_model() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    selection = selection.with_movement_draft_overlays(preferences)
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=_movement_proposal_decision(
+            context_overrides={
+                "movement_budget_inches": 9.0,
+                "base_movement_budget_inches": 6.0,
+            }
+        ),
+    )
+    assert draft is not None
+    draft = draft.select_current_group(view=view)
+
+    primitives = build_world_primitives(
+        view,
+        selection,
+        draft,
+        movement_budget_ring_mode="split",
+    )
+
+    budget_rings = [primitive for primitive in primitives if type(primitive) is CirclePrimitive]
+    base_rings = [
+        primitive for primitive in budget_rings if primitive.layer == "movement_base_budget_ring"
+    ]
+    enhanced_rings = [
+        primitive
+        for primitive in budget_rings
+        if primitive.layer == "movement_enhanced_budget_ring"
+    ]
+
+    assert len(base_rings) == len(view.units[0].models)
+    assert len(enhanced_rings) == len(view.units[0].models)
+    assert {ring.radius for ring in base_rings} == {6.0}
+    assert {ring.radius for ring in enhanced_rings} == {9.0}
+    assert "movement_budget_ring" not in {ring.layer for ring in budget_rings}
+
+
 def test_placement_draft_builds_ghost_primitives_without_labels() -> None:
     view = default_battlefield_view()
     draft = PlacementDraft.start_for_pending(
@@ -508,7 +554,17 @@ def _summary_group(
     )
 
 
-def _movement_proposal_decision() -> UiDecision:
+def _movement_proposal_decision(
+    *,
+    context_overrides: dict[str, object] | None = None,
+) -> UiDecision:
+    context: dict[str, object] = {
+        "source_selected_option_id": "normal_move",
+        "movement_mode": "normal",
+        "movement_budget_inches": 6.0,
+    }
+    if context_overrides is not None:
+        context.update(context_overrides)
     return UiDecision.from_payload(
         {
             "request_id": "decision-request-000005",
@@ -528,11 +584,7 @@ def _movement_proposal_decision() -> UiDecision:
                     "source_decision_result_id": "ui-result-000001",
                     "movement_phase_action": "normal_move",
                     "placement_kinds": [],
-                    "context": {
-                        "source_selected_option_id": "normal_move",
-                        "movement_mode": "normal",
-                        "movement_budget_inches": 6.0,
-                    },
+                    "context": context,
                 }
             },
             "is_parameterized": True,

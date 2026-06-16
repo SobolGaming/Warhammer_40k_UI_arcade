@@ -31,10 +31,14 @@ def test_compass_ring_layout_reserves_four_edge_zones_and_center_viewport() -> N
         "right_inspector",
         "bottom_workbench",
     }
-    assert layout.center_viewport.width == 780.0
+    assert layout.center_viewport.width == 704.0
     assert layout.center_viewport.height == 560.0
-    assert layout.region("left_rail") is not None
-    assert layout.region("right_inspector") is not None
+    left_rail = layout.region("left_rail")
+    right_inspector = layout.region("right_inspector")
+    assert left_rail is not None
+    assert right_inspector is not None
+    assert left_rail.rect.width == 300.0
+    assert right_inspector.rect.width == 276.0
 
 
 def test_command_bench_layout_reserves_player_opponent_and_command_bench_zones() -> None:

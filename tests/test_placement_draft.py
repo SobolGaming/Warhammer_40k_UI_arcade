@@ -72,6 +72,29 @@ def test_deployment_placement_payload_uses_setup_family_shape() -> None:
     assert type(payload["model_placements"]) is list
 
 
+def test_deployment_placement_draft_uses_display_base_size_for_unprojected_unit() -> None:
+    model_id = "army-alpha:strategic-reserve-unit:core-vehicle-monster:001:model:001"
+    draft = PlacementDraft.start_for_pending(
+        view=default_battlefield_view(),
+        selection=_empty_selection(),
+        pending_decision=_unprojected_vehicle_deployment_decision(model_id=model_id),
+        model_display_by_id={
+            model_id: {
+                "model_instance_id": model_id,
+                "base_size": {
+                    "base_size_id": "base-size:core-vehicle-monster",
+                    "kind": "circular",
+                    "diameter_mm": 120.0,
+                },
+            }
+        },
+    )
+
+    assert draft is not None
+    assert len(draft.model_poses) == 1
+    assert abs(draft.model_poses[0].base_radius - (120.0 / 25.4 / 2.0)) < 1.0e-9
+
+
 def test_placement_hover_preview_does_not_clear_ready_payload() -> None:
     ready = _ready_reinforcement_draft()
 
@@ -159,6 +182,37 @@ def _deployment_placement_decision() -> UiDecision:
                     ],
                     "source_decision_request_id": "decision-request-deploy-unit-001",
                     "source_decision_result_id": "ui-result-deploy-unit-001",
+                    "context": {},
+                }
+            },
+            "is_parameterized": True,
+            "options": [_parameterized_option_payload()],
+        }
+    )
+
+
+def _unprojected_vehicle_deployment_decision(*, model_id: str) -> UiDecision:
+    unit_id = "army-alpha:strategic-reserve-unit:core-vehicle-monster:001"
+    return UiDecision.from_payload(
+        {
+            "request_id": "decision-request-deployment-vehicle-001",
+            "decision_type": "submit_deployment_placement",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-deployment-vehicle-001",
+                    "decision_type": "submit_deployment_placement",
+                    "actor_id": "player_1",
+                    "game_id": "phase28-game",
+                    "ruleset_descriptor_hash": "ruleset-hash-001",
+                    "setup_step": "deployment",
+                    "player_id": "player_1",
+                    "unit_instance_id": unit_id,
+                    "proposal_kind": "deployment_placement",
+                    "placement_kind": "deployment_zone",
+                    "model_instance_ids": [model_id],
+                    "source_decision_request_id": "decision-request-deploy-unit-vehicle-001",
+                    "source_decision_result_id": "ui-result-deploy-unit-vehicle-001",
                     "context": {},
                 }
             },
