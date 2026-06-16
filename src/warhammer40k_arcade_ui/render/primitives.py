@@ -132,6 +132,7 @@ def build_world_primitives(
             line_width=2.0,
         ),
     ]
+    primitives.extend(_table_metadata_label_primitives(view))
     primitives.extend(_deployment_zone_primitives(view))
     primitives.extend(_objective_primitives(view))
     primitives.extend(_terrain_primitives(view))
@@ -164,6 +165,27 @@ def build_screen_overlay_primitives(
     if context_menu is not None:
         primitives.extend(_context_menu_primitives(context_menu))
     return tuple(primitives)
+
+
+def _table_metadata_label_primitives(view: BattlefieldView) -> tuple[TextPrimitive, ...]:
+    labels = tuple(
+        label
+        for label in (view.table.terrain_layout_label, view.table.deployment_map_label)
+        if label is not None
+    )
+    return tuple(
+        TextPrimitive(
+            layer="table_metadata_label",
+            text=label,
+            position=(0.0, view.table.height + 2.05 - (index * 1.2)),
+            color=HUD_ACCENT if index == 0 else HUD_TEXT,
+            font_size=9.5,
+            coordinate_space="world",
+            anchor_x="left",
+            anchor_y="baseline",
+        )
+        for index, label in enumerate(labels)
+    )
 
 
 def _deployment_zone_primitives(view: BattlefieldView) -> tuple[RenderPrimitive, ...]:
