@@ -600,7 +600,7 @@ def default_hud_zone_preferences() -> tuple[HudZonePreference, ...]:
 
     return (
         HudZonePreference("top_ribbon", True, 84, False),
-        HudZonePreference("left_rail", True, 224, False),
+        HudZonePreference("left_rail", True, 300, False),
         HudZonePreference("right_inspector", True, 276, False),
         HudZonePreference("bottom_workbench", True, 156, False),
         HudZonePreference("left_player_bench", True, 240, False),
