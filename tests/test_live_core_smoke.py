@@ -29,17 +29,21 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     assert decision.decision_type == "select_movement_unit"
     assert decision.actor_id == "player-a"
     assert [option.option_id for option in decision.options] == [
+        "army-alpha:deep-strike-unit",
         "army-alpha:scout-redeploy-unit",
+        "army-alpha:strategic-reserve-unit",
     ]
     assert startup.viewer_player_id == "player-a"
     assert startup.event_cursor > 0
     assert startup.battlefield_view.table.width == 60.0
     assert startup.battlefield_view.table.height == 44.0
     assert [unit.unit_id for unit in startup.battlefield_view.units] == [
+        "army-alpha:deep-strike-unit",
         "army-alpha:scout-redeploy-unit",
+        "army-alpha:strategic-reserve-unit",
         "army-beta:scout-redeploy-unit",
     ]
-    assert startup.battlefield_view.units[0].models[0].model_id == (
+    assert startup.battlefield_view.units[1].models[0].model_id == (
         "army-alpha:scout-redeploy-unit:core-intercessor-like:001"
     )
 
@@ -234,7 +238,11 @@ def _ready_live_core_normal_move_payload() -> tuple[LiveCoreSmokeStartup, UiDeci
         "army-alpha:scout-redeploy-unit"
     )
 
-    unit = startup.battlefield_view.units[0]
+    unit = next(
+        unit
+        for unit in startup.battlefield_view.units
+        if unit.unit_id == "army-alpha:scout-redeploy-unit"
+    )
     first_model = unit.models[0]
     preferences = default_preferences()
     selection = SelectionState.initial(preferences).select_at(

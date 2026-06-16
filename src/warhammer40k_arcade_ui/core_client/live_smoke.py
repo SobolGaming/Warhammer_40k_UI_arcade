@@ -345,22 +345,13 @@ def _submit_smoke_reserve_declarations(
 ) -> UiClientStatus:
     if stop_at_phase == "reserve-declarations":
         return status
-    current = status
-    result_number = 1
-    for option_id in (
-        "declare_strategic_reserves:army-alpha:strategic-reserve-unit",
-        "declare_deep_strike:army-alpha:deep-strike-unit",
-    ):
-        decision = current.decision
-        if decision is None or decision.decision_type != SELECT_RESERVE_DECLARATION_DECISION_TYPE:
-            raise LiveCoreSmokeError("Expected reserve declaration decision.")
-        current = client.submit_finite(
-            request_id=decision.request_id,
-            selected_option_id=option_id,
-            result_id=f"ui-live-smoke-reserve-{result_number:06d}",
-        )
-        result_number += 1
-    return current
+    return _submit_expected_finite(
+        client=client,
+        status=status,
+        expected_decision_type=SELECT_RESERVE_DECLARATION_DECISION_TYPE,
+        selected_option_id="complete_reserve_declarations",
+        result_id="ui-live-smoke-reserve-complete",
+    )
 
 
 def _submit_smoke_redeploys(
@@ -665,16 +656,17 @@ def _smoke_deployment_pose(
     column = index % 3
     base_y = _deployment_base_y_for_unit(unit_instance_id)
     if player_id == "player-b":
-        return Pose.at(58.8 - (row * 1.4), base_y + (column * 1.8), 0.0, facing_degrees=180.0)
-    return Pose.at(1.2 + (row * 1.4), base_y + (column * 1.8), 0.0, facing_degrees=0.0)
+        return Pose.at(57.0 - (row * 1.6), base_y + (column * 1.8), 0.0, facing_degrees=180.0)
+    return Pose.at(3.0 + (row * 1.6), base_y + (column * 1.8), 0.0, facing_degrees=0.0)
 
 
 def _deployment_base_y_for_unit(unit_instance_id: str) -> float:
-    unit_suffix = unit_instance_id.rsplit("-", 1)[-1]
-    if unit_suffix in {"1", "2"}:
-        return 7.0
-    if unit_suffix in {"3", "4"}:
-        return 25.0
+    if "deep-strike-unit" in unit_instance_id:
+        return 6.0
+    if "scout-redeploy-unit" in unit_instance_id:
+        return 16.0
+    if "strategic-reserve-unit" in unit_instance_id:
+        return 30.0
     return 16.0
 
 

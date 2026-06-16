@@ -428,7 +428,9 @@ def test_driver_live_core_smoke_click_unit_opens_actions_and_starts_movement_dra
         assert driver.window.viewer_player_id == "player-a"
         assert driver.pending_decision_type == "select_movement_unit"
         assert driver.battlefield_unit_ids == (
+            "army-alpha:deep-strike-unit",
             "army-alpha:scout-redeploy-unit",
+            "army-alpha:strategic-reserve-unit",
             "army-beta:scout-redeploy-unit",
         )
 
@@ -573,15 +575,15 @@ def test_next_deployment_roster_starts_synced_to_current_action_option() -> None
 
         assert driver.window.viewer_player_id == "player-a"
         assert driver.pending_decision_type == "select_deployment_unit"
-        assert driver.highlighted_finite_option_id == "deploy:army-alpha:scout-redeploy-unit"
-        assert driver.selected_unit_id == "army-alpha:scout-redeploy-unit"
+        assert driver.highlighted_finite_option_id == "deploy:army-alpha:deep-strike-unit"
+        assert driver.selected_unit_id == "army-alpha:deep-strike-unit"
 
         driver.window.on_draw()
         selected_roster_button = next(
             region
             for region in driver.hud_button_hit_regions
             if region.action_kind == "select_unit"
-            and region.unit_id == "army-alpha:scout-redeploy-unit"
+            and region.unit_id == "army-alpha:deep-strike-unit"
         )
         assert selected_roster_button.unit_id == driver.selected_unit_id
     finally:
@@ -595,7 +597,9 @@ def test_manual_deployments_refresh_authoritative_projection_before_prebattle() 
 
         assert driver.pending_decision_type == "resolve_sequencing_order"
         assert driver.battlefield_unit_ids == (
+            "army-alpha:deep-strike-unit",
             "army-alpha:scout-redeploy-unit",
+            "army-alpha:strategic-reserve-unit",
             "army-beta:scout-redeploy-unit",
         )
         assert driver.finite_status_kind == "waiting_for_decision"
@@ -625,19 +629,25 @@ def test_player_units_roster_scroll_region_consumes_wheel_without_zooming() -> N
 
 _LIVE_SMOKE_DEPLOYMENT_POINTS: dict[str, tuple[tuple[float, float], ...]] = {
     "army-beta:scout-redeploy-unit": (
-        (56.0, 7.0),
-        (56.0, 8.6),
-        (56.0, 10.2),
-        (54.4, 7.8),
-        (54.4, 9.4),
+        (57.0, 16.0),
+        (57.0, 17.8),
+        (57.0, 19.6),
+        (55.4, 16.0),
+        (55.4, 17.8),
+    ),
+    "army-alpha:deep-strike-unit": (
+        (3.0, 6.0),
+        (3.0, 7.8),
+        (3.0, 9.6),
     ),
     "army-alpha:scout-redeploy-unit": (
-        (4.0, 7.0),
-        (4.0, 8.6),
-        (4.0, 10.2),
-        (5.6, 7.8),
-        (5.6, 9.4),
+        (3.0, 16.0),
+        (3.0, 17.8),
+        (3.0, 19.6),
+        (4.6, 16.0),
+        (4.6, 17.8),
     ),
+    "army-alpha:strategic-reserve-unit": ((4.0, 30.0),),
 }
 
 
