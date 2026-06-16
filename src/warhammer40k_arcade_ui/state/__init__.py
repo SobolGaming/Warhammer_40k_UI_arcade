@@ -23,7 +23,11 @@ from warhammer40k_arcade_ui.state.entity_selection import (
 )
 from warhammer40k_arcade_ui.state.finite_decision import (
     FiniteDecisionSubmission,
+    FiniteDecisionSubmissionResult,
     FiniteDecisionUiState,
+    SubmissionRefreshResult,
+    refresh_submission_projection,
+    refresh_viewer_player_id_for_status,
     submit_finite_option,
 )
 from warhammer40k_arcade_ui.state.movement_draft import (
@@ -74,6 +78,7 @@ __all__ = [
     "EntitySelectionProfile",
     "EntitySelectionState",
     "FiniteDecisionSubmission",
+    "FiniteDecisionSubmissionResult",
     "FiniteDecisionUiState",
     "ModelHit",
     "MovementAssignmentView",
@@ -91,6 +96,7 @@ __all__ = [
     "PlacementSubmissionResult",
     "SelectionCardinality",
     "SelectionState",
+    "SubmissionRefreshResult",
     "build_entity_selection_profile",
     "entity_layer_registry",
     "entity_ref_for_model",
@@ -106,6 +112,8 @@ __all__ = [
     "placement_proposal_for_selected_unit",
     "prepare_movement_submission",
     "prepare_placement_submission",
+    "refresh_submission_projection",
+    "refresh_viewer_player_id_for_status",
     "selected_model",
     "selected_unit",
     "submit_finite_option",

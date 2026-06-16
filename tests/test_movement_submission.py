@@ -139,10 +139,70 @@ def test_submit_movement_draft_records_client_submission_and_clears_on_acceptanc
     assert fake.movement_submissions[0].payload == draft.payload_preview
     assert fake.advance_call_count == 1
     assert result.clear_movement_draft is True
+    assert result.viewer_player_id == "player_1"
     assert result.finite_state.next_result_index == 2
     assert result.finite_state.status_message == "Movement accepted."
     assert result.finite_state.event_cursor == 3
     assert result.finite_state.event_log_lines[-1] == "movement_proposal_accepted: player_1"
+
+
+def test_submit_movement_draft_refreshes_next_actor_viewer() -> None:
+    decision = _movement_proposal_decision()
+    draft = _ready_draft(decision)
+    next_decision = _movement_unit_decision_for_player_2()
+    redacted_next_decision = _movement_unit_decision_for_player_2(options=())
+    next_status = UiClientStatus(
+        stage="battle",
+        status_kind="waiting_for_decision",
+        decision=next_decision,
+        payload=None,
+    )
+    fake = FakeCoreClient(
+        status=UiClientStatus(stage="battle", status_kind="advanced", payload=None),
+        movement_status=next_status,
+        view_by_player_id={
+            "player_1": _game_view(
+                pending_decision=redacted_next_decision,
+                viewer_player_id="player_1",
+            ),
+            "player_2": _game_view(
+                pending_decision=next_decision,
+                viewer_player_id="player_2",
+            ),
+        },
+        event_delta_by_player_id={
+            "player_2": UiEventDelta(
+                viewer_player_id="player_2",
+                cursor=2,
+                next_cursor=3,
+                events=(
+                    {
+                        "event_type": "decision_requested",
+                        "payload": {"player_id": "player_2"},
+                    },
+                ),
+            )
+        },
+    )
+
+    result = submit_movement_draft(
+        state=FiniteDecisionUiState(
+            pending_decision=decision,
+            event_cursor=2,
+            event_log_lines=("movement proposal pending",),
+        ),
+        movement_draft=draft,
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert result.viewer_player_id == "player_2"
+    assert fake.view_requests == ["player_2"]
+    assert fake.event_delta_requests == [(2, "player_2")]
+    assert result.finite_state.pending_decision == next_decision
+    assert result.finite_state.highlighted_option is not None
+    assert result.finite_state.highlighted_option.option_id == "player-2-unit-1"
+    assert result.finite_state.event_log_lines[-1] == "decision_requested: player_2"
 
 
 def test_submit_movement_draft_surfaces_invalid_diagnostics_and_keeps_draft() -> None:
@@ -200,6 +260,7 @@ def test_submit_movement_draft_surfaces_invalid_diagnostics_and_keeps_draft() ->
     )
 
     assert result.clear_movement_draft is False
+    assert result.reset_movement_draft_ready is True
     assert fake.advance_call_count == 0
     assert result.finite_state.pending_decision == retry_decision
     assert result.finite_state.diagnostics[0].violation_code == "movement_budget_exceeded"
@@ -425,13 +486,38 @@ def option_payload(option: UiFiniteOption) -> dict[str, object]:
     }
 
 
-def _game_view(pending_decision: UiDecision | None) -> UiGameView:
+def _movement_unit_decision_for_player_2(
+    *,
+    options: tuple[UiFiniteOption, ...] | None = None,
+) -> UiDecision:
+    visible_options = (
+        UiFiniteOption(
+            option_id="player-2-unit-1",
+            label="Player 2 Unit 1",
+            payload={"unit_instance_id": "player-2-unit-1"},
+        ),
+    )
+    return UiDecision(
+        request_id="decision-request-player-2-001",
+        decision_type="select_movement_unit",
+        actor_id="player_2",
+        payload={"phase": "movement"},
+        options=visible_options if options is None else options,
+        is_parameterized=False,
+    )
+
+
+def _game_view(
+    pending_decision: UiDecision | None,
+    *,
+    viewer_player_id: str = "player_1",
+) -> UiGameView:
     return UiGameView(
-        viewer_player_id="player_1",
+        viewer_player_id=viewer_player_id,
         game_id="phase10-game",
         stage="battle",
         battle_round=1,
-        active_player_id="player_1",
+        active_player_id=viewer_player_id,
         current_setup_step=None,
         current_battle_phase="movement",
         player_ids=("player_1", "player_2"),

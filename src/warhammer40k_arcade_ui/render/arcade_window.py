@@ -83,6 +83,7 @@ from warhammer40k_arcade_ui.render.scissor import scoped_scissor
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, RenderViewModelError
 from warhammer40k_arcade_ui.state.entity_selection import entity_ref_for_model
 from warhammer40k_arcade_ui.state.finite_decision import (
+    FiniteDecisionSubmissionResult,
     FiniteDecisionUiState,
     submit_finite_option,
 )
@@ -941,6 +942,13 @@ class ArcadeWarhammerWindow(arcade.Window):
                         )
                     else:
                         self._trace_placement_draft_event("ui.placement_draft_preview")
+            elif (
+                self._pending_decision is not None
+                and self._pending_decision.movement_proposal is not None
+            ):
+                self._sync_movement_draft()
+                if self._movement_draft is None:
+                    self._submit_movement_draft()
             else:
                 self._submit_finite_option(None)
         elif invocation.command_id == "cancel":
@@ -1231,7 +1239,19 @@ class ArcadeWarhammerWindow(arcade.Window):
                 summary={"status_kind": self._finite_state.status_kind},
             )
             return
-        self._set_finite_state(self._submit_finite_option_or_fatal(selected_option_id))
+        result = self._submit_finite_option_or_fatal(selected_option_id)
+        if result.viewer_player_id is not None:
+            self._viewer_player_id = result.viewer_player_id
+        if result.refreshed_view is not None:
+            try:
+                self._apply_refreshed_game_view(
+                    view=result.refreshed_view,
+                    state=result.finite_state,
+                )
+            except RenderViewModelError as exc:
+                self._set_finite_state(self._fatal_game_engine_state(exc))
+                return
+        self._set_finite_state(result.finite_state)
         self._trace_event(
             category="ui",
             event_name="ui.finite_submission_outcome",
@@ -1241,13 +1261,15 @@ class ArcadeWarhammerWindow(arcade.Window):
     def _submit_finite_option_or_fatal(
         self,
         selected_option_id: str | None,
-    ) -> FiniteDecisionUiState:
+    ) -> FiniteDecisionSubmissionResult:
         client = self._core_client
         if client is None:
-            return self._finite_state.with_local_invalid(
-                violation_code="no_core_client",
-                message="Finite submission requires a configured core client.",
-                field="client",
+            return FiniteDecisionSubmissionResult(
+                finite_state=self._finite_state.with_local_invalid(
+                    violation_code="no_core_client",
+                    message="Finite submission requires a configured core client.",
+                    field="client",
+                )
             )
         try:
             return submit_finite_option(
@@ -1257,15 +1279,15 @@ class ArcadeWarhammerWindow(arcade.Window):
                 viewer_player_id=self._viewer_player_id,
             )
         except UiClientProtocolError as exc:
-            return self._fatal_game_engine_state(exc)
+            return FiniteDecisionSubmissionResult(finite_state=self._fatal_game_engine_state(exc))
         except RenderViewModelError as exc:
-            return self._fatal_game_engine_state(exc)
+            return FiniteDecisionSubmissionResult(finite_state=self._fatal_game_engine_state(exc))
         except MovementSubmissionError as exc:
-            return self._fatal_game_engine_state(exc)
+            return FiniteDecisionSubmissionResult(finite_state=self._fatal_game_engine_state(exc))
         except PlacementSubmissionError as exc:
-            return self._fatal_game_engine_state(exc)
+            return FiniteDecisionSubmissionResult(finite_state=self._fatal_game_engine_state(exc))
         except KeyError as exc:
-            return self._fatal_game_engine_state(exc)
+            return FiniteDecisionSubmissionResult(finite_state=self._fatal_game_engine_state(exc))
 
     def _submit_movement_draft(self) -> None:
         self._trace_movement_draft_event("ui.movement_submission_attempt")
@@ -1288,6 +1310,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         except KeyError as exc:
             self._set_finite_state(self._fatal_game_engine_state(exc))
             return
+        if result.viewer_player_id is not None:
+            self._viewer_player_id = result.viewer_player_id
         if result.refreshed_view is not None:
             try:
                 self._apply_refreshed_game_view(
@@ -1301,6 +1325,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft = None
             self._selection_state = self._selection_state.without_movement_draft_overlays(
                 self._preferences
+            )
+        elif result.reset_movement_draft_ready and self._movement_draft is not None:
+            self._movement_draft = self._movement_draft.clear_ready_payload(
+                view=self._battlefield_view
             )
         self._set_finite_state(result.finite_state)
         self._trace_event(

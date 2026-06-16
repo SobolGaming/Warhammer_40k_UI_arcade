@@ -94,10 +94,20 @@ def parse_args(argv: Sequence[str] | None) -> CliArgs:
     )
     parser.add_argument(
         "--stop-at-phase",
-        choices=("deployment", "movement"),
+        choices=(
+            "setup",
+            "secondary-missions",
+            "reserve-declarations",
+            "deployment",
+            "redeploy",
+            "prebattle",
+            "scout-move",
+            "movement",
+        ),
         help=(
-            "Live-core smoke pause point. Defaults to movement; use deployment to open the "
-            "Arcade window at the first deployment placement proposal."
+            "Live-core smoke pause point. Defaults to movement; use setup, "
+            "reserve-declarations, deployment, redeploy, prebattle, scout-move, or movement "
+            "to open the Arcade window at a real core setup/prebattle/battle request."
         ),
     )
     parser.add_argument(

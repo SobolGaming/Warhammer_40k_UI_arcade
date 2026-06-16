@@ -11,7 +11,10 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiDecision,
     UiGameView,
 )
-from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
+from warhammer40k_arcade_ui.state.finite_decision import (
+    FiniteDecisionUiState,
+    refresh_submission_projection,
+)
 from warhammer40k_arcade_ui.state.movement_draft import (
     SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES,
     SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS,
@@ -36,6 +39,8 @@ class MovementSubmissionResult:
     finite_state: FiniteDecisionUiState
     refreshed_view: UiGameView | None
     clear_movement_draft: bool
+    viewer_player_id: str | None = None
+    reset_movement_draft_ready: bool = False
 
 
 def prepare_movement_submission(
@@ -217,15 +222,18 @@ def submit_movement_draft(
         if submitted_status.status_kind == "invalid"
         else client.advance_until_decision_or_terminal()
     )
-    refreshed_state = prepared_state.apply_status(authoritative_status)
-    refreshed_view = client.get_view(viewer_player_id)
-    refreshed_state = refreshed_state.apply_view(refreshed_view)
-    event_delta = client.get_events_since(refreshed_state.event_cursor, viewer_player_id)
-    refreshed_state = refreshed_state.apply_event_delta(event_delta)
+    refresh = refresh_submission_projection(
+        state=prepared_state,
+        status=authoritative_status,
+        client=client,
+        fallback_viewer_player_id=viewer_player_id,
+    )
     return MovementSubmissionResult(
-        finite_state=refreshed_state,
-        refreshed_view=refreshed_view,
+        finite_state=refresh.finite_state,
+        refreshed_view=refresh.refreshed_view,
         clear_movement_draft=submitted_status.status_kind != "invalid",
+        viewer_player_id=refresh.viewer_player_id,
+        reset_movement_draft_ready=submitted_status.status_kind == "invalid",
     )
 
 

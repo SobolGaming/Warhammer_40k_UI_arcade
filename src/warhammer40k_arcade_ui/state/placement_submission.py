@@ -11,7 +11,10 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiDecision,
     UiGameView,
 )
-from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
+from warhammer40k_arcade_ui.state.finite_decision import (
+    FiniteDecisionUiState,
+    refresh_submission_projection,
+)
 from warhammer40k_arcade_ui.state.placement_draft import (
     PLACEMENT_PROPOSAL_DECISION_TYPES,
     SUPPORTED_PLACEMENT_PROPOSAL_KINDS,
@@ -203,31 +206,18 @@ def submit_placement_draft(
         if submitted_status.status_kind == "invalid"
         else client.advance_until_decision_or_terminal()
     )
-    refreshed_state = prepared_state.apply_status(authoritative_status)
-    refresh_viewer_player_id = _refresh_viewer_player_id(
+    refresh = refresh_submission_projection(
+        state=prepared_state,
         status=authoritative_status,
+        client=client,
         fallback_viewer_player_id=viewer_player_id,
     )
-    refreshed_view = client.get_view(refresh_viewer_player_id)
-    refreshed_state = refreshed_state.apply_view(refreshed_view)
-    event_delta = client.get_events_since(refreshed_state.event_cursor, refresh_viewer_player_id)
-    refreshed_state = refreshed_state.apply_event_delta(event_delta)
     return PlacementSubmissionResult(
-        finite_state=refreshed_state,
-        refreshed_view=refreshed_view,
+        finite_state=refresh.finite_state,
+        refreshed_view=refresh.refreshed_view,
         clear_placement_draft=True,
-        viewer_player_id=refresh_viewer_player_id,
+        viewer_player_id=refresh.viewer_player_id,
     )
-
-
-def _refresh_viewer_player_id(
-    *,
-    status: UiClientStatus,
-    fallback_viewer_player_id: str,
-) -> str:
-    if status.decision is None or status.decision.actor_id is None:
-        return fallback_viewer_player_id
-    return status.decision.actor_id
 
 
 def _local_invalid(

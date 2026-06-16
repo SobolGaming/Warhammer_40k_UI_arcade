@@ -52,13 +52,35 @@ def _new_parameterized_submissions() -> list[SubmittedParameterizedPayload]:
     return []
 
 
+def _new_view_by_player_id() -> dict[str, UiGameView]:
+    return {}
+
+
+def _new_event_delta_by_player_id() -> dict[str, UiEventDelta]:
+    return {}
+
+
+def _new_view_requests() -> list[str]:
+    return []
+
+
+def _new_event_delta_requests() -> list[tuple[int, str]]:
+    return []
+
+
 @dataclass(slots=True)
 class FakeCoreClient:
     """Scriptable fake for UI modules that should not launch a real game."""
 
     status: UiClientStatus
     view: UiGameView | None = None
+    view_by_player_id: dict[str, UiGameView] = field(default_factory=_new_view_by_player_id)
     event_delta: UiEventDelta | None = None
+    event_delta_by_player_id: dict[str, UiEventDelta] = field(
+        default_factory=_new_event_delta_by_player_id
+    )
+    view_requests: list[str] = field(default_factory=_new_view_requests)
+    event_delta_requests: list[tuple[int, str]] = field(default_factory=_new_event_delta_requests)
     finite_submissions: list[SubmittedFiniteDecision] = field(
         default_factory=_new_finite_submissions
     )
@@ -82,11 +104,17 @@ class FakeCoreClient:
         return self.status
 
     def get_view(self, viewer_player_id: str) -> UiGameView:
+        self.view_requests.append(viewer_player_id)
+        if viewer_player_id in self.view_by_player_id:
+            return self.view_by_player_id[viewer_player_id]
         if self.view is None:
             raise ValueError("FakeCoreClient view is not configured.")
         return self.view
 
     def get_events_since(self, cursor: int, viewer_player_id: str) -> UiEventDelta:
+        self.event_delta_requests.append((cursor, viewer_player_id))
+        if viewer_player_id in self.event_delta_by_player_id:
+            return self.event_delta_by_player_id[viewer_player_id]
         if self.event_delta is None:
             raise ValueError("FakeCoreClient event_delta is not configured.")
         return self.event_delta
