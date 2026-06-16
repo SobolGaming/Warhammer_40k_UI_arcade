@@ -148,7 +148,9 @@ authoritative shortcuts.
 - Parameterized decisions must submit typed, JSON-safe payloads for the current proposal request.
 - Movement/charge/pile-in/consolidate/disembark/reserves/reactive movement require a `PathWitness`
   or typed invalid result from the engine.
-- Endpoint-only movement validation is invalid except for explicit teleport/setup placement.
+- Endpoint-only movement paths are valid when accepted by the core movement contract. The UI must
+  not synthesize intermediate path poses to satisfy stale client-side expectations unless the active
+  core contract explicitly requires those poses.
 - Client previews are advisory only and must be labeled as such.
 - Hidden or secret pending decisions, projections, event deltas, and diagnostics must remain
   viewer-scoped.
@@ -157,6 +159,25 @@ authoritative shortcuts.
 - User preferences may configure known UI commands, known overlays, local hotkeys, HUD defaults, and
   advisory presentation only; they must not create engine decisions, legal actions, proposal kinds,
   validation behavior, or hidden-information visibility.
+
+## UI invariants
+
+- User-facing controls that represent the same current-action selection must stay synchronized
+  whenever they are relevant to the active workflow. For example, during unit movement selection,
+  the Current Action option button, battlefield unit/model highlight, and Player Units roster entry
+  should reciprocally select, focus, and highlight the same unit when any one of those surfaces is
+  used.
+- Selection synchronization is a UI state invariant, not a visibility-only behavior. If an
+  equivalent selection surface is hidden, collapsed, scrolled out of view, or currently showing a
+  different player's list, the underlying focus/selection/highlight state for that surface must
+  still be updated so it is correct when the surface becomes visible again.
+- When a workflow can select entities through multiple aliases, the synchronized selection must use
+  the engine-valid entity layer for the current action. For example, clicking a model may select its
+  unit when the current request requires a unit, but must not silently submit or highlight an
+  invalid entity layer for that request.
+- Reciprocal highlighting must remain advisory and local. It may guide the user toward the currently
+  selected or focused entity, but it must not imply engine acceptance, mutate authoritative state, or
+  bypass the current `DecisionRequest` / `DecisionResult` path.
 
 ## Bugfixes
 

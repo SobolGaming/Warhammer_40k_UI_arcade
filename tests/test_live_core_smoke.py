@@ -104,24 +104,38 @@ def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> N
     assert "movement_activation_completed" in _event_types(event_delta.events)
 
 
-def test_live_core_smoke_rejects_endpoint_only_moved_paths() -> None:
+def test_live_core_smoke_handles_endpoint_only_moved_paths() -> None:
     startup, proposal_decision, payload_preview = _ready_live_core_normal_move_payload()
     endpoint_only_payload = _endpoint_only_payload(payload_preview)
 
-    invalid_status = startup.core_client.submit_movement_payload(
+    submitted_status = startup.core_client.submit_movement_payload(
         request_id=proposal_decision.request_id,
         payload=endpoint_only_payload,
         result_id="ui-test-live-smoke-submit-endpoint-only-move",
     )
 
-    payload = _required_object_value(invalid_status.payload)
-    proposal_validation = _required_object(payload, "proposal_validation")
-    violations = _required_list(proposal_validation, "violations")
-    first_violation = _required_object_value(violations[0])
+    if submitted_status.status_kind == "invalid":
+        payload = _required_object_value(submitted_status.payload)
+        proposal_validation = _required_object(payload, "proposal_validation")
+        violations = _required_list(proposal_validation, "violations")
+        first_violation = _required_object_value(violations[0])
 
-    assert invalid_status.status_kind == "invalid"
-    assert payload["violation_code"] == "endpoint_only_path"
-    assert first_violation["violation_code"] == "endpoint_only_path"
+        assert payload["violation_code"] == "endpoint_only_path"
+        assert first_violation["violation_code"] == "endpoint_only_path"
+        return
+
+    event_delta = startup.core_client.get_events_since(
+        startup.event_cursor,
+        startup.viewer_player_id,
+    )
+    assert submitted_status.status_kind == "waiting_for_decision"
+    assert submitted_status.decision is not None
+    assert submitted_status.decision.decision_type == "select_movement_unit"
+    assert [option.option_id for option in submitted_status.decision.options] == [
+        "army-alpha:intercessor-unit-3"
+    ]
+    assert _required_object_value(submitted_status.payload)["legal_unit_count"] == 1
+    assert "movement_activation_completed" in _event_types(event_delta.events)
 
 
 def test_live_core_smoke_surfaces_projection_errors_as_startup_diagnostics(
