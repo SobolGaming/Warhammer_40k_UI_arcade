@@ -81,7 +81,9 @@ summaries, CI quality gates, golden regression fixtures, ADRs, and packaging smo
   deterministic fixture/projection payloads, plus supported refresh from render-shaped payloads or
   core battlefield runtime model-placement projections.
 - `warhammer40k_arcade_ui.render.core_projection` — viewer-scoped core `GameViewPayload` to
-  render-view adapter for the live smoke launch path.
+  render-view adapter for the live smoke launch path. It renders current validated layout terrain
+  from typed `mission_setup.terrain_areas[*].footprint_polygon` payloads, while keeping strict
+  `terrain_features[*].display_geometry` support for future feature-level terrain projections.
 - `warhammer40k_arcade_ui.render.camera` — world-space camera, pan/zoom, and screen/world
   coordinate conversion.
 - `warhammer40k_arcade_ui.render.primitives` — pure table, deployment-zone, objective, terrain,

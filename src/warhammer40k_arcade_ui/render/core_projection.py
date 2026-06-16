@@ -22,6 +22,8 @@ _DEFAULT_PRESENTATION_BASE_RADIUS_INCHES = 32.0 / _MM_PER_INCH / 2.0
 _TERRAIN_DISPLAY_SCHEMA_VERSION = "terrain-display-v1"
 _TERRAIN_DISPLAY_COORDINATE_SPACE = "battlefield_inches"
 _TERRAIN_DISPLAY_FOOTPRINT_KIND = "polygon"
+_TERRAIN_SOURCE_KIND_FEATURE = "terrain_feature"
+_TERRAIN_SOURCE_KIND_AREA = "terrain_area"
 _FOOTPRINT_BOUNDS_TOLERANCE = 1.0e-4
 _FOOTPRINT_AREA_TOLERANCE = 1.0e-9
 
@@ -139,17 +141,98 @@ def _objectives_from_mission_setup(mission_setup: JsonObject) -> tuple[Objective
 
 
 def _terrain_from_mission_setup(mission_setup: JsonObject) -> tuple[TerrainFootprintView, ...]:
-    return tuple(
+    objective_marker_ids_by_area_id = _objective_marker_ids_by_terrain_area_id(mission_setup)
+    terrain_areas = tuple(
+        _terrain_area_from_payload(
+            _json_object("terrain_area", value),
+            objective_marker_ids_by_area_id=objective_marker_ids_by_area_id,
+        )
+        for value in _optional_list(mission_setup, "terrain_areas")
+    )
+    _validate_objective_links_reference_terrain_areas(
+        objective_marker_ids_by_area_id=objective_marker_ids_by_area_id,
+        terrain_areas=terrain_areas,
+    )
+    terrain_features = tuple(
         TerrainFootprintView(
             terrain_id=_required_string(feature, "feature_id"),
             label=_required_string(feature, "feature_kind"),
             footprint=_terrain_display_footprint(feature),
+            source_kind=_TERRAIN_SOURCE_KIND_FEATURE,
         )
         for feature in (
             _json_object("terrain_feature", value)
-            for value in _required_list(mission_setup, "terrain_features")
+            for value in _optional_list(mission_setup, "terrain_features")
         )
     )
+    return terrain_areas + terrain_features
+
+
+def _terrain_area_from_payload(
+    area: JsonObject,
+    *,
+    objective_marker_ids_by_area_id: dict[str, tuple[str, ...]],
+) -> TerrainFootprintView:
+    terrain_area_id = _required_string(area, "terrain_area_id")
+    classification = _required_string(area, "classification")
+    footprint_template_id = _required_string(area, "footprint_template_id")
+    _required_string(area, "terrain_feature_kind")
+    _required_float(area, "center_x_inches")
+    _required_float(area, "center_y_inches")
+    _required_float(area, "rotation_degrees")
+    _required_string(area, "local_transform")
+    _required_string(area, "source_layout_id")
+    _required_string(area, "source_id")
+    return TerrainFootprintView(
+        terrain_id=terrain_area_id,
+        label=classification or footprint_template_id,
+        footprint=_terrain_area_footprint(area),
+        source_kind=_TERRAIN_SOURCE_KIND_AREA,
+        objective_marker_ids=objective_marker_ids_by_area_id.get(terrain_area_id, ()),
+    )
+
+
+def _objective_marker_ids_by_terrain_area_id(
+    mission_setup: JsonObject,
+) -> dict[str, tuple[str, ...]]:
+    marker_ids_by_area_id: dict[str, tuple[str, ...]] = {}
+    for value in _optional_list(mission_setup, "objective_terrain_areas"):
+        objective_terrain_area = _json_object("objective_terrain_area", value)
+        objective_marker_id = _required_string(objective_terrain_area, "objective_marker_id")
+        _required_string(objective_terrain_area, "objective_role")
+        _required_string(objective_terrain_area, "source_id")
+        terrain_area_ids = tuple(
+            _non_empty_string("terrain_area_id", terrain_area_id_value)
+            for terrain_area_id_value in _required_list(
+                objective_terrain_area,
+                "terrain_area_ids",
+            )
+        )
+        if not terrain_area_ids:
+            raise CoreProjectionRenderError(
+                "objective_terrain_areas terrain_area_ids must not be empty."
+            )
+        for terrain_area_id in terrain_area_ids:
+            if terrain_area_id in marker_ids_by_area_id:
+                raise CoreProjectionRenderError(
+                    "objective_terrain_areas must not link a terrain area to multiple "
+                    "objective markers."
+                )
+            marker_ids_by_area_id[terrain_area_id] = (objective_marker_id,)
+    return marker_ids_by_area_id
+
+
+def _validate_objective_links_reference_terrain_areas(
+    *,
+    objective_marker_ids_by_area_id: dict[str, tuple[str, ...]],
+    terrain_areas: tuple[TerrainFootprintView, ...],
+) -> None:
+    terrain_area_ids = {area.terrain_id for area in terrain_areas}
+    unknown_area_ids = sorted(set(objective_marker_ids_by_area_id) - terrain_area_ids)
+    if unknown_area_ids:
+        raise CoreProjectionRenderError(
+            f"objective_terrain_areas references unknown terrain area: {unknown_area_ids[0]}."
+        )
 
 
 def _units_from_battlefield_state(
@@ -310,8 +393,25 @@ def _terrain_display_footprint(feature: JsonObject) -> tuple[tuple[float, float]
     return footprint
 
 
+def _terrain_area_footprint(area: JsonObject) -> tuple[tuple[float, float], ...]:
+    footprint = tuple(
+        _terrain_area_point_from_payload(value)
+        for value in _required_list(area, "footprint_polygon")
+    )
+    _validate_terrain_area_footprint(footprint)
+    return footprint
+
+
 def _terrain_display_point_from_payload(value: JsonValue) -> tuple[float, float]:
     point = _json_object("terrain display point", value)
+    return (
+        _required_float(point, "x_inches"),
+        _required_float(point, "y_inches"),
+    )
+
+
+def _terrain_area_point_from_payload(value: JsonValue) -> tuple[float, float]:
+    point = _json_object("terrain area point", value)
     return (
         _required_float(point, "x_inches"),
         _required_float(point, "y_inches"),
@@ -331,6 +431,17 @@ def _validate_terrain_display_footprint(footprint: tuple[tuple[float, float], ..
         raise CoreProjectionRenderError(
             "terrain display geometry footprint_polygon must have non-zero area."
         )
+
+
+def _validate_terrain_area_footprint(footprint: tuple[tuple[float, float], ...]) -> None:
+    if len(footprint) < 3:
+        raise CoreProjectionRenderError(
+            "terrain area footprint_polygon must contain at least three points."
+        )
+    if footprint[0] == footprint[-1]:
+        raise CoreProjectionRenderError("terrain area footprint_polygon must be unclosed.")
+    if abs(_polygon_area(footprint)) <= _FOOTPRINT_AREA_TOLERANCE:
+        raise CoreProjectionRenderError("terrain area footprint_polygon must have non-zero area.")
 
 
 def _validate_display_footprint_matches_bounds(
@@ -410,10 +521,22 @@ def _required_list(payload: JsonObject, key: str) -> list[JsonValue]:
     return value
 
 
-def _required_string(payload: JsonObject, key: str) -> str:
+def _optional_list(payload: JsonObject, key: str) -> list[JsonValue]:
     value = payload.get(key)
+    if value is None:
+        return []
+    if type(value) is not list:
+        raise CoreProjectionRenderError(f"{key} must be a JSON list.")
+    return value
+
+
+def _required_string(payload: JsonObject, key: str) -> str:
+    return _non_empty_string(key, payload.get(key))
+
+
+def _non_empty_string(name: str, value: object) -> str:
     if type(value) is not str or not value:
-        raise CoreProjectionRenderError(f"{key} must be a non-empty string.")
+        raise CoreProjectionRenderError(f"{name} must be a non-empty string.")
     return value
 
 

@@ -118,11 +118,25 @@ class TerrainFootprintView:
     terrain_id: str
     label: str
     footprint: Polygon
+    source_kind: str = "terrain_feature"
+    objective_marker_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "terrain_id", _non_empty_string("terrain_id", self.terrain_id))
         object.__setattr__(self, "label", _non_empty_string("label", self.label))
         object.__setattr__(self, "footprint", _validate_polygon("footprint", self.footprint))
+        if self.source_kind not in {"terrain_feature", "terrain_area"}:
+            raise RenderViewModelError("source_kind must be terrain_feature or terrain_area.")
+        if type(self.objective_marker_ids) is not tuple:
+            raise RenderViewModelError("objective_marker_ids must be a tuple.")
+        object.__setattr__(
+            self,
+            "objective_marker_ids",
+            tuple(
+                _non_empty_string("objective_marker_id", marker_id)
+                for marker_id in self.objective_marker_ids
+            ),
+        )
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -131,6 +145,11 @@ class TerrainFootprintView:
             terrain_id=_required_string(terrain, "terrain_id"),
             label=_required_string(terrain, "label"),
             footprint=_required_polygon(terrain, "footprint"),
+            source_kind=_optional_string(terrain, "source_kind") or "terrain_feature",
+            objective_marker_ids=tuple(
+                _required_string_item("objective_marker_id", marker_id)
+                for marker_id in _optional_list(terrain, "objective_marker_ids")
+            ),
         )
 
 
@@ -417,6 +436,15 @@ def _pose_position(payload: object) -> Point:
 
 def _required_list(payload: dict[str, object], key: str) -> list[object]:
     value = _required_value(payload, key)
+    if type(value) is not list:
+        raise RenderViewModelError(f"{key} must be a list.")
+    return cast(list[object], value)
+
+
+def _optional_list(payload: dict[str, object], key: str) -> list[object]:
+    value = payload.get(key)
+    if value is None:
+        return []
     if type(value) is not list:
         raise RenderViewModelError(f"{key} must be a list.")
     return cast(list[object], value)

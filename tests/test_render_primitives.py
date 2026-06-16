@@ -82,6 +82,23 @@ def test_fixture_payload_builds_expected_world_primitives() -> None:
     assert text_layers.count("deployment_side_label") == 2
 
 
+def test_objective_linked_terrain_area_builds_advisory_outline() -> None:
+    payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    payload["terrain"][0]["source_kind"] = "terrain_area"
+    payload["terrain"][0]["objective_marker_ids"] = ["objective_alpha"]
+    view = BattlefieldView.from_payload(payload)
+
+    primitives = build_world_primitives(view)
+
+    assert view.terrain[0].source_kind == "terrain_area"
+    assert view.terrain[0].objective_marker_ids == ("objective_alpha",)
+    polygon_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is PolygonPrimitive
+    ]
+    assert polygon_layers.count("terrain") == 1
+    assert polygon_layers.count("objective_terrain_link") == 1
+
+
 def test_table_metadata_labels_render_top_left_outside_battlefield() -> None:
     view = default_battlefield_view()
     view = replace(
