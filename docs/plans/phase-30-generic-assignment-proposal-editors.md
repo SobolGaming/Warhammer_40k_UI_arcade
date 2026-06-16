@@ -29,6 +29,8 @@ In scope:
 Out of scope:
 
 - attack resolution after declaration acceptance;
+- finite `use_stratagem` windows, Command Re-roll opportunities, generic reaction trays, and
+  adapter-captured `InterfaceIntent` materialization; those belong to Phase 32;
 - local weapon, target, visibility, Precision, engagement, or Stratagem legality;
 - local CP spending or effect mutation;
 - non-enumerated setup flows not exposed by the engine.
@@ -48,6 +50,13 @@ The core catalog exposes:
 All three use the parameterized submission path with the fixed `submit_parameterized_payload`
 option. The engine supplies target candidates, available weapons or policy context, and validates
 the submitted payload.
+
+Core revision `0531ebe` adds Phase 18B opportunity windows for finite optional actions such as
+Shooting/Fight Command Re-roll. Those requests may use `decision_type: "use_stratagem"` with
+`submission_family: "opportunity_window"` and nested `opportunity_submission` option payloads. That
+path is distinct from parameterized `stratagem_target_binding`: Phase 30 should not try to lower
+finite opportunity-window options into assignment rows. It should hand those requests to the
+current-action/finite workbench and the future Phase 32 opportunity-window tray.
 
 ## UX Model
 
@@ -100,6 +109,8 @@ The Generic Assignment HUD should show the current proposal as a human-readable 
    - Render target binding slots from the pending Stratagem proposal request.
    - Support affected unit/card/target IDs and handler-owned `effect_selection` where exposed.
    - Show and submit the decline payload only when the engine marks the request declinable.
+   - Treat finite `use_stratagem` opportunity-window requests as out of scope for this editor; do
+     not infer target-binding rows from `opportunity_submission` payloads.
 
 6. **HUD and visual summary**
    - Bind assignment workspace rows into the existing Assignments HUD area.
@@ -117,6 +128,8 @@ The Generic Assignment HUD should show the current proposal as a human-readable 
 - Shooting declaration, melee declaration, and Stratagem target-binding fixtures can produce
   JSON-safe proposal payloads using the current request ID.
 - Stratagem decline is available only when the request explicitly exposes an optional decline.
+- Finite `use_stratagem` opportunity-window requests remain finite choices and are not accidentally
+  parsed as parameterized target-binding requests.
 - The UI does not compute weapon legality, target legality, CP spending, attack pools, or source
   effects locally.
 - Assignment visual summaries are driven by workspace data and can be toggled.
@@ -129,6 +142,8 @@ Add or update tests for:
 - source/target candidate parsing for shooting, melee, and Stratagem requests;
 - payload generation for representative declaration/binding fixtures;
 - declinable and non-declinable Stratagem target windows;
+- guard tests that `submission_family: "opportunity_window"` finite requests are routed away from
+  assignment editors;
 - HUD runtime data and overlay primitive generation from assignment rows;
 - invalid diagnostics and retry behavior.
 
