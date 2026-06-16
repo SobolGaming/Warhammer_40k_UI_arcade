@@ -220,10 +220,11 @@ uv run pre-commit run --all-files
 
 ## Manual Validation Checklist
 
-- Launch the live core smoke scenario at deployment placement:
+- Launch the live core smoke scenario at deployment unit selection:
   `uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase deployment --ui-prefs docs/preferences/default.yaml`.
-- Select a placement subject from the Player Units panel if the core first emits a unit-selection or
-  placement-subject request.
+- Confirm the UI pauses at `select_deployment_unit` before any deployment unit is auto-selected.
+- Select a placement subject from the Player Units panel and confirm it highlights the same unit
+  option in Current Action.
 - Confirm the Player Units panel lists all units for the current viewer/player army, including
   unplaced units.
 - Confirm the selected/current Player Units row, placed rows, and unplaced rows use distinct visual
@@ -273,10 +274,12 @@ Implemented in the Phase 28 PR:
 - Added placeholder side labels under the lower left and lower right board corners.
 - Added Assignment HUD placement rows for current, placed, and unplaced model poses.
 - Added `--stop-at-phase deployment` for `--live-core-smoke` so the real core smoke harness can
-  pause at the first deployment placement proposal and expose the generic placement editor for
-  manual GUI validation.
+  pause at the first deployment unit-selection request. Roster-row clicks can then focus the
+  matching engine-provided finite option before entering the placement editor.
 - Updated deployment smoke launch to use the pending deployment actor as the viewer so the manual
   tester sees the side that is currently being asked to deploy.
+- Updated Player Units roster selection so unprojected deployment units can focus matching finite
+  options without requiring a battlefield projection first.
 
 Important limitations:
 

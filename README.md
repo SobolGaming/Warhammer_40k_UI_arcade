@@ -157,18 +157,20 @@ uv run warhammer40k-arcade-ui --live-core-smoke --ui-prefs docs/preferences/defa
 ```
 
 To manually test the generic placement editor against the real local core, stop the same smoke
-scenario at the first deployment placement proposal:
+scenario at the first deployment unit-selection request:
 
 ```bash
 uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase deployment --ui-prefs docs/preferences/default.yaml
 ```
 
 This path still uses the real core session. It only pauses before the smoke harness would otherwise
-auto-submit the deployment placement payload. The current smoke mission follows the core deployment
-order, so the first paused deployment placement is currently for `player-b`; the UI launches from
-that actor's viewer perspective for this stop point. Place the requested unit in the matching
-`player-b deployment` zone before reviewing/submitting the draft. The Player Units panel should show
-the current actor's full smoke-test army with current, placed, and unplaced rows distinguished.
+auto-select and auto-place deployment units. The current smoke mission follows the core deployment
+order, so the first paused deployment choice is currently for `player-b`; the UI launches from that
+actor's viewer perspective for this stop point. Click a unit row in Player Units or the matching
+Current Action option to select the deployment unit, press `ENTER`, then place the requested models
+in the matching `player-b deployment` zone before reviewing/submitting the draft. The Player Units
+panel should show the current actor's full smoke-test army with current, placed, and unplaced rows
+distinguished.
 
 ## Forensic event traces
 

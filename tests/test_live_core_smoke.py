@@ -46,27 +46,24 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     )
 
 
-def test_live_core_smoke_can_stop_at_deployment_placement_request() -> None:
+def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
     startup = build_live_core_smoke_startup(stop_at_phase="deployment")
     decision = startup.status.decision
 
     assert decision is not None
-    assert decision.decision_type == "submit_deployment_placement"
+    assert decision.decision_type == "select_deployment_unit"
     assert decision.actor_id == "player-b"
-    assert decision.is_parameterized is True
-    assert decision.placement_proposal is not None
-    assert decision.placement_proposal.request_id == decision.request_id
-    assert decision.placement_proposal.decision_type == "submit_deployment_placement"
-    assert decision.placement_proposal.player_id == decision.actor_id
-    assert decision.placement_proposal.proposal_kind == "deployment_placement"
-    assert decision.placement_proposal.unit_instance_id == "army-beta:intercessor-unit-2"
-    assert decision.placement_proposal.required_model_ids == (
-        "army-beta:intercessor-unit-2:core-intercessor-like:001",
-        "army-beta:intercessor-unit-2:core-intercessor-like:002",
-        "army-beta:intercessor-unit-2:core-intercessor-like:003",
-        "army-beta:intercessor-unit-2:core-intercessor-like:004",
-        "army-beta:intercessor-unit-2:core-intercessor-like:005",
-    )
+    assert decision.is_parameterized is False
+    assert [option.option_id for option in decision.options] == [
+        "deploy:army-beta:intercessor-unit-2",
+        "deploy:army-beta:intercessor-unit-4",
+    ]
+    assert [
+        _required_object_value(option.payload)["unit_instance_id"] for option in decision.options
+    ] == [
+        "army-beta:intercessor-unit-2",
+        "army-beta:intercessor-unit-4",
+    ]
     assert startup.viewer_player_id == "player-b"
     assert {
         unit_id

@@ -471,7 +471,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_payloads=self._finite_state.event_payloads,
             pending_decision=self._pending_decision,
             hovered_hud_button_id=self._hovered_hud_button_id,
-            selected_unit_id=self._selection_state.selected_unit_id,
+            selected_unit_id=self._hud_selected_unit_id(),
             viewer_player_id=self._viewer_player_id,
             unit_display_by_id=self._known_unit_display_by_id,
         )
@@ -990,7 +990,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
             return
         if hit_region.action_kind == "select_unit" and hit_region.unit_id is not None:
-            self._select_projected_unit_from_hud(hit_region.unit_id)
+            self._select_unit_from_hud(hit_region.unit_id)
             return
         if hit_region.action_kind == "placement_submit":
             self._handle_placement_submit_button()
@@ -1078,12 +1078,17 @@ class ArcadeWarhammerWindow(arcade.Window):
                 next_y = current_y
             self._hud_scroll_offsets[region.component_id] = (next_x, next_y)
 
-    def _select_projected_unit_from_hud(self, unit_id: str) -> None:
+    def _select_unit_from_hud(self, unit_id: str) -> None:
+        if self._focus_finite_unit_option_from_hud(unit_id):
+            return
         if not _view_has_unit(self._battlefield_view, unit_id):
             self._set_finite_state(
                 self._finite_state.with_local_invalid(
                     violation_code="unknown_hud_unit",
-                    message="HUD roster selected a unit that is not in the current projection.",
+                    message=(
+                        "HUD roster selected a unit that is neither projected nor a current "
+                        "finite option."
+                    ),
                     field="unit_id",
                 )
             )
@@ -1102,6 +1107,28 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_name="ui.roster_unit_selected",
             summary={"unit_id": unit_id},
         )
+
+    def _focus_finite_unit_option_from_hud(self, unit_id: str) -> bool:
+        next_state = self._finite_state.highlight_option_for_unit(unit_id)
+        if not _highlighted_option_targets_unit(next_state, unit_id):
+            return False
+        self._selection_state = self._selection_state.select_model_id(
+            unit_id=unit_id,
+            model_id=None,
+            preferences=self._preferences,
+        )
+        self._set_finite_state(next_state, focus_source="hud_roster_unit")
+        self._trace_event(
+            category="ui",
+            event_name="ui.roster_unit_finite_option_focused",
+            summary={
+                "unit_id": unit_id,
+                "option_id": None
+                if next_state.highlighted_option is None
+                else next_state.highlighted_option.option_id,
+            },
+        )
+        return True
 
     def _focus_entity_for_highlighted_option(
         self,
@@ -1386,6 +1413,19 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         self._sync_movement_draft()
         self._sync_placement_draft()
+
+    def _hud_selected_unit_id(self) -> str | None:
+        if self._selection_state.selected_unit_id is not None:
+            return self._selection_state.selected_unit_id
+        highlighted_option = self._finite_state.highlighted_option
+        if highlighted_option is not None:
+            return _option_hud_unit_id(
+                option_id=highlighted_option.option_id,
+                payload=highlighted_option.payload,
+                view=self._battlefield_view,
+                unit_display_by_id=self._known_unit_display_by_id,
+            )
+        return None
 
     def _sync_movement_draft(self) -> None:
         current = self._movement_draft
@@ -1786,6 +1826,44 @@ def _option_entity_focus_target(
             return OptionEntityFocusTarget(unit_id=resolved_unit_id, model_id=model_id)
     if unit_id is not None and _view_has_unit(view, unit_id):
         return OptionEntityFocusTarget(unit_id=unit_id)
+    return None
+
+
+def _highlighted_option_targets_unit(state: FiniteDecisionUiState, unit_id: str) -> bool:
+    option = state.highlighted_option
+    if option is None:
+        return False
+    return _finite_option_targets_unit(
+        option_id=option.option_id,
+        payload=option.payload,
+        unit_id=unit_id,
+    )
+
+
+def _finite_option_targets_unit(
+    *,
+    option_id: str,
+    payload: JsonValue,
+    unit_id: str,
+) -> bool:
+    if option_id == unit_id:
+        return True
+    payload_unit_id = _first_unique_payload_string(payload, OPTION_FOCUS_UNIT_ID_KEYS)
+    return payload_unit_id == unit_id
+
+
+def _option_hud_unit_id(
+    *,
+    option_id: str,
+    payload: JsonValue,
+    view: BattlefieldView,
+    unit_display_by_id: JsonObject,
+) -> str | None:
+    payload_unit_id = _first_unique_payload_string(payload, OPTION_FOCUS_UNIT_ID_KEYS)
+    if payload_unit_id is not None:
+        return payload_unit_id
+    if _view_has_unit(view, option_id) or option_id in unit_display_by_id:
+        return option_id
     return None
 
 

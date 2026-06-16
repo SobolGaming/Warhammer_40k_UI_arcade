@@ -91,7 +91,7 @@ def build_live_core_smoke_startup(
     )
     status = _submit_smoke_deployments(client=client, status=status, stop_at_phase=stop_phase)
     expected_decision = (
-        SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE
+        SELECT_DEPLOYMENT_UNIT_DECISION_TYPE
         if stop_phase == "deployment"
         else "select_movement_unit"
     )
@@ -205,6 +205,8 @@ def _submit_smoke_deployments(
         decision = current.decision
         result_id = f"ui-live-smoke-deployment-{result_number:06d}"
         if decision.decision_type == SELECT_DEPLOYMENT_UNIT_DECISION_TYPE:
+            if stop_at_phase == "deployment":
+                return current
             if not decision.options:
                 raise LiveCoreSmokeError("Expected deployment unit options.")
             current = client.submit_finite(
@@ -212,12 +214,6 @@ def _submit_smoke_deployments(
                 selected_option_id=decision.options[0].option_id,
                 result_id=result_id,
             )
-            if (
-                stop_at_phase == "deployment"
-                and current.decision is not None
-                and current.decision.decision_type == SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE
-            ):
-                return current
         else:
             request = _pending_core_request(
                 client=client,

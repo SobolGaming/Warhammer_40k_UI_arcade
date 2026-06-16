@@ -97,12 +97,13 @@ class GuiTestDriver:
         *,
         preferences: UiPreferences | None = None,
         trace_writer: ForensicTraceWriter | None = None,
+        stop_at_phase: str | None = None,
     ) -> GuiTestDriver:
         """Create a driver backed by the real local core smoke session."""
 
         from warhammer40k_arcade_ui.core_client.live_smoke import build_live_core_smoke_startup
 
-        startup = build_live_core_smoke_startup()
+        startup = build_live_core_smoke_startup(stop_at_phase=stop_at_phase)
         window_core_client = (
             trace_core_client(startup.core_client, trace_writer)
             if trace_writer is not None
@@ -113,6 +114,7 @@ class GuiTestDriver:
             battlefield_view=startup.battlefield_view,
             preferences=preferences or default_preferences(),
             initial_status=startup.status,
+            initial_game_view=startup.game_view,
             core_client=window_core_client,
             viewer_player_id=startup.viewer_player_id,
             event_cursor=startup.event_cursor,
