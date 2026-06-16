@@ -7,6 +7,7 @@ from dataclasses import replace
 from warhammer40k_arcade_ui.core_client.protocol import UiDecision
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
+from warhammer40k_arcade_ui.render.view_models import BattlefieldView
 from warhammer40k_arcade_ui.state.entity_selection import EntityRef, entity_ref_for_model
 from warhammer40k_arcade_ui.state.movement_draft import (
     MovementDraft,
@@ -70,6 +71,45 @@ def test_movement_draft_seed_from_unit_selection_expands_to_all_models() -> None
         "intercessor_2",
         "intercessor_3",
     )
+
+
+def test_normal_move_budget_falls_back_to_datasheet_base_movement() -> None:
+    view = _view_with_intercessor_base_movement(6.0)
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(view=view),
+        pending_decision=_movement_proposal_decision(
+            context={
+                "source_selected_option_id": "normal_move",
+                "movement_mode": "normal",
+            }
+        ),
+    )
+
+    assert draft is not None
+    assert draft.movement_budget_inches == 6.0
+    assert draft.base_movement_budget_inches == 6.0
+
+
+def test_advance_move_budget_uses_datasheet_base_movement_plus_advance_roll() -> None:
+    view = _view_with_intercessor_base_movement(6.0)
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(view=view),
+        pending_decision=_movement_proposal_decision(
+            proposal_kind="advance",
+            movement_phase_action="advance",
+            context={
+                "source_selected_option_id": "advance",
+                "movement_mode": "advance",
+                "advance_roll": {"value": 6},
+            },
+        ),
+    )
+
+    assert draft is not None
+    assert draft.movement_budget_inches == 12.0
+    assert draft.base_movement_budget_inches == 6.0
 
 
 def test_movement_draft_does_not_start_for_unrelated_selected_unit() -> None:
@@ -492,13 +532,31 @@ def _active_draft() -> MovementDraft:
     return draft
 
 
-def _selected_intercessors() -> SelectionState:
-    view = default_battlefield_view()
+def _selected_intercessors(*, view: BattlefieldView | None = None) -> SelectionState:
+    view = default_battlefield_view() if view is None else view
     preferences = default_preferences()
     return SelectionState.initial(preferences).select_at(
         view=view,
         world_point=(7.0, 18.0),
         preferences=preferences,
+    )
+
+
+def _view_with_intercessor_base_movement(movement_inches: float) -> BattlefieldView:
+    view = default_battlefield_view()
+    intercessors, *other_units = view.units
+    return replace(
+        view,
+        units=(
+            replace(
+                intercessors,
+                models=tuple(
+                    replace(model, base_movement_inches=movement_inches)
+                    for model in intercessors.models
+                ),
+            ),
+            *other_units,
+        ),
     )
 
 

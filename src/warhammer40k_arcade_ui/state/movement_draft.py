@@ -470,7 +470,10 @@ class MovementDraft:
                 for model in unit.models
             ),
             cursor_preview_point=None,
-            movement_budget_inches=_proposal_movement_budget_inches(proposal),
+            movement_budget_inches=_proposal_movement_budget_inches(
+                proposal=proposal,
+                unit=unit,
+            ),
             base_movement_budget_inches=_proposal_base_movement_budget_inches(
                 proposal=proposal,
                 unit=unit,
@@ -674,7 +677,10 @@ class MovementDraft:
             proposal_request_id=proposal.request_id,
             ready_payload=None,
             cursor_preview_point=None,
-            movement_budget_inches=_proposal_movement_budget_inches(proposal),
+            movement_budget_inches=_proposal_movement_budget_inches(
+                proposal=proposal,
+                unit=_unit_by_id(view, proposal.unit_instance_id),
+            ),
             base_movement_budget_inches=_proposal_base_movement_budget_inches(
                 proposal=proposal,
                 unit=_unit_by_id(view, proposal.unit_instance_id),
@@ -1226,7 +1232,11 @@ def movement_proposal_profile(
     )
 
 
-def _proposal_movement_budget_inches(proposal: UiMovementProposalRequest) -> float | None:
+def _proposal_movement_budget_inches(
+    *,
+    proposal: UiMovementProposalRequest,
+    unit: UnitView | None,
+) -> float | None:
     profile = movement_proposal_profile(
         decision_type=proposal.decision_type,
         proposal_kind=proposal.proposal_kind,
@@ -1235,7 +1245,17 @@ def _proposal_movement_budget_inches(proposal: UiMovementProposalRequest) -> flo
         return proposal.scout_distance_inches
     if profile.distance_context_key is None:
         return None
-    return _context_positive_float(proposal.context, profile.distance_context_key)
+    explicit_budget = _context_positive_float(proposal.context, profile.distance_context_key)
+    if explicit_budget is not None:
+        return explicit_budget
+    base_budget = _proposal_base_movement_budget_inches(proposal=proposal, unit=unit)
+    if proposal.proposal_kind == "advance":
+        advance_roll = _advance_roll_value(proposal.context)
+        if base_budget is not None and advance_roll is not None:
+            return base_budget + advance_roll
+    if proposal.proposal_kind in ("normal_move", "fall_back"):
+        return base_budget
+    return None
 
 
 def _proposal_base_movement_budget_inches(
@@ -1255,6 +1275,20 @@ def _proposal_base_movement_budget_inches(
         if model.base_movement_inches is not None
     )
     return min(movement_values) if movement_values else None
+
+
+def _advance_roll_value(context: JsonObject) -> float | None:
+    value = context.get("advance_roll")
+    if value is None:
+        return None
+    advance_roll = _json_object("context.advance_roll", value)
+    roll_value = advance_roll.get("value")
+    if roll_value is None:
+        return None
+    number = _validated_finite_float("context.advance_roll.value", roll_value)
+    if number <= 0.0:
+        raise MovementDraftError("context.advance_roll.value must be positive.")
+    return number
 
 
 def _proposal_movement_mode(proposal: UiMovementProposalRequest) -> str | None:
