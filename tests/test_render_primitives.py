@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import replace
 from pathlib import Path
 
@@ -79,6 +80,34 @@ def test_fixture_payload_builds_expected_world_primitives() -> None:
     assert circle_layers.count("model_base") == 4
     assert "unit_label" in text_layers
     assert text_layers.count("deployment_side_label") == 2
+
+
+def test_table_metadata_labels_render_top_left_outside_battlefield() -> None:
+    view = default_battlefield_view()
+    view = replace(
+        view,
+        table=replace(
+            view.table,
+            terrain_layout_label="Terrain layout: layout-3",
+            deployment_map_label="Deployment map: deployment-map-3",
+        ),
+    )
+
+    labels = [
+        primitive
+        for primitive in build_world_primitives(view)
+        if type(primitive) is TextPrimitive and primitive.layer == "table_metadata_label"
+    ]
+
+    assert [label.text for label in labels] == [
+        "Terrain layout: layout-3",
+        "Deployment map: deployment-map-3",
+    ]
+    assert labels[0].position[0] == 0.0
+    assert math.isclose(labels[0].position[1], view.table.height + 2.05)
+    assert labels[1].position[0] == 0.0
+    assert math.isclose(labels[1].position[1], view.table.height + 0.85)
+    assert all(label.anchor_x == "left" for label in labels)
 
 
 def test_selected_unit_builds_selection_overlay_primitives() -> None:

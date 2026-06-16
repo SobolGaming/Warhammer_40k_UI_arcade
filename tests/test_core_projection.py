@@ -118,6 +118,21 @@ def test_core_projection_allows_empty_unit_list_during_deployment() -> None:
     assert view.table.height == 44.0
 
 
+def test_core_projection_preserves_terrain_and_deployment_layout_labels() -> None:
+    view = battlefield_view_from_game_view(
+        _game_view(
+            _terrain_feature(
+                center=(10.0, 20.0),
+                size=(6.0, 4.0),
+                source_id="custom-terrain-source",
+            )
+        )
+    )
+
+    assert view.table.terrain_layout_label == "Terrain layout: layout-1"
+    assert view.table.deployment_map_label == "Deployment map: deployment-map-a"
+
+
 def test_core_projection_rejects_source_terrain_footprint_bound_mismatch() -> None:
     with pytest.raises(
         CoreProjectionRenderError,
@@ -167,6 +182,7 @@ def _game_view(
             {
                 "mission_pool_entry_id": "mission-a",
                 "terrain_layout_id": "layout-1",
+                "deployment_map_id": "deployment-map-a",
                 "battlefield_width_inches": 60.0,
                 "battlefield_depth_inches": 44.0,
                 "deployment_zones": [] if deployment_zones is None else deployment_zones,

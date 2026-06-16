@@ -21,11 +21,23 @@ class TableView:
     width: float
     height: float
     label: str
+    terrain_layout_label: str | None = None
+    deployment_map_label: str | None = None
 
     def __post_init__(self) -> None:
         _validate_positive_float("width", self.width)
         _validate_positive_float("height", self.height)
         object.__setattr__(self, "label", _non_empty_string("label", self.label))
+        object.__setattr__(
+            self,
+            "terrain_layout_label",
+            _optional_non_empty_string("terrain_layout_label", self.terrain_layout_label),
+        )
+        object.__setattr__(
+            self,
+            "deployment_map_label",
+            _optional_non_empty_string("deployment_map_label", self.deployment_map_label),
+        )
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -34,6 +46,8 @@ class TableView:
             width=_required_positive_float(table, "width"),
             height=_required_positive_float(table, "height"),
             label=_required_string(table, "label"),
+            terrain_layout_label=_optional_string(table, "terrain_layout_label"),
+            deployment_map_label=_optional_string(table, "deployment_map_label"),
         )
 
 
@@ -415,6 +429,17 @@ def _required_string(payload: dict[str, object], key: str) -> str:
 
 
 def _required_string_item(name: str, value: object) -> str:
+    return _non_empty_string(name, value)
+
+
+def _optional_string(payload: dict[str, object], key: str) -> str | None:
+    value = payload.get(key)
+    return _optional_non_empty_string(key, value)
+
+
+def _optional_non_empty_string(name: str, value: object) -> str | None:
+    if value is None:
+        return None
     return _non_empty_string(name, value)
 
 

@@ -66,10 +66,13 @@ def _table_from_mission_setup(
 ) -> TableView:
     mission_pool_entry_id = _required_string(mission_setup, "mission_pool_entry_id")
     terrain_layout_id = _required_string(mission_setup, "terrain_layout_id")
+    deployment_map_id = _required_string(mission_setup, "deployment_map_id")
     return TableView(
         width=width,
         height=height,
         label=f"Live Core {mission_pool_entry_id} / {terrain_layout_id}",
+        terrain_layout_label=f"Terrain layout: {terrain_layout_id}",
+        deployment_map_label=f"Deployment map: {deployment_map_id}",
     )
 
 
