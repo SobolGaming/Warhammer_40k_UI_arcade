@@ -23,6 +23,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
+from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 
 
 @pytest.fixture
@@ -307,6 +308,94 @@ def test_movement_workflow_marks_ready_survives_hover_and_submits(
     assert driver.finite_status_message == "Debug movement accepted."
 
 
+def test_confirm_restarts_parameterized_movement_draft_after_cancel(
+    driver: GuiTestDriver,
+) -> None:
+    driver.click_world((7.0, 18.0))
+    driver.press_key(arcade.key.ENTER)
+
+    assert driver.pending_decision_type == "submit_movement_proposal"
+    assert _movement_draft(driver) is not None
+
+    finite_submission_count = len(driver.finite_submissions)
+    driver.press_key(arcade.key.ESCAPE)
+
+    assert _movement_draft(driver) is None
+
+    driver.press_key(arcade.key.ENTER)
+
+    assert len(driver.finite_submissions) == finite_submission_count
+    assert driver.pending_decision_type == "submit_movement_proposal"
+    assert _movement_draft(driver) is not None
+    assert driver.finite_status_kind == "waiting_for_decision"
+
+
+def test_confirm_for_parameterized_movement_with_unrelated_selection_does_not_start_draft(
+    driver: GuiTestDriver,
+) -> None:
+    driver.click_world((7.0, 18.0))
+    driver.press_key(arcade.key.ENTER)
+    driver.press_key(arcade.key.ESCAPE)
+    driver.click_world((53.0, 18.0))
+
+    assert driver.selected_unit_id == "guardian_squad"
+    assert _movement_draft(driver) is None
+
+    driver.press_key(arcade.key.ENTER)
+
+    assert _movement_draft(driver) is None
+    assert driver.finite_status_kind == "invalid"
+    assert driver.window.finite_state.diagnostics[0].violation_code == "no_movement_draft"
+
+
+def test_invalid_movement_submission_returns_ready_draft_to_preview(
+    driver: GuiTestDriver,
+) -> None:
+    assert isinstance(driver.core_client, FakeCoreClient)
+    fake_client = driver.core_client
+    driver.click_world((7.0, 18.0))
+    driver.press_key(arcade.key.ENTER)
+    driver.click_world((10.0, 18.0))
+    driver.press_key(arcade.key.ENTER)
+
+    draft = _movement_draft(driver)
+    assert draft is not None
+    assert draft.is_ready
+    pending_decision = driver.window.pending_decision
+    assert pending_decision is not None
+    fake_client.movement_status = UiClientStatus.invalid(
+        stage="battle",
+        violation_code="path_validation_failed",
+        message="Path witness final pose overlaps another model.",
+        field="witness",
+        payload={"invalid_reason": "path_validation_failed"},
+        decision=pending_decision,
+    )
+    fake_client.movement_view_from_payload = None
+    fake_client.movement_view = fake_client.view
+    fake_client.movement_event_delta = UiEventDelta(
+        viewer_player_id="player_1",
+        cursor=1,
+        next_cursor=1,
+        events=(),
+    )
+
+    driver.press_key(arcade.key.ENTER)
+
+    assert len(driver.movement_submissions) == 1
+    draft = _movement_draft(driver)
+    assert draft is not None
+    assert not draft.is_ready
+    assert driver.finite_status_kind == "invalid"
+
+    driver.press_key(arcade.key.ENTER)
+
+    assert len(driver.movement_submissions) == 1
+    draft = _movement_draft(driver)
+    assert draft is not None
+    assert draft.is_ready
+
+
 def test_movement_submission_flags_unsupported_projection_shape(
     driver: GuiTestDriver,
 ) -> None:
@@ -588,6 +677,10 @@ def _pending_payload(driver: GuiTestDriver) -> JsonObject:
     decision = driver.window.pending_decision
     assert decision is not None
     return cast(JsonObject, decision.payload)
+
+
+def _movement_draft(driver: GuiTestDriver) -> MovementDraft | None:
+    return driver.window.movement_draft
 
 
 def _unit_selection_decision() -> UiDecision:

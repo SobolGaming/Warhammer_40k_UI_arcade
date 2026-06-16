@@ -260,6 +260,7 @@ def test_submit_movement_draft_surfaces_invalid_diagnostics_and_keeps_draft() ->
     )
 
     assert result.clear_movement_draft is False
+    assert result.reset_movement_draft_ready is True
     assert fake.advance_call_count == 0
     assert result.finite_state.pending_decision == retry_decision
     assert result.finite_state.diagnostics[0].violation_code == "movement_budget_exceeded"

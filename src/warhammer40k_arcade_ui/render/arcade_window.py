@@ -942,6 +942,13 @@ class ArcadeWarhammerWindow(arcade.Window):
                         )
                     else:
                         self._trace_placement_draft_event("ui.placement_draft_preview")
+            elif (
+                self._pending_decision is not None
+                and self._pending_decision.movement_proposal is not None
+            ):
+                self._sync_movement_draft()
+                if self._movement_draft is None:
+                    self._submit_movement_draft()
             else:
                 self._submit_finite_option(None)
         elif invocation.command_id == "cancel":
@@ -1318,6 +1325,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._movement_draft = None
             self._selection_state = self._selection_state.without_movement_draft_overlays(
                 self._preferences
+            )
+        elif result.reset_movement_draft_ready and self._movement_draft is not None:
+            self._movement_draft = self._movement_draft.clear_ready_payload(
+                view=self._battlefield_view
             )
         self._set_finite_state(result.finite_state)
         self._trace_event(

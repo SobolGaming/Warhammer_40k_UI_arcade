@@ -40,6 +40,7 @@ class MovementSubmissionResult:
     refreshed_view: UiGameView | None
     clear_movement_draft: bool
     viewer_player_id: str | None = None
+    reset_movement_draft_ready: bool = False
 
 
 def prepare_movement_submission(
@@ -232,6 +233,7 @@ def submit_movement_draft(
         refreshed_view=refresh.refreshed_view,
         clear_movement_draft=submitted_status.status_kind != "invalid",
         viewer_player_id=refresh.viewer_player_id,
+        reset_movement_draft_ready=submitted_status.status_kind == "invalid",
     )
 
 

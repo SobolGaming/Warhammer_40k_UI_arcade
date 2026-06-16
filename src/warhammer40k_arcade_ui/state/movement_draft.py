@@ -420,6 +420,8 @@ class MovementDraft:
         unit = _unit_by_id(view, proposal.unit_instance_id)
         if unit is None:
             return None
+        if selection.selected_unit_id != unit.unit_id:
+            return None
         if proposal.movement_phase_action is None:
             raise MovementDraftError("Movement proposal requires movement_phase_action.")
         movement_mode = _proposal_movement_mode(proposal)
@@ -845,6 +847,15 @@ class MovementDraft:
         """Recompute local advisory hints for the current assignment geometry."""
 
         return replace(self, local_hint_lines=_local_hint_lines(view=view, draft=self))
+
+    def clear_ready_payload(self, *, view: BattlefieldView) -> MovementDraft:
+        """Return this draft to preview mode while preserving assigned paths."""
+
+        return replace(
+            self,
+            cursor_preview_point=None,
+            ready_payload=None,
+        ).with_recomputed_hints(view=view)
 
     def preview_model_paths(self) -> tuple[MovementModelPath, ...]:
         """Return model paths including the current cursor preview, if any."""

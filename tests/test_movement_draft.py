@@ -49,6 +49,24 @@ def test_movement_proposal_for_selected_unit_activates_model_assignment_draft() 
     assert all(path.points == (path.points[0],) for path in draft.model_paths)
 
 
+def test_movement_draft_does_not_start_for_unrelated_selected_unit() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_model_id(
+        unit_id="guardian_squad",
+        model_id="guardian_1",
+        preferences=preferences,
+    )
+
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=_movement_proposal_decision(),
+    )
+
+    assert draft is None
+
+
 def test_one_model_movement_draft_moves_only_active_model() -> None:
     view = default_battlefield_view()
     draft = _active_draft().add_waypoint(view=view, world_point=(10.0, 18.0))
@@ -360,7 +378,7 @@ def test_request_drift_starts_new_draft_without_previous_assignments() -> None:
     assert replacement.assigned_model_count == 0
 
 
-def test_start_for_pending_uses_proposal_unit_when_selection_drifted() -> None:
+def test_start_for_pending_does_not_use_proposal_unit_when_selection_drifted() -> None:
     view = default_battlefield_view()
     preferences = default_preferences()
     selection = SelectionState.initial(preferences).select_at(
@@ -383,9 +401,7 @@ def test_start_for_pending_uses_proposal_unit_when_selection_drifted() -> None:
 
     assert selection.selected_unit_id == "guardian_squad"
     assert selected_proposal is None
-    assert draft is not None
-    assert draft.selected_unit_id == "intercessor_squad"
-    assert draft.selected_model_ids == ("intercessor_1",)
+    assert draft is None
 
 
 def test_assignment_views_expose_summary_friendly_model_states() -> None:
