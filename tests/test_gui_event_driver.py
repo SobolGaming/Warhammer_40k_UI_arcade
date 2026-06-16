@@ -437,6 +437,48 @@ def test_next_deployment_roster_starts_synced_to_current_action_option() -> None
         driver.close()
 
 
+def test_manual_deployments_refresh_authoritative_projection_for_movement_clicks() -> None:
+    driver = GuiTestDriver.live_core_smoke(stop_at_phase="deployment")
+    try:
+        _deploy_all_live_smoke_units(driver)
+
+        assert driver.pending_decision_type == "select_movement_unit"
+        assert driver.battlefield_unit_ids == (
+            "army-alpha:intercessor-unit-1",
+            "army-alpha:intercessor-unit-3",
+            "army-beta:intercessor-unit-2",
+            "army-beta:intercessor-unit-4",
+        )
+
+        unit_id = "army-alpha:intercessor-unit-1"
+        driver.click_world(driver.first_model_position_for_unit(unit_id))
+
+        assert driver.selected_unit_id == unit_id
+        assert driver.highlighted_finite_option_id == unit_id
+
+        driver.press_key(arcade.key.ENTER)
+
+        assert driver.pending_decision_type == "select_movement_action"
+        assert _pending_payload(driver)["unit_instance_id"] == unit_id
+
+        driver.press_key(arcade.key.TAB)
+
+        assert driver.highlighted_finite_option_id == "normal_move"
+
+        driver.press_key(arcade.key.ENTER)
+
+        assert driver.pending_decision_type == "submit_movement_proposal"
+        assert driver.pending_proposal_kind == "normal_move"
+        assert driver.selected_unit_id == unit_id
+        assert driver.movement_selected_model_ids == (
+            "army-alpha:intercessor-unit-1:core-intercessor-like:001",
+        )
+        assert driver.window.movement_draft is not None
+        assert driver.finite_status_kind == "waiting_for_decision"
+    finally:
+        driver.close()
+
+
 def test_player_units_roster_scroll_region_consumes_wheel_without_zooming() -> None:
     driver = GuiTestDriver.launch(core_mode="live_core_smoke")
     try:
@@ -455,6 +497,68 @@ def test_player_units_roster_scroll_region_consumes_wheel_without_zooming() -> N
         assert driver.window.camera.zoom == original_zoom
     finally:
         driver.close()
+
+
+_LIVE_SMOKE_DEPLOYMENT_POINTS: dict[str, tuple[tuple[float, float], ...]] = {
+    "army-beta:intercessor-unit-2": (
+        (56.0, 7.0),
+        (56.0, 8.6),
+        (56.0, 10.2),
+        (54.4, 7.8),
+        (54.4, 9.4),
+    ),
+    "army-alpha:intercessor-unit-1": (
+        (4.0, 7.0),
+        (4.0, 8.6),
+        (4.0, 10.2),
+        (5.6, 7.8),
+        (5.6, 9.4),
+    ),
+    "army-beta:intercessor-unit-4": (
+        (56.0, 25.0),
+        (56.0, 26.6),
+        (56.0, 28.2),
+        (54.4, 25.8),
+        (54.4, 27.4),
+    ),
+    "army-alpha:intercessor-unit-3": (
+        (4.0, 25.0),
+        (4.0, 26.6),
+        (4.0, 28.2),
+        (5.6, 25.8),
+        (5.6, 27.4),
+    ),
+}
+
+
+def _deploy_all_live_smoke_units(driver: GuiTestDriver) -> None:
+    for _ in range(len(_LIVE_SMOKE_DEPLOYMENT_POINTS)):
+        assert driver.pending_decision_type == "select_deployment_unit"
+        unit_id = driver.selected_unit_id
+        assert unit_id is not None
+        _deploy_current_live_smoke_unit(driver, unit_id)
+    assert driver.pending_decision_type == "select_movement_unit"
+
+
+def _deploy_current_live_smoke_unit(driver: GuiTestDriver, unit_id: str) -> None:
+    driver.press_key(arcade.key.ENTER)
+
+    assert driver.pending_decision_type == "submit_deployment_placement"
+    assert driver.window.placement_draft is not None
+    assert driver.window.placement_draft.selected_unit_id == unit_id
+
+    for point in _LIVE_SMOKE_DEPLOYMENT_POINTS[unit_id]:
+        driver.click_world(point)
+
+    assert driver.window.placement_draft is not None
+    assert driver.window.placement_draft.unplaced_model_count == 0
+
+    driver.press_key(arcade.key.ENTER)
+
+    assert driver.window.placement_draft is not None
+    assert driver.window.placement_draft.is_ready
+
+    driver.press_key(arcade.key.ENTER)
 
 
 def _pending_payload(driver: GuiTestDriver) -> JsonObject:

@@ -65,6 +65,10 @@ from warhammer40k_arcade_ui.preferences.diagnostics import PreferenceDiagnostic
 from warhammer40k_arcade_ui.preferences.io import PreferencesLoadResult, load_preferences
 from warhammer40k_arcade_ui.preferences.schema import UiPreferences
 from warhammer40k_arcade_ui.render.camera import WorldCamera, WorldPoint
+from warhammer40k_arcade_ui.render.core_projection import (
+    CoreProjectionRenderError,
+    battlefield_view_from_game_view,
+)
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
@@ -1681,16 +1685,28 @@ class ArcadeWarhammerWindow(arcade.Window):
             **self._known_unit_display_by_id,
             **view.unit_display_by_id,
         }
-        self._battlefield_view = self._battlefield_view.refreshed_from_projection(
-            battlefield_state=view.battlefield_state,
-            phase_label=view.current_battle_phase or view.stage,
-            active_player_id=view.active_player_id or "none",
-            pending_decision_summary=_pending_decision_summary(state.pending_decision),
-            event_log_lines=_hud_event_lines(
-                current_lines=self._battlefield_view.hud.event_log_lines,
-                state_lines=state.event_log_lines,
-            ),
+        event_log_lines = _hud_event_lines(
+            current_lines=self._battlefield_view.hud.event_log_lines,
+            state_lines=state.event_log_lines,
         )
+        if _can_rebuild_core_projection(view):
+            try:
+                self._battlefield_view = battlefield_view_from_game_view(view).with_hud(
+                    phase_label=view.current_battle_phase or view.stage,
+                    active_player_id=view.active_player_id or "none",
+                    pending_decision_summary=_pending_decision_summary(state.pending_decision),
+                    event_log_lines=event_log_lines,
+                )
+            except CoreProjectionRenderError as exc:
+                raise RenderViewModelError(str(exc)) from exc
+        else:
+            self._battlefield_view = self._battlefield_view.refreshed_from_projection(
+                battlefield_state=view.battlefield_state,
+                phase_label=view.current_battle_phase or view.stage,
+                active_player_id=view.active_player_id or "none",
+                pending_decision_summary=_pending_decision_summary(state.pending_decision),
+                event_log_lines=event_log_lines,
+            )
         self._trace_event(
             category="ui",
             event_name="ui.projection_refreshed",
@@ -1839,6 +1855,10 @@ def _context_menu_action_at(
     if action_index < 0 or action_index >= len(menu.actions):
         return None
     return menu.actions[action_index]
+
+
+def _can_rebuild_core_projection(view: UiGameView) -> bool:
+    return type(view.mission_setup) is dict and type(view.battlefield_state) is dict
 
 
 def _hud_button_summary(hit_region: HudButtonHitRegion | None) -> JsonObject:
