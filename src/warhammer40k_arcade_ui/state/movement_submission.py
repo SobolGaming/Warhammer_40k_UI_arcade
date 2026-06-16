@@ -13,9 +13,10 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 )
 from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
 from warhammer40k_arcade_ui.state.movement_draft import (
-    MOVEMENT_PROPOSAL_DECISION_TYPE,
+    SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES,
     SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS,
     MovementDraft,
+    movement_proposal_profile,
 )
 
 
@@ -79,12 +80,15 @@ def prepare_movement_submission(
             next_result_index,
         )
     proposal = pending_decision.movement_proposal
-    if proposal is None or proposal.decision_type != MOVEMENT_PROPOSAL_DECISION_TYPE:
+    if proposal is None or proposal.decision_type not in SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES:
         return (
             _local_invalid(
                 pending_decision=pending_decision,
                 violation_code="unsupported_parameterized_request",
-                message="submit_movement_payload can answer only movement proposal requests.",
+                message=(
+                    "Movement draft submission requires a supported movement-shaped "
+                    "parameterized request."
+                ),
                 field="decision_type",
             ),
             None,
@@ -188,10 +192,25 @@ def submit_movement_draft(
         diagnostics=(),
         next_result_index=next_result_index,
     )
-    submitted_status = client.submit_movement_payload(
-        request_id=submission.request_id,
-        payload=submission.payload,
-        result_id=submission.result_id,
+    proposal = state.pending_decision.movement_proposal if state.pending_decision else None
+    if proposal is None:
+        raise MovementSubmissionError("Prepared movement submission lost pending proposal.")
+    profile = movement_proposal_profile(
+        decision_type=proposal.decision_type,
+        proposal_kind=proposal.proposal_kind,
+    )
+    submitted_status = (
+        client.submit_parameterized_payload(
+            request_id=submission.request_id,
+            payload=submission.payload,
+            result_id=submission.result_id,
+        )
+        if profile.submits_through_generic_parameterized_client
+        else client.submit_movement_payload(
+            request_id=submission.request_id,
+            payload=submission.payload,
+            result_id=submission.result_id,
+        )
     )
     authoritative_status = (
         submitted_status

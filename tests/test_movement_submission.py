@@ -224,6 +224,49 @@ def test_submit_movement_draft_without_core_client_returns_local_diagnostic() ->
     assert result.finite_state.diagnostics[0].violation_code == "no_core_client"
 
 
+def test_submit_scout_move_draft_uses_generic_parameterized_submission() -> None:
+    decision = _scout_move_proposal_decision()
+    draft = _ready_draft(decision)
+    accepted_status = UiClientStatus(
+        stage="battle",
+        status_kind="advanced",
+        decision=None,
+        message="Scout Move accepted.",
+        payload={"phase_body_status": "scout_move_complete"},
+    )
+    fake = FakeCoreClient(
+        status=accepted_status,
+        view=_game_view(pending_decision=None),
+        event_delta=UiEventDelta(
+            viewer_player_id="player_1",
+            cursor=2,
+            next_cursor=3,
+            events=(
+                {
+                    "event_type": "prebattle_scout_move_completed",
+                    "payload": {"player_id": "player_1"},
+                },
+            ),
+        ),
+    )
+
+    result = submit_movement_draft(
+        state=FiniteDecisionUiState(
+            pending_decision=decision,
+            event_cursor=2,
+            event_log_lines=("scout move pending",),
+        ),
+        movement_draft=draft,
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert fake.movement_submissions == []
+    assert fake.parameterized_submissions[0].request_id == "decision-request-scout-001"
+    assert fake.parameterized_submissions[0].payload == draft.payload_preview
+    assert result.clear_movement_draft is True
+
+
 def _active_draft(decision: UiDecision) -> MovementDraft:
     view = default_battlefield_view()
     draft = MovementDraft.start_for_pending(
@@ -285,6 +328,49 @@ def _movement_proposal_decision(
                         "movement_mode": "normal",
                         "movement_budget_inches": 6.0,
                     },
+                }
+            },
+            "is_parameterized": True,
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )
+
+
+def _scout_move_proposal_decision() -> UiDecision:
+    return UiDecision.from_payload(
+        {
+            "request_id": "decision-request-scout-001",
+            "decision_type": "submit_scout_move",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-scout-001",
+                    "decision_type": "submit_scout_move",
+                    "actor_id": "player_1",
+                    "game_id": "phase29-scout-game",
+                    "setup_step": "resolve_prebattle_actions",
+                    "player_id": "player_1",
+                    "unit_instance_id": "intercessor_squad",
+                    "component_unit_instance_ids": ["intercessor_squad"],
+                    "model_instance_ids": ["intercessor_1", "intercessor_2", "intercessor_3"],
+                    "proposal_kind": "scout_move",
+                    "action_kind": "scout_move",
+                    "source_rule_id": "core:scouts",
+                    "placement_kind": None,
+                    "scout_distance_inches": 6.0,
+                    "deployment_zone_ids": ["deployment-zone-a"],
+                    "legal_deployment_zones": [],
+                    "mission_setup": {},
+                    "ruleset_descriptor_hash": "ruleset-phase29",
+                    "source_decision_request_id": "decision-request-prebattle-001",
+                    "source_decision_result_id": "ui-result-prebattle-001",
+                    "context": {"source_selected_option_id": "scout_move:intercessor_squad"},
                 }
             },
             "is_parameterized": True,

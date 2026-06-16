@@ -208,15 +208,15 @@ def test_movement_draft_panel_shows_measurements_and_ready_state() -> None:
     assert panel.unchanged_model_count == 2
     assert panel.total_path_inches == 3.0
     assert panel.remaining_budget_inches == 3.0
-    assert panel.synthetic_witness_model_ids == ("intercessor_1",)
-    assert panel.synthetic_witness_point_count == 1
+    assert panel.synthetic_witness_model_ids == ()
+    assert panel.synthetic_witness_point_count == 0
     assert panel.payload_witness_lines == (
-        "intercessor_1: 3 witness point(s), synthetic midpoint",
+        "intercessor_1: 2 witness point(s)",
         "intercessor_2: 2 witness point(s), no-op",
         "intercessor_3: 2 witness point(s), no-op",
     )
     assert panel.ready is True
-    assert any("synthetic midpoint witness evidence" in hint for hint in panel.hint_lines)
+    assert not any("synthetic midpoint witness evidence" in hint for hint in panel.hint_lines)
 
 
 def test_movement_draft_panel_reports_unsupported_parameterized_request() -> None:
@@ -377,7 +377,7 @@ def test_assignment_hud_shows_ready_movement_groups_and_refs() -> None:
     assert panel.assigned_ref_keys == ("model:intercessor_1",)
     assert panel.unassigned_ref_keys == ("model:intercessor_2", "model:intercessor_3")
     assert panel.readiness_state == "ready"
-    assert any("synthetic midpoint witness evidence" in line for line in panel.advisory_lines)
+    assert not any("synthetic midpoint witness evidence" in line for line in panel.advisory_lines)
     assert [group.group_id for group in panel.groups] == [
         "assignment-group-000001",
         "unassigned-or-no-op",
@@ -406,7 +406,7 @@ def test_assignment_hud_can_be_hidden_by_preferences() -> None:
     assert panel is None
 
 
-def test_assignment_hud_reports_unsupported_charge_move_without_movement_draft() -> None:
+def test_assignment_hud_reports_supported_charge_move_draft() -> None:
     view = default_battlefield_view()
     draft = MovementDraft.start_for_pending(
         view=view,
@@ -423,12 +423,11 @@ def test_assignment_hud_reports_unsupported_charge_move_without_movement_draft()
         preference_source_label="default.yaml",
     )
 
-    assert draft is None
+    assert draft is not None
     assert panel is not None
-    assert panel.operation_kind == "unsupported"
+    assert panel.operation_kind == "movement"
     assert panel.proposal_kind == "charge_move"
-    assert panel.readiness_state == "unsupported"
-    assert panel.groups[0].label == "Unsupported proposal tool: charge_move"
+    assert panel.readiness_state == "empty"
 
 
 def test_assignment_hud_summarizes_fight_order_finite_options() -> None:

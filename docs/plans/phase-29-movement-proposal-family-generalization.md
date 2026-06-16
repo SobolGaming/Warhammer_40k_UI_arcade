@@ -164,3 +164,30 @@ uv run pre-commit run --all-files
 Review should focus on whether "movement" has become a generic path-witness editor rather than a
 Movement phase-only implementation. Each family still needs a strict serializer because the engine
 payload shapes are intentionally different.
+
+## Implementation Progress
+
+- Implemented on branch `codex/phase29-movement-proposal-family-generalization`.
+- Added movement proposal family profiles for `normal_move`, `advance`, `fall_back`,
+  `surge_move`, `charge_move`, `pile_in`, `consolidate`, and `scout_move`.
+- Normal Movement phase proposals now preserve endpoint-only moved paths; synthetic midpoint
+  evidence is profile-gated to families that currently need sampled/intermediate path evidence.
+- Charge, Pile In, and Consolidate support no-witness no-move payload previews when no model
+  assignment has been drafted.
+- Charge, Pile In, Consolidate, and Scout Move payload builders preserve engine-issued family
+  context instead of rolling, deriving, or inventing local rule data.
+- `submit_scout_move` requests are parsed as movement-shaped drafts and submitted through the
+  generic parameterized client method; normal movement-family requests continue through the
+  existing movement submission path.
+- Updated HUD/action-summary/regression tests so previously unsupported Phase 15 movement-family
+  requests are treated as draftable.
+
+## Implementation Verification
+
+```bash
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests
+env UV_CACHE_DIR=/tmp/uv-cache uv run pyright
+env UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest
+```

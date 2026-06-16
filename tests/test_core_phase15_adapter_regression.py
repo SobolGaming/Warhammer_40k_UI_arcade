@@ -73,9 +73,6 @@ def test_phase21a_pending_proposal_metadata_is_required(missing_key: str) -> Non
 @pytest.mark.parametrize(
     ("proposal_name", "expected_kind"),
     [
-        ("pile_in", "pile_in"),
-        ("consolidate", "consolidate"),
-        ("heroic_intervention_charge_move", "charge_move"),
         ("melee_declaration", "melee_declaration"),
         ("stratagem_counteroffensive", "stratagem_target_binding"),
     ],
@@ -116,6 +113,48 @@ def test_phase21a_unsupported_parameterized_requests_render_without_draft(
     assert assignment_panel.advisory_lines == (
         "Visible request only; no local assignment payload will be built.",
     )
+
+
+@pytest.mark.parametrize(
+    ("proposal_name", "expected_kind"),
+    [
+        ("pile_in", "pile_in"),
+        ("consolidate", "consolidate"),
+        ("heroic_intervention_charge_move", "charge_move"),
+    ],
+)
+def test_phase29_movement_family_requests_open_local_drafts(
+    proposal_name: str,
+    expected_kind: str,
+) -> None:
+    decision = _parameterized_decision(proposal_name)
+    view = default_battlefield_view()
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+
+    movement_panel = build_movement_draft_panel(
+        movement_draft=draft,
+        pending_decision=decision,
+    )
+    assignment_panel = build_assignment_hud_panel(
+        movement_draft=draft,
+        pending_decision=decision,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=default_preferences(),
+        preference_source_label="default.yaml",
+    )
+
+    assert draft is not None
+    assert draft.proposal_kind == expected_kind
+    assert movement_panel is not None
+    assert movement_panel.proposal_kind == expected_kind
+    assert assignment_panel is not None
+    assert assignment_panel.operation_kind == "movement"
+    assert assignment_panel.proposal_kind == expected_kind
 
 
 def test_phase28_placement_reinforcement_opens_local_placement_draft() -> None:
@@ -166,7 +205,7 @@ def test_phase28_placement_reinforcement_opens_local_placement_draft() -> None:
         pytest.param("heroic_intervention_charge_move"),
     ],
 )
-def test_phase21a_movement_submission_blocks_unsupported_movement_kinds(
+def test_phase29_stale_normal_move_draft_rejects_other_movement_contexts(
     proposal_name: str,
 ) -> None:
     supported_decision = _normal_move_decision()
@@ -185,9 +224,9 @@ def test_phase21a_movement_submission_blocks_unsupported_movement_kinds(
     assert submission is None
     assert invalid_status is not None
     assert invalid_status.invalid_diagnostics[0].violation_code == (
-        "unsupported_movement_proposal_kind"
+        "movement_proposal_context_drift"
     )
-    assert invalid_status.invalid_diagnostics[0].field == "proposal_kind"
+    assert invalid_status.invalid_diagnostics[0].field == "proposal_request"
     assert next_result_index == 4
 
 

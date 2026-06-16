@@ -97,7 +97,7 @@ def test_invalid_movement_diagnostic_marks_summary_warning() -> None:
     )
 
 
-def test_unsupported_charge_summary_is_diagnostic_without_geometry() -> None:
+def test_supported_charge_summary_without_draft_has_no_geometry() -> None:
     summary = build_action_visual_summary(
         movement_draft=None,
         pending_decision=_charge_move_proposal_decision(),
@@ -106,13 +106,7 @@ def test_unsupported_charge_summary_is_diagnostic_without_geometry() -> None:
         max_labels=6,
     )
 
-    assert summary is not None
-    assert summary.operation_kind == "unsupported"
-    assert summary.groups == ()
-    assert summary.has_drawable_groups is False
-    assert summary.diagnostic_lines == (
-        "No action visual summary adapter is available for charge_move.",
-    )
+    assert summary is None
 
 
 def _movement_proposal_decision() -> UiDecision:
