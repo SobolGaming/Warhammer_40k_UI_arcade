@@ -1,6 +1,6 @@
 # Phase 28: Generic Placement Proposal Editor
 
-Status: Proposed
+Status: Implemented
 
 ## Purpose
 
@@ -220,12 +220,23 @@ uv run pre-commit run --all-files
 
 ## Manual Validation Checklist
 
-- Launch a core setup or smoke scenario that emits a placement proposal.
-- Select a placement subject from the Player Units panel if the core first emits a unit-selection or
-  placement-subject request.
-- Confirm the selected Player Units row and battlefield unit highlight stay synchronized.
+- Launch the live core smoke scenario at deployment unit selection:
+  `uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase deployment --ui-prefs docs/preferences/default.yaml`.
+- Confirm the UI pauses at `select_deployment_unit` before any deployment unit is auto-selected.
+- Select a placement subject from the Player Units panel and confirm it highlights the same unit
+  option in Current Action.
+- Confirm the Player Units panel lists all units for the current viewer/player army, including
+  unplaced units.
+- Confirm the selected/current Player Units row, placed rows, and unplaced rows use distinct visual
+  states.
+- Confirm the selected Player Units row and battlefield unit highlight stay synchronized where a
+  battlefield unit already exists.
 - Place each required model token.
 - Confirm Player Units row colors distinguish unplaced, current, and fully placed subjects.
+- Submit a placement, continue to the next placement request, and confirm the previous placement
+  remains visible as advisory ghost bases or authoritative projected units.
+- Confirm the board has placeholder `player-a side` / `player-b side` labels below the lower board
+  corners.
 - Confirm Current Action shows placement draft completeness and submit readiness.
 - Submit a valid-looking draft and verify the core either accepts it or returns an authoritative
   invalid diagnostic.
@@ -236,3 +247,76 @@ uv run pre-commit run --all-files
 
 Review should focus on whether the editor is genuinely generic. Any proposal-kind branch should be
 limited to serialization of fields the engine already exposed, not a separate rules path.
+
+## Implementation Notes
+
+Implemented in the Phase 28 PR:
+
+- Added strict `UiPlacementProposalRequest` parsing for the current placement proposal families.
+- Added a generic `submit_parameterized_payload` UI core-client method and local-session bridge.
+- Added local `PlacementDraft` state keyed by proposal request ID.
+- Added reserve/arrival placement payload generation using `attempted_placement.model_placements`.
+- Added deployment/pre-battle placement payload generation using top-level `model_placements`.
+- Wired placement drafts into the Arcade window:
+  - placement proposal requests auto-open a local placement draft;
+  - left click places the current model ghost base and advances focus;
+  - `TAB` or the Current Action `Next model` button cycles placement-model focus;
+  - first `ENTER` marks a complete draft ready for review;
+  - second `ENTER` submits the payload through the generic parameterized client path;
+  - `ESC`/cancel clears the local draft without submitting.
+- Added placement ghost-base primitives on the battlefield without text labels.
+- Added Current Action placement summary and local placement buttons.
+- Added Player Units placement metadata/status for projected units, core unit-display-map units when
+  available, and the pending placement subject before it is projected onto the battlefield.
+- Added live-smoke display-map seeding so the Player Units panel shows the current actor's full
+  two-unit army during deployment even when the installed core package predates unit display maps.
+- Added persistent advisory placement ghost history for accepted local placement drafts.
+- Added placeholder side labels under the lower left and lower right board corners.
+- Added Assignment HUD placement rows for current, placed, and unplaced model poses.
+- Added `--stop-at-phase deployment` for `--live-core-smoke` so the real core smoke harness can
+  pause at the first deployment unit-selection request. Roster-row clicks can then focus the
+  matching engine-provided finite option before entering the placement editor.
+- Updated deployment smoke launch to use the pending deployment actor as the viewer so the manual
+  tester sees the side that is currently being asked to deploy.
+- Updated Player Units roster selection so unprojected deployment units can focus matching finite
+  options without requiring a battlefield projection first.
+- Updated finite-option transitions so when the engine advances from one deployment placement to
+  the next unit-selection request, the Player Units roster starts highlighted on the same unit as
+  the Current Action option without requiring a mouse or keyboard refresh first.
+
+Important limitations:
+
+- The editor does not perform local placement legality validation.
+- The editor does not yet support rotation/facing controls beyond preserving the default facing
+  value in generated poses.
+- The Player Units panel can show core-provided undeployed unit display records when the installed
+  engine exposes them. Older engine installs still show the current placement request's subject as a
+  focused row, but cannot safely show a complete undeployed roster without additional core exposure.
+- Failed authoritative submissions keep the local draft only when the core returns an invalid
+  status. If the core advances to a different request, the request ID remains the boundary for
+  clearing local state.
+
+## Verification
+
+Automated checks run:
+
+```bash
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff check src tests
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests
+env UV_CACHE_DIR=/tmp/uv-cache uv run pyright
+env UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/
+env UV_CACHE_DIR=/tmp/uv-cache PRE_COMMIT_HOME=/tmp/pre-commit-cache uv run pre-commit run --all-files
+```
+
+Manual reviewer focus:
+
+- Reach a core or fixture scenario that exposes `submit_placement_proposal` with
+  `reinforcement_placement`.
+- Confirm the Current Action panel shows placement progress and local placement buttons.
+- Confirm the Player Units row for the requested unit is selected/focused when the draft starts.
+- Click battlefield locations for each model and confirm ghost bases appear without text labels.
+- Press `ENTER` once after all models are placed and confirm the Current Action/Assignment state
+  moves to ready/review.
+- Press `ENTER` again and confirm the UI submits via the core parameterized path or displays the
+  authoritative invalid diagnostic.

@@ -139,6 +139,39 @@ class LocalSessionClient:
             self.session.lifecycle.submit_decision(submission.to_result(pending_request))
         )
 
+    def submit_parameterized_payload(
+        self,
+        *,
+        request_id: str,
+        payload: JsonValue,
+        result_id: str,
+    ) -> UiClientStatus:
+        """Submit a generic parameterized proposal payload with explicit request/result IDs."""
+
+        pending_or_status = self._pending_request_for_submission(
+            request_id=request_id,
+            no_pending_message=("Parameterized payload submission requires a pending request."),
+        )
+        if isinstance(pending_or_status, UiClientStatus):
+            return pending_or_status
+        pending_request = pending_or_status
+        pending_decision = _decision_from_request(pending_request)
+        if not pending_request.is_parameterized_submission_request():
+            return self._invalid_submission_status(
+                violation_code="parameterized_payload_for_finite_request",
+                message="Parameterized payload submission requires a parameterized request.",
+                field="request_id",
+                decision=pending_decision,
+            )
+        submission = ParameterizedSubmission(
+            request_id=request_id,
+            payload=validate_json_value(payload),
+            result_id=result_id,
+        )
+        return status_from_lifecycle(
+            self.session.lifecycle.submit_decision(submission.to_result(pending_request))
+        )
+
     def _pending_request_for_submission(
         self,
         *,

@@ -83,6 +83,7 @@ def create_window(
     arcade_runtime: ArcadeRuntime | None = None,
     ui_prefs_path: Path | None = None,
     live_core_smoke: bool = False,
+    live_core_stop_phase: str | None = None,
     event_trace_level: str | None = None,
     event_trace_file: Path | None = None,
     event_trace_cfg_file: Path | None = None,
@@ -109,7 +110,7 @@ def create_window(
     )
     resolved_crash_context = _resolve_crash_context(
         crash_report_context=crash_report_context,
-        runtime_mode=_runtime_mode(live_core_smoke),
+        runtime_mode=_runtime_mode(live_core_smoke, live_core_stop_phase),
         ui_prefs_path=ui_prefs_path,
         trace_writer=resolved_trace_writer,
     )
@@ -123,12 +124,12 @@ def create_window(
             )
 
             try:
-                startup = build_live_core_smoke_startup()
+                startup = build_live_core_smoke_startup(stop_at_phase=live_core_stop_phase)
             except LiveCoreSmokeError as exc:
                 report_path = _write_startup_crash_report(
                     exception=exc,
                     context=resolved_crash_context.with_updates(
-                        runtime_mode="live_core_smoke",
+                        runtime_mode=_runtime_mode(True, live_core_stop_phase),
                         viewer_player_id="player-a",
                     ),
                     crash_report_dir=crash_report_dir,
@@ -145,7 +146,7 @@ def create_window(
                     viewer_player_id="player-a",
                     trace_writer=resolved_trace_writer,
                     crash_report_context=resolved_crash_context.with_updates(
-                        runtime_mode="live_core_smoke",
+                        runtime_mode=_runtime_mode(True, live_core_stop_phase),
                         viewer_player_id="player-a",
                     ),
                     crash_report_dir=crash_report_dir,
@@ -155,12 +156,13 @@ def create_window(
                 battlefield_view=startup.battlefield_view,
                 preferences_path=ui_prefs_path,
                 initial_status=startup.status,
+                initial_game_view=startup.game_view,
                 core_client=trace_core_client(startup.core_client, resolved_trace_writer),
                 viewer_player_id=startup.viewer_player_id,
                 event_cursor=startup.event_cursor,
                 trace_writer=resolved_trace_writer,
                 crash_report_context=resolved_crash_context.with_updates(
-                    runtime_mode="live_core_smoke",
+                    runtime_mode=_runtime_mode(True, live_core_stop_phase),
                     viewer_player_id=startup.viewer_player_id,
                     event_cursor=startup.event_cursor,
                 ),
@@ -190,6 +192,7 @@ def run_app(
     arcade_runtime: ArcadeRuntime | None = None,
     ui_prefs_path: Path | None = None,
     live_core_smoke: bool = False,
+    live_core_stop_phase: str | None = None,
     event_trace_level: str | None = None,
     event_trace_file: Path | None = None,
     event_trace_cfg_file: Path | None = None,
@@ -208,6 +211,7 @@ def run_app(
             config,
             ui_prefs_path=ui_prefs_path,
             live_core_smoke=live_core_smoke,
+            live_core_stop_phase=live_core_stop_phase,
             event_trace_level=event_trace_level,
             event_trace_file=event_trace_file,
             event_trace_cfg_file=event_trace_cfg_file,
@@ -228,6 +232,7 @@ def run_app(
         runtime,
         ui_prefs_path=ui_prefs_path,
         live_core_smoke=live_core_smoke,
+        live_core_stop_phase=live_core_stop_phase,
         event_trace_level=event_trace_level,
         event_trace_file=event_trace_file,
         event_trace_cfg_file=event_trace_cfg_file,
@@ -269,8 +274,10 @@ def _resolve_trace_writer(
     )
 
 
-def _runtime_mode(live_core_smoke: bool) -> str:
+def _runtime_mode(live_core_smoke: bool, live_core_stop_phase: str | None) -> str:
     if live_core_smoke:
+        if live_core_stop_phase is not None:
+            return f"live_core_smoke:{live_core_stop_phase}"
         return "live_core_smoke"
     return "fake_fixture"
 

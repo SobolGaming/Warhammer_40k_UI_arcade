@@ -43,6 +43,19 @@ from warhammer40k_arcade_ui.state.movement_submission import (
     prepare_movement_submission,
     submit_movement_draft,
 )
+from warhammer40k_arcade_ui.state.placement_draft import (
+    PlacementAssignmentView,
+    PlacementDraft,
+    PlacementDraftError,
+    PlacementModelPose,
+    placement_proposal_for_selected_unit,
+)
+from warhammer40k_arcade_ui.state.placement_submission import (
+    PlacementProposalSubmission,
+    PlacementSubmissionResult,
+    prepare_placement_submission,
+    submit_placement_draft,
+)
 from warhammer40k_arcade_ui.state.selection import (
     ModelHit,
     SelectionState,
@@ -70,6 +83,12 @@ __all__ = [
     "MovementProposalContextDiagnostic",
     "MovementProposalSubmission",
     "MovementSubmissionResult",
+    "PlacementAssignmentView",
+    "PlacementDraft",
+    "PlacementDraftError",
+    "PlacementModelPose",
+    "PlacementProposalSubmission",
+    "PlacementSubmissionResult",
     "SelectionCardinality",
     "SelectionState",
     "build_entity_selection_profile",
@@ -84,11 +103,14 @@ __all__ = [
     "movement_proposal_context_diagnostic",
     "movement_proposal_context_diagnostic_line",
     "movement_proposal_for_selected_unit",
+    "placement_proposal_for_selected_unit",
     "prepare_movement_submission",
+    "prepare_placement_submission",
     "selected_model",
     "selected_unit",
     "submit_finite_option",
     "submit_movement_draft",
+    "submit_placement_draft",
     "unit_center",
     "unit_entity_ref",
     "unsupported_entity_selection_profile",

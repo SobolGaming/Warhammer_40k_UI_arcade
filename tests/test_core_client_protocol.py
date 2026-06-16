@@ -14,6 +14,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiGameView,
     UiMovementProposalRequest,
     UiParameterizedProposalRequest,
+    UiPlacementProposalRequest,
 )
 
 
@@ -146,6 +147,43 @@ def test_status_represents_generic_parameterized_request_without_movement_shape(
     assert status.decision.movement_proposal is None
     assert status.decision.parameterized_proposal is not None
     assert status.decision.parameterized_proposal.proposal_kind == "core:smokescreen"
+
+
+def test_status_represents_placement_proposal_request() -> None:
+    proposal_payload = _placement_proposal_request_payload()
+
+    status = UiClientStatus.from_payload(
+        {
+            "stage": "battle",
+            "status_kind": "waiting_for_decision",
+            "decision_request": {
+                "request_id": "decision-request-placement-001",
+                "decision_type": "submit_placement_proposal",
+                "actor_id": "player-a",
+                "payload": {"proposal_request": proposal_payload},
+                "is_parameterized": True,
+                "options": [
+                    {
+                        "option_id": "submit_parameterized_payload",
+                        "label": "Submit Parameterized Payload",
+                        "payload": {"submission_kind": "parameterized"},
+                    }
+                ],
+            },
+            "message": None,
+            "payload": None,
+        }
+    )
+
+    assert status.decision is not None
+    assert status.decision.is_parameterized is True
+    assert status.decision.movement_proposal is None
+    assert status.decision.placement_proposal == UiPlacementProposalRequest.from_payload(
+        proposal_payload
+    )
+    assert status.decision.parameterized_proposal == UiParameterizedProposalRequest.from_payload(
+        proposal_payload
+    )
 
 
 def test_status_requires_explicit_is_parameterized_even_with_parameterized_option() -> None:
@@ -489,6 +527,50 @@ def test_game_view_represents_viewer_projection() -> None:
     assert view.pending_proposal is not None
     assert view.pending_proposal.request_id == "decision-request-000005"
     assert view.pending_proposal.proposal_kind == "normal_move"
+    assert view.unit_display_by_id == {}
+    assert view.model_display_by_id == {}
+
+
+def test_game_view_preserves_optional_display_maps() -> None:
+    view = UiGameView.from_payload(
+        {
+            "viewer_player_id": "player-a",
+            "game_id": "phase28-game",
+            "stage": "setup",
+            "battle_round": 1,
+            "active_player_id": None,
+            "current_setup_step": "deployment",
+            "current_battle_phase": None,
+            "player_ids": ["player-a", "player-b"],
+            "battlefield_state": None,
+            "mission_setup": None,
+            "public_secondary_mission_choices": [],
+            "public_secondary_mission_card_states": [],
+            "public_command_point_ledgers": [],
+            "public_victory_point_ledgers": [],
+            "public_stratagem_use_records": [],
+            "pending_decision": None,
+            "pending_proposal": None,
+            "event_count": 3,
+            "unit_display_by_id": {
+                "unit-1": {
+                    "unit_instance_id": "unit-1",
+                    "owner_player_id": "player-a",
+                    "unit_display_name": "Battleline Infantry",
+                    "model_instance_ids": ["model-1", "model-2"],
+                }
+            },
+            "model_display_by_id": {"model-1": {"model_instance_id": "model-1"}},
+        }
+    )
+
+    assert view.unit_display_by_id["unit-1"] == {
+        "unit_instance_id": "unit-1",
+        "owner_player_id": "player-a",
+        "unit_display_name": "Battleline Infantry",
+        "model_instance_ids": ["model-1", "model-2"],
+    }
+    assert view.model_display_by_id["model-1"] == {"model_instance_id": "model-1"}
 
 
 def test_game_view_pending_proposal_missing_request_id_fails_fast() -> None:
@@ -564,11 +646,17 @@ def test_fake_core_client_records_explicit_submission_ids() -> None:
         payload={"proposal_request_id": "decision-request-000005"},
         result_id="ui-result-000018",
     )
+    fake.submit_parameterized_payload(
+        request_id="decision-request-placement-001",
+        payload={"proposal_request_id": "decision-request-placement-001"},
+        result_id="ui-result-000019",
+    )
 
     assert returned is status
     assert fake.finite_submissions[0].request_id == "decision-request-000004"
     assert fake.finite_submissions[0].selected_option_id == "normal_move"
     assert fake.movement_submissions[0].request_id == "decision-request-000005"
+    assert fake.parameterized_submissions[0].request_id == "decision-request-placement-001"
 
 
 def _movement_proposal_request_payload() -> dict[str, object]:
@@ -588,6 +676,25 @@ def _movement_proposal_request_payload() -> dict[str, object]:
         "context": {
             "source_selected_option_id": "normal_move",
             "movement_mode": "normal",
+        },
+    }
+
+
+def _placement_proposal_request_payload() -> dict[str, object]:
+    return {
+        "request_id": "decision-request-placement-001",
+        "decision_type": "submit_placement_proposal",
+        "actor_id": "player-a",
+        "game_id": "phase28-game",
+        "unit_instance_id": "unit-1",
+        "proposal_kind": "reinforcement_placement",
+        "source_decision_request_id": "decision-request-unit-001",
+        "source_decision_result_id": "ui-result-unit-001",
+        "placement_kinds": ["reinforcement"],
+        "model_instance_ids": ["model-1", "model-2"],
+        "context": {
+            "placement_kind": "reinforcement",
+            "reserve_state": "strategic_reserves",
         },
     }
 

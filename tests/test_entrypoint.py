@@ -64,6 +64,7 @@ def test_main_configures_logging_then_runs_app(
         *,
         ui_prefs_path: Path | None = None,
         live_core_smoke: bool = False,
+        live_core_stop_phase: str | None = None,
         event_trace_level: str | None = None,
         event_trace_file: Path | None = None,
         event_trace_cfg_file: Path | None = None,
@@ -77,6 +78,7 @@ def test_main_configures_logging_then_runs_app(
     ) -> None:
         assert trace_writer is not None
         assert crash_report_context is not None
+        assert live_core_stop_phase == "deployment"
         assert event_trace_cfg_file == config_path
         assert event_trace_include == ("ui.key_press", "ui.command_dispatch")
         assert event_trace_exclude == ("ui.mouse_motion", "ui.key_release")
@@ -101,6 +103,8 @@ def test_main_configures_logging_then_runs_app(
             "--ui-prefs",
             "docs/preferences/keyboard-heavy.yaml",
             "--live-core-smoke",
+            "--stop-at-phase",
+            "deployment",
             "--event-trace",
             "payload",
             "--event-trace-file",
@@ -160,6 +164,8 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
             "--ui-prefs",
             "/tmp/profile.yaml",
             "--live-core-smoke",
+            "--stop-at-phase",
+            "deployment",
             "--event-trace",
             "summary",
             "--event-trace-file",
@@ -182,6 +188,7 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
 
     assert parsed.ui_prefs_path == Path("/tmp/profile.yaml")
     assert parsed.live_core_smoke is True
+    assert parsed.stop_at_phase == "deployment"
     assert parsed.event_trace_level == "summary"
     assert parsed.event_trace_file == Path("/tmp/trace.jsonl")
     assert parsed.event_trace_cfg_file == Path("/tmp/event-trace-cfg.json")
@@ -190,3 +197,8 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
     assert parsed.event_trace_include_categories == ("core_client",)
     assert parsed.event_trace_exclude_categories == ("render",)
     assert parsed.crash_report_dir == Path("/tmp/crashes")
+
+
+def test_parse_args_rejects_stop_phase_without_live_core_smoke() -> None:
+    with pytest.raises(SystemExit):
+        main.parse_args(["--stop-at-phase", "deployment"])

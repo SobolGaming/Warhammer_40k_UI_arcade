@@ -42,7 +42,15 @@ type HudStatusChipShape = Literal["round", "square", "rounded_rect", "pill"]
 type HudScrollAxis = Literal["x", "y", "both"]
 type HudWheelAxis = Literal["x", "y", "auto"]
 type HudScrollbarVisibility = Literal["never", "auto", "always"]
-type HudButtonActionKind = Literal["none", "finite_option", "local_command", "select_unit"]
+type HudButtonActionKind = Literal[
+    "none",
+    "finite_option",
+    "local_command",
+    "select_unit",
+    "placement_submit",
+    "placement_clear",
+    "placement_next_model",
+]
 type HudButtonShape = Literal["rect", "rounded_rect", "pill", "square"]
 type HudButtonIconSide = Literal["left", "right", "both", "center", "none"]
 type CurrentActionSourceKind = Literal[
@@ -774,6 +782,7 @@ _WIDGET_ATTRIBUTES: dict[HudWidgetType, frozenset[str]] = {
             "button_gap",
             "button_height",
             "button_min_width",
+            "max_buttons_per_row",
             "button_shape",
             "cancel_hint",
             "confirm_hint",

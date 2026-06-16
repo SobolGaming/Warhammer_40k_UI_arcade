@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Literal
 
 from warhammer40k_core.core.army_catalog import ArmyCatalog
 from warhammer40k_core.core.ruleset_descriptor import RulesetDescriptor
@@ -35,7 +36,7 @@ from warhammer40k_arcade_ui.core_client.local_session_client import (
     LocalSessionClient,
     status_from_lifecycle,
 )
-from warhammer40k_arcade_ui.core_client.protocol import UiClientStatus, UiGameView
+from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiClientStatus, UiGameView
 from warhammer40k_arcade_ui.render.core_projection import (
     CoreProjectionRenderError,
     battlefield_view_from_game_view,
@@ -44,6 +45,7 @@ from warhammer40k_arcade_ui.render.view_models import BattlefieldView
 
 LIVE_CORE_SMOKE_VIEWER_PLAYER_ID = "player-a"
 LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID = "fixed:assassination:bring-it-down"
+type LiveCoreSmokeStopPhase = Literal["deployment", "movement"]
 
 
 class LiveCoreSmokeError(ValueError):
@@ -65,9 +67,11 @@ class LiveCoreSmokeStartup:
 def build_live_core_smoke_startup(
     *,
     viewer_player_id: str = LIVE_CORE_SMOKE_VIEWER_PLAYER_ID,
+    stop_at_phase: str | None = None,
 ) -> LiveCoreSmokeStartup:
-    """Start a real local core session and advance to the first movement-unit choice."""
+    """Start a real local core session and advance to the requested smoke stop point."""
 
+    stop_phase = _validated_stop_phase(stop_at_phase)
     client = LocalSessionClient()
     client.start_game(_live_core_smoke_config())
     status = client.advance_until_decision_or_terminal()
@@ -85,10 +89,20 @@ def build_live_core_smoke_startup(
         selected_option_id=LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID,
         result_id="ui-live-smoke-secondary-player-b",
     )
-    status = _submit_smoke_deployments(client=client, status=status)
-    _assert_expected_pending_decision(status, "select_movement_unit")
-    game_view = client.get_view(viewer_player_id)
-    event_delta = client.get_events_since(0, viewer_player_id)
+    status = _submit_smoke_deployments(client=client, status=status, stop_at_phase=stop_phase)
+    expected_decision = (
+        SELECT_DEPLOYMENT_UNIT_DECISION_TYPE
+        if stop_phase == "deployment"
+        else "select_movement_unit"
+    )
+    _assert_expected_pending_decision(status, expected_decision)
+    effective_viewer_player_id = _smoke_viewer_player_id(
+        status=status,
+        stop_phase=stop_phase,
+        default_viewer_player_id=viewer_player_id,
+    )
+    game_view = _with_live_smoke_display_maps(client.get_view(effective_viewer_player_id))
+    event_delta = client.get_events_since(0, effective_viewer_player_id)
     try:
         battlefield_view = battlefield_view_from_game_view(game_view)
     except CoreProjectionRenderError as exc:
@@ -98,9 +112,54 @@ def build_live_core_smoke_startup(
         status=status,
         game_view=game_view,
         battlefield_view=battlefield_view,
-        viewer_player_id=viewer_player_id,
+        viewer_player_id=effective_viewer_player_id,
         event_cursor=event_delta.next_cursor,
     )
+
+
+def _smoke_viewer_player_id(
+    *,
+    status: UiClientStatus,
+    stop_phase: LiveCoreSmokeStopPhase,
+    default_viewer_player_id: str,
+) -> str:
+    if stop_phase != "deployment" or status.decision is None:
+        return default_viewer_player_id
+    return status.decision.actor_id or default_viewer_player_id
+
+
+def _with_live_smoke_display_maps(view: UiGameView) -> UiGameView:
+    return replace(
+        view,
+        unit_display_by_id={
+            **_live_smoke_unit_display_by_id(),
+            **view.unit_display_by_id,
+        },
+    )
+
+
+def _live_smoke_unit_display_by_id() -> JsonObject:
+    units: JsonObject = {}
+    for player_id, army_id, unit_selection_ids in (
+        ("player-a", "army-alpha", ("intercessor-unit-1", "intercessor-unit-3")),
+        ("player-b", "army-beta", ("intercessor-unit-2", "intercessor-unit-4")),
+    ):
+        for unit_selection_id in unit_selection_ids:
+            unit_instance_id = f"{army_id}:{unit_selection_id}"
+            units[unit_instance_id] = {
+                "unit_instance_id": unit_instance_id,
+                "owner_player_id": player_id,
+                "visible_status": "visible",
+                "unit_display_name": _live_smoke_unit_display_name(unit_selection_id),
+                "model_instance_ids": [
+                    f"{unit_instance_id}:core-intercessor-like:{index:03d}" for index in range(1, 6)
+                ],
+            }
+    return units
+
+
+def _live_smoke_unit_display_name(unit_selection_id: str) -> str:
+    return unit_selection_id.replace("-", " ").title()
 
 
 def _submit_expected_finite(
@@ -135,6 +194,7 @@ def _submit_smoke_deployments(
     *,
     client: LocalSessionClient,
     status: UiClientStatus,
+    stop_at_phase: LiveCoreSmokeStopPhase,
 ) -> UiClientStatus:
     current = status
     result_number = 1
@@ -145,6 +205,8 @@ def _submit_smoke_deployments(
         decision = current.decision
         result_id = f"ui-live-smoke-deployment-{result_number:06d}"
         if decision.decision_type == SELECT_DEPLOYMENT_UNIT_DECISION_TYPE:
+            if stop_at_phase == "deployment":
+                return current
             if not decision.options:
                 raise LiveCoreSmokeError("Expected deployment unit options.")
             current = client.submit_finite(
@@ -164,6 +226,16 @@ def _submit_smoke_deployments(
             )
         result_number += 1
     return current
+
+
+def _validated_stop_phase(stop_at_phase: str | None) -> LiveCoreSmokeStopPhase:
+    if stop_at_phase is None:
+        return "movement"
+    if stop_at_phase == "deployment":
+        return "deployment"
+    if stop_at_phase == "movement":
+        return "movement"
+    raise LiveCoreSmokeError(f"Unsupported live-core smoke stop phase: {stop_at_phase}.")
 
 
 def _pending_core_request(

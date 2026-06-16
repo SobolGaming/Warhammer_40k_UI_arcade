@@ -115,6 +115,28 @@ def test_current_action_panel_renders_clickable_finite_option_buttons() -> None:
                         "selected": False,
                         "enabled": True,
                     },
+                    {
+                        "button_id": "finite_option_2_remain_stationary",
+                        "command_id": "select_finite_option",
+                        "action_kind": "finite_option",
+                        "request_id": "decision-request-1",
+                        "option_id": "remain_stationary",
+                        "label": "Remain Stationary",
+                        "state": "normal",
+                        "selected": False,
+                        "enabled": True,
+                    },
+                    {
+                        "button_id": "finite_option_3_fall_back",
+                        "command_id": "select_finite_option",
+                        "action_kind": "finite_option",
+                        "request_id": "decision-request-1",
+                        "option_id": "fall_back",
+                        "label": "Fall Back",
+                        "state": "normal",
+                        "selected": False,
+                        "enabled": True,
+                    },
                 ],
             }
         },
@@ -146,9 +168,12 @@ def test_current_action_panel_renders_clickable_finite_option_buttons() -> None:
     assert "Current Action: Movement" in texts
     assert "Normal Move" in texts
     assert "Advance" in texts
-    assert len(render_result.hit_regions) == 2
+    assert len(render_result.hit_regions) == 4
     assert render_result.hit_regions[0].option_id == "normal_move"
     assert render_result.hit_regions[0].request_id == "decision-request-1"
+    first_row_tops = {region.bounds[3] for region in render_result.hit_regions[:3]}
+    assert len(first_row_tops) == 1
+    assert render_result.hit_regions[3].bounds[3] < render_result.hit_regions[0].bounds[3]
     assert render_result.hit_regions[0].contains(
         (render_result.hit_regions[0].bounds[0] + render_result.hit_regions[0].bounds[2]) / 2.0,
         (render_result.hit_regions[0].bounds[1] + render_result.hit_regions[0].bounds[3]) / 2.0,

@@ -37,6 +37,7 @@ from warhammer40k_arcade_ui.render.view_models import (
     UnitView,
 )
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
+from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "phase03_battlefield_view.json"
@@ -77,6 +78,7 @@ def test_fixture_payload_builds_expected_world_primitives() -> None:
     assert circle_layers.count("unit_token") == 2
     assert circle_layers.count("model_base") == 4
     assert "unit_label" in text_layers
+    assert text_layers.count("deployment_side_label") == 2
 
 
 def test_selected_unit_builds_selection_overlay_primitives() -> None:
@@ -131,6 +133,46 @@ def test_movement_draft_builds_path_waypoint_ghost_and_budget_primitives() -> No
     assert "movement_waypoint" in circle_layers
     assert "movement_budget_ring" in circle_layers
     assert "movement_waypoint_label" not in text_layers
+
+
+def test_placement_draft_builds_ghost_primitives_without_labels() -> None:
+    view = default_battlefield_view()
+    draft = PlacementDraft.start_for_pending(
+        view=view,
+        selection=SelectionState.initial(default_preferences()),
+        pending_decision=_placement_proposal_decision(),
+    )
+    assert draft is not None
+    draft = draft.place_current_model((8.0, 18.0))
+
+    primitives = build_world_primitives(view, placement_draft=draft)
+
+    circle_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is CirclePrimitive
+    ]
+    text_layers = [primitive.layer for primitive in primitives if type(primitive) is TextPrimitive]
+    assert "placement_placed_ghost_base" in circle_layers
+    assert "placement_current_ghost_base" not in circle_layers
+    assert not any(layer.startswith("placement_") for layer in text_layers)
+
+
+def test_placement_history_keeps_previous_advisory_ghosts() -> None:
+    view = default_battlefield_view()
+    draft = PlacementDraft.start_for_pending(
+        view=view,
+        selection=SelectionState.initial(default_preferences()),
+        pending_decision=_placement_proposal_decision(),
+    )
+    assert draft is not None
+    draft = draft.place_current_model((8.0, 18.0))
+
+    primitives = build_world_primitives(view, placement_history=(draft,))
+
+    circle_layers = [
+        primitive.layer for primitive in primitives if type(primitive) is CirclePrimitive
+    ]
+    assert "placement_history_placed_ghost_base" in circle_layers
+    assert "placement_placed_ghost_base" not in circle_layers
 
 
 def test_action_visual_summary_builds_dim_path_and_ghost_primitives() -> None:
@@ -462,6 +504,38 @@ def _movement_proposal_decision() -> UiDecision:
                         "movement_mode": "normal",
                         "movement_budget_inches": 6.0,
                     },
+                }
+            },
+            "is_parameterized": True,
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )
+
+
+def _placement_proposal_decision() -> UiDecision:
+    return UiDecision.from_payload(
+        {
+            "request_id": "decision-request-placement-001",
+            "decision_type": "submit_placement_proposal",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-placement-001",
+                    "decision_type": "submit_placement_proposal",
+                    "actor_id": "player_1",
+                    "game_id": "phase28-game",
+                    "unit_instance_id": "intercessor_squad",
+                    "proposal_kind": "reinforcement_placement",
+                    "source_decision_request_id": "decision-request-unit-001",
+                    "source_decision_result_id": "ui-result-unit-001",
+                    "placement_kinds": ["reinforcement"],
+                    "context": {"placement_kind": "reinforcement"},
                 }
             },
             "is_parameterized": True,

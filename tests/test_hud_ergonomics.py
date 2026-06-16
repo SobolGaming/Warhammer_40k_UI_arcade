@@ -15,6 +15,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
     build_assignment_hud_panel,
     build_finite_decision_panel,
     build_movement_draft_panel,
+    build_placement_draft_panel,
     build_unit_panel,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
@@ -26,6 +27,7 @@ from warhammer40k_arcade_ui.render.primitives import (
     TextPrimitive,
 )
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
+from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
 
@@ -166,6 +168,203 @@ def test_player_units_roster_runtime_data_filters_and_highlights_viewer_units() 
     assert [button["unit_id"] for button in buttons] == ["intercessor_squad"]
     assert buttons[0]["selected"] is True
     assert buttons[0]["action_kind"] == "select_unit"
+
+
+def test_placement_draft_updates_current_action_and_player_units_status() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences)
+    decision = _placement_proposal_decision()
+    draft = PlacementDraft.start_for_pending(
+        view=view,
+        selection=selection,
+        pending_decision=decision,
+    )
+    assert draft is not None
+    draft = draft.place_current_model((8.0, 18.0))
+    finite_panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=0,
+        status_message="Placement proposal pending",
+        diagnostics=(),
+    )
+    placement_panel = build_placement_draft_panel(
+        placement_draft=draft,
+        pending_decision=decision,
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=None,
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        placement_draft_panel=placement_panel,
+        assignment_hud_panel=build_assignment_hud_panel(
+            movement_draft=None,
+            placement_draft=draft,
+            pending_decision=decision,
+            highlighted_option_index=0,
+            diagnostics=(),
+            preferences=preferences,
+            preference_source_label="default.yaml",
+        ),
+        event_log_lines=(),
+        selected_unit_id=draft.selected_unit_id,
+        viewer_player_id="player_1",
+    )
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    roster = cast(JsonObject, runtime["hud.player_units.roster"])
+    buttons = cast(list[JsonObject], roster["buttons"])
+    current_action = cast(JsonObject, runtime["current_action"])
+    placement_metadata = cast(JsonObject, buttons[0]["metadata"])
+    current_action_buttons = cast(list[JsonObject], current_action["buttons"])
+    current_action_summary = cast(str, current_action["summary"])
+
+    assert placement_metadata["placement_status"] == "unplaced"
+    assert current_action["source_kind"] == "local_gui"
+    assert "1/3 placed" in current_action_summary
+    assert [button["action_kind"] for button in current_action_buttons] == [
+        "placement_submit",
+        "placement_next_model",
+        "placement_clear",
+    ]
+
+
+def test_player_units_roster_includes_pending_placement_unit_before_projection() -> None:
+    view = replace(default_battlefield_view(), units=())
+    preferences = default_preferences()
+    decision = _deployment_placement_proposal_decision()
+    finite_panel = build_finite_decision_panel(
+        pending_decision=decision,
+        highlighted_option_index=0,
+        status_message="Placement proposal pending",
+        diagnostics=(),
+    )
+    placement_panel = build_placement_draft_panel(
+        placement_draft=None,
+        pending_decision=decision,
+    )
+    assert placement_panel is not None
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=None,
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        placement_draft_panel=placement_panel,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+        selected_unit_id=placement_panel.unit_id,
+        viewer_player_id="player-b",
+    )
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    roster = cast(JsonObject, runtime["hud.player_units.roster"])
+    buttons = cast(list[JsonObject], roster["buttons"])
+    metadata = cast(JsonObject, buttons[0]["metadata"])
+
+    assert [button["unit_id"] for button in buttons] == ["army-beta:intercessor-unit-2"]
+    assert buttons[0]["selected"] is True
+    assert buttons[0]["state"] == "selected"
+    assert buttons[0]["label"] == "Intercessor Unit 2"
+    assert metadata["model_count"] == 5
+    assert metadata["placement_status"] == "unplaced"
+
+
+def test_player_units_roster_can_use_core_display_maps_for_undeployed_units() -> None:
+    view = replace(default_battlefield_view(), units=())
+    preferences = default_preferences()
+    finite_panel = build_finite_decision_panel(
+        pending_decision=None,
+        highlighted_option_index=0,
+        status_message="Idle",
+        diagnostics=(),
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=None,
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+        viewer_player_id="player-a",
+        unit_display_by_id={
+            "army-alpha:intercessor-unit-1": {
+                "unit_instance_id": "army-alpha:intercessor-unit-1",
+                "owner_player_id": "player-a",
+                "unit_display_name": "Alpha Intercessors",
+                "model_instance_ids": ["model-1", "model-2"],
+            },
+            "army-beta:intercessor-unit-2": {
+                "unit_instance_id": "army-beta:intercessor-unit-2",
+                "owner_player_id": "player-b",
+                "unit_display_name": "Beta Intercessors",
+                "model_instance_ids": ["model-3", "model-4"],
+            },
+        },
+    )
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    roster = cast(JsonObject, runtime["hud.player_units.roster"])
+    buttons = cast(list[JsonObject], roster["buttons"])
+    metadata = cast(JsonObject, buttons[0]["metadata"])
+
+    assert [button["unit_id"] for button in buttons] == ["army-alpha:intercessor-unit-1"]
+    assert buttons[0]["label"] == "Alpha Intercessors"
+    assert buttons[0]["state"] == "normal"
+    assert buttons[0]["color_role"] == "neutral"
+    assert metadata["model_count"] == 2
+    assert metadata["placement_status"] == "unplaced"
+
+
+def test_player_units_roster_distinguishes_placed_and_unplaced_display_map_units() -> None:
+    view = replace(default_battlefield_view(), units=(default_battlefield_view().units[0],))
+    preferences = default_preferences()
+    finite_panel = build_finite_decision_panel(
+        pending_decision=None,
+        highlighted_option_index=0,
+        status_message="Idle",
+        diagnostics=(),
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=None,
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+        viewer_player_id="player_1",
+        unit_display_by_id={
+            "intercessor_squad": {
+                "unit_instance_id": "intercessor_squad",
+                "owner_player_id": "player_1",
+                "unit_display_name": "Intercessors",
+                "model_instance_ids": ["intercessor_1", "intercessor_2", "intercessor_3"],
+            },
+            "reserve_squad": {
+                "unit_instance_id": "reserve_squad",
+                "owner_player_id": "player_1",
+                "unit_display_name": "Reserve Squad",
+                "model_instance_ids": ["reserve_1", "reserve_2"],
+            },
+        },
+    )
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    roster = cast(JsonObject, runtime["hud.player_units.roster"])
+    buttons = cast(list[JsonObject], roster["buttons"])
+    status_by_unit = {
+        cast(str, button["unit_id"]): cast(JsonObject, button["metadata"])["placement_status"]
+        for button in buttons
+    }
+    color_by_unit = {cast(str, button["unit_id"]): button["color_role"] for button in buttons}
+
+    assert [button["unit_id"] for button in buttons] == ["intercessor_squad", "reserve_squad"]
+    assert status_by_unit == {"intercessor_squad": "placed", "reserve_squad": "unplaced"}
+    assert color_by_unit == {"intercessor_squad": "active", "reserve_squad": "neutral"}
 
 
 def test_ergonomic_selected_unit_actions_mark_highlighted_option() -> None:
@@ -587,6 +786,79 @@ def _movement_proposal_decision() -> UiDecision:
                         "movement_mode": "normal",
                         "movement_budget_inches": 6.0,
                     },
+                }
+            },
+            "is_parameterized": True,
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )
+
+
+def _placement_proposal_decision() -> UiDecision:
+    return UiDecision.from_payload(
+        {
+            "request_id": "decision-request-placement-001",
+            "decision_type": "submit_placement_proposal",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-placement-001",
+                    "decision_type": "submit_placement_proposal",
+                    "actor_id": "player_1",
+                    "game_id": "phase28-game",
+                    "unit_instance_id": "intercessor_squad",
+                    "proposal_kind": "reinforcement_placement",
+                    "source_decision_request_id": "decision-request-unit-001",
+                    "source_decision_result_id": "ui-result-unit-001",
+                    "placement_kinds": ["reinforcement"],
+                    "context": {"placement_kind": "reinforcement"},
+                }
+            },
+            "is_parameterized": True,
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )
+
+
+def _deployment_placement_proposal_decision() -> UiDecision:
+    return UiDecision.from_payload(
+        {
+            "request_id": "decision-request-deployment-001",
+            "decision_type": "submit_deployment_placement",
+            "actor_id": "player-b",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-deployment-001",
+                    "decision_type": "submit_deployment_placement",
+                    "actor_id": "player-b",
+                    "game_id": "phase28-game",
+                    "player_id": "player-b",
+                    "unit_instance_id": "army-beta:intercessor-unit-2",
+                    "proposal_kind": "deployment_placement",
+                    "placement_kind": "deployment",
+                    "placement_kinds": ["deployment"],
+                    "model_instance_ids": [
+                        "army-beta:intercessor-unit-2:core-intercessor-like:001",
+                        "army-beta:intercessor-unit-2:core-intercessor-like:002",
+                        "army-beta:intercessor-unit-2:core-intercessor-like:003",
+                        "army-beta:intercessor-unit-2:core-intercessor-like:004",
+                        "army-beta:intercessor-unit-2:core-intercessor-like:005",
+                    ],
+                    "source_decision_request_id": "decision-request-unit-001",
+                    "source_decision_result_id": "ui-result-unit-001",
+                    "context": {"placement_kind": "deployment"},
                 }
             },
             "is_parameterized": True,

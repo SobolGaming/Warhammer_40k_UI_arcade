@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, Self, cast
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, JsonValue]
+
+
+def _empty_json_object() -> JsonObject:
+    return {}
 
 
 class UiClientProtocolError(ValueError):
@@ -59,6 +63,17 @@ class UiCoreClient(Protocol):
 
         ...
 
+    def submit_parameterized_payload(
+        self,
+        *,
+        request_id: str,
+        payload: JsonValue,
+        result_id: str,
+    ) -> UiClientStatus:
+        """Submit a generic parameterized proposal payload for an explicit request ID."""
+
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class UiFiniteOption:
@@ -85,7 +100,7 @@ class UiFiniteOption:
 
 @dataclass(frozen=True, slots=True)
 class UiMovementProposalRequest:
-    """UI view of an engine movement or placement proposal request."""
+    """UI view of an engine movement proposal request."""
 
     request_id: str
     decision_type: str
@@ -179,6 +194,142 @@ class UiMovementProposalRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class UiPlacementProposalRequest:
+    """UI view of an engine placement proposal request."""
+
+    request_id: str
+    decision_type: str
+    actor_id: str
+    game_id: str
+    player_id: str
+    unit_instance_id: str
+    proposal_kind: str
+    placement_kind: str
+    placement_kinds: tuple[str, ...]
+    required_model_ids: tuple[str, ...]
+    source_decision_request_id: str
+    source_decision_result_id: str
+    ruleset_descriptor_hash: str | None
+    setup_step: str | None
+    action_kind: str | None
+    source_rule_id: str | None
+    context: JsonObject
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "request_id", _non_empty_string("request_id", self.request_id))
+        object.__setattr__(
+            self,
+            "decision_type",
+            _non_empty_string("decision_type", self.decision_type),
+        )
+        object.__setattr__(self, "actor_id", _non_empty_string("actor_id", self.actor_id))
+        object.__setattr__(self, "game_id", _non_empty_string("game_id", self.game_id))
+        object.__setattr__(self, "player_id", _non_empty_string("player_id", self.player_id))
+        object.__setattr__(
+            self,
+            "unit_instance_id",
+            _non_empty_string("unit_instance_id", self.unit_instance_id),
+        )
+        object.__setattr__(
+            self,
+            "proposal_kind",
+            _non_empty_string("proposal_kind", self.proposal_kind),
+        )
+        object.__setattr__(
+            self,
+            "placement_kind",
+            _non_empty_string("placement_kind", self.placement_kind),
+        )
+        if type(self.placement_kinds) is not tuple:
+            raise UiClientProtocolError("placement_kinds must be a tuple.")
+        object.__setattr__(
+            self,
+            "placement_kinds",
+            tuple(_non_empty_string("placement_kind", kind) for kind in self.placement_kinds),
+        )
+        if self.placement_kind not in self.placement_kinds:
+            raise UiClientProtocolError("placement_kind must be one of placement_kinds.")
+        if type(self.required_model_ids) is not tuple:
+            raise UiClientProtocolError("required_model_ids must be a tuple.")
+        object.__setattr__(
+            self,
+            "required_model_ids",
+            tuple(
+                _non_empty_string("model_instance_id", model_id)
+                for model_id in self.required_model_ids
+            ),
+        )
+        object.__setattr__(
+            self,
+            "source_decision_request_id",
+            _non_empty_string("source_decision_request_id", self.source_decision_request_id),
+        )
+        object.__setattr__(
+            self,
+            "source_decision_result_id",
+            _non_empty_string("source_decision_result_id", self.source_decision_result_id),
+        )
+        object.__setattr__(
+            self,
+            "ruleset_descriptor_hash",
+            _optional_string("ruleset_descriptor_hash", self.ruleset_descriptor_hash),
+        )
+        object.__setattr__(self, "setup_step", _optional_string("setup_step", self.setup_step))
+        object.__setattr__(self, "action_kind", _optional_string("action_kind", self.action_kind))
+        object.__setattr__(
+            self,
+            "source_rule_id",
+            _optional_string("source_rule_id", self.source_rule_id),
+        )
+        object.__setattr__(self, "context", _json_object("context", self.context))
+
+    @classmethod
+    def from_payload(cls, payload: object) -> Self:
+        proposal = _json_object("placement proposal request payload", payload)
+        context = _json_object("proposal context", proposal["context"])
+        actor_id = _required_string(proposal, "actor_id")
+        player_id = _optional_string_value(proposal, "player_id") or actor_id
+        placement_kind = (
+            _optional_string_value(proposal, "placement_kind")
+            or _optional_string_value(context, "placement_kind")
+            or _first_string_list_value(proposal, "placement_kinds")
+        )
+        if placement_kind is None:
+            raise UiClientProtocolError("placement_kind is required.")
+        placement_kinds = tuple(_string_list_if_present(proposal, "placement_kinds"))
+        if not placement_kinds:
+            placement_kinds = (placement_kind,)
+        return cls(
+            request_id=_required_string(proposal, "request_id"),
+            decision_type=_required_string(proposal, "decision_type"),
+            actor_id=actor_id,
+            game_id=_required_string(proposal, "game_id"),
+            player_id=player_id,
+            unit_instance_id=_required_string(proposal, "unit_instance_id"),
+            proposal_kind=_required_string(proposal, "proposal_kind"),
+            placement_kind=placement_kind,
+            placement_kinds=placement_kinds,
+            required_model_ids=tuple(_string_list_if_present(proposal, "model_instance_ids")),
+            source_decision_request_id=_required_string(
+                proposal,
+                "source_decision_request_id",
+            ),
+            source_decision_result_id=_required_string(
+                proposal,
+                "source_decision_result_id",
+            ),
+            ruleset_descriptor_hash=_optional_string_value(
+                proposal,
+                "ruleset_descriptor_hash",
+            ),
+            setup_step=_optional_string_value(proposal, "setup_step"),
+            action_kind=_optional_string_value(proposal, "action_kind"),
+            source_rule_id=_optional_string_value(proposal, "source_rule_id"),
+            context=context,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class UiParameterizedProposalRequest:
     """Generic UI view of a parameterized proposal request."""
 
@@ -266,6 +417,7 @@ class UiDecision:
     is_parameterized: bool
     parameterized_proposal: UiParameterizedProposalRequest | None = None
     movement_proposal: UiMovementProposalRequest | None = None
+    placement_proposal: UiPlacementProposalRequest | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "request_id", _non_empty_string("request_id", self.request_id))
@@ -292,6 +444,11 @@ class UiDecision:
             and type(self.movement_proposal) is not UiMovementProposalRequest
         ):
             raise UiClientProtocolError("movement_proposal must be a UiMovementProposalRequest.")
+        if (
+            self.placement_proposal is not None
+            and type(self.placement_proposal) is not UiPlacementProposalRequest
+        ):
+            raise UiClientProtocolError("placement_proposal must be a UiPlacementProposalRequest.")
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -322,6 +479,7 @@ class UiDecision:
             is_parameterized=is_parameterized,
             parameterized_proposal=parameterized_proposal,
             movement_proposal=_movement_proposal_from_parameterized(parameterized_proposal),
+            placement_proposal=_placement_proposal_from_parameterized(parameterized_proposal),
         )
 
 
@@ -459,6 +617,8 @@ class UiGameView:
     pending_decision: UiDecision | None
     pending_proposal: UiParameterizedProposalRequest | None
     event_count: int
+    unit_display_by_id: JsonObject = field(default_factory=_empty_json_object)
+    model_display_by_id: JsonObject = field(default_factory=_empty_json_object)
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -508,6 +668,8 @@ class UiGameView:
                 else UiParameterizedProposalRequest.from_payload(pending_proposal_payload)
             ),
             event_count=_required_int(view, "event_count"),
+            unit_display_by_id=_optional_json_object_value(view, "unit_display_by_id"),
+            model_display_by_id=_optional_json_object_value(view, "model_display_by_id"),
         )
 
 
@@ -650,7 +812,17 @@ def _movement_proposal_from_parameterized(
     return UiMovementProposalRequest.from_payload(proposal.payload)
 
 
+def _placement_proposal_from_parameterized(
+    proposal: UiParameterizedProposalRequest | None,
+) -> UiPlacementProposalRequest | None:
+    if proposal is None or not _payload_has_placement_proposal_shape(proposal.payload):
+        return None
+    return UiPlacementProposalRequest.from_payload(proposal.payload)
+
+
 def _payload_has_movement_proposal_shape(payload: JsonObject) -> bool:
+    if payload.get("decision_type") != "submit_movement_proposal":
+        return False
     required_keys = (
         "request_id",
         "decision_type",
@@ -666,6 +838,52 @@ def _payload_has_movement_proposal_shape(payload: JsonObject) -> bool:
         "context",
     )
     return all(key in payload for key in required_keys)
+
+
+def _payload_has_placement_proposal_shape(payload: JsonObject) -> bool:
+    decision_type = payload.get("decision_type")
+    proposal_kind = payload.get("proposal_kind")
+    return (
+        type(decision_type) is str
+        and type(proposal_kind) is str
+        and (
+            decision_type in _PLACEMENT_PROPOSAL_DECISION_TYPES
+            or proposal_kind in _PLACEMENT_PROPOSAL_KINDS
+        )
+        and all(key in payload for key in _PLACEMENT_PROPOSAL_REQUIRED_KEYS)
+    )
+
+
+_PLACEMENT_PROPOSAL_DECISION_TYPES = frozenset(
+    (
+        "submit_placement_proposal",
+        "submit_deployment_placement",
+        "submit_redeploy_placement",
+        "submit_scout_reserve_setup",
+    )
+)
+_PLACEMENT_PROPOSAL_KINDS = frozenset(
+    (
+        "reinforcement_placement",
+        "deep_strike_placement",
+        "strategic_reserves_placement",
+        "disembark_placement",
+        "deployment_placement",
+        "redeploy_placement",
+        "scout_reserve_setup",
+    )
+)
+_PLACEMENT_PROPOSAL_REQUIRED_KEYS = (
+    "request_id",
+    "decision_type",
+    "actor_id",
+    "game_id",
+    "unit_instance_id",
+    "proposal_kind",
+    "source_decision_request_id",
+    "source_decision_result_id",
+    "context",
+)
 
 
 def _json_object(field_name: str, value: object) -> JsonObject:
@@ -688,6 +906,12 @@ def _required_string(payload: JsonObject, key: str) -> str:
 
 def _optional_string_value(payload: JsonObject, key: str) -> str | None:
     return _optional_string(key, payload.get(key))
+
+
+def _optional_json_object_value(payload: JsonObject, key: str) -> JsonObject:
+    if key not in payload or payload[key] is None:
+        return {}
+    return _json_object(key, payload[key])
 
 
 def _required_matching_string(
@@ -724,6 +948,17 @@ def _required_value(payload: JsonObject, key: str) -> JsonValue:
 
 def _string_list(payload: JsonObject, key: str) -> list[str]:
     return [_non_empty_string(key, value) for value in _json_list(key, payload[key])]
+
+
+def _string_list_if_present(payload: JsonObject, key: str) -> list[str]:
+    if key not in payload:
+        return []
+    return _string_list(payload, key)
+
+
+def _first_string_list_value(payload: JsonObject, key: str) -> str | None:
+    values = _string_list_if_present(payload, key)
+    return values[0] if values else None
 
 
 def _non_empty_string(field_name: str, value: object) -> str:

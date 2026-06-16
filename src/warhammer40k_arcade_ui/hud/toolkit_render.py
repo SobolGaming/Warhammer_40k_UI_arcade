@@ -780,33 +780,33 @@ def _button_row(
         rect.height,
         max(20.0, _attribute_float(node, "button_height", default=34.0)),
     )
-    min_width = max(36.0, _attribute_float(node, "button_min_width", default=98.0))
-    x = rect.x
+    max_per_row = max(1, min(3, _attribute_int(node, "max_buttons_per_row", default=3)))
     y_top = rect.top
     primitives: list[RenderPrimitive] = []
     hit_regions: list[HudButtonHitRegion] = []
-    for button in buttons:
-        label = json_text(button.get("label"), default=json_text(button.get("button_id")))
-        wanted_width = max(
-            min_width,
-            min(rect.width, _estimated_text_width(label, theme.compact_font_size_px) + 34.0),
-        )
-        if x > rect.x and x + wanted_width > rect.right:
-            x = rect.x
-            y_top -= button_height + gap
+    for row_start in range(0, len(buttons), max_per_row):
+        row_buttons = buttons[row_start : row_start + max_per_row]
         if y_top - button_height < rect.y:
             break
-        button_rect = ScreenRect(
-            x,
-            y_top - button_height,
-            min(wanted_width, rect.width),
-            button_height,
+        column_count = max(1, len(row_buttons))
+        button_width = max(
+            0.0,
+            (rect.width - (gap * max(0, column_count - 1))) / column_count,
         )
-        primitives.extend(_hud_button_primitives(button, rect=button_rect, theme=theme, node=node))
-        hit_region = _hit_region_for_button(node.widget_id, button, button_rect)
-        if hit_region is not None:
-            hit_regions.append(hit_region)
-        x += button_rect.width + gap
+        for column_index, button in enumerate(row_buttons):
+            button_rect = ScreenRect(
+                rect.x + ((button_width + gap) * column_index),
+                y_top - button_height,
+                button_width,
+                button_height,
+            )
+            primitives.extend(
+                _hud_button_primitives(button, rect=button_rect, theme=theme, node=node)
+            )
+            hit_region = _hit_region_for_button(node.widget_id, button, button_rect)
+            if hit_region is not None:
+                hit_regions.append(hit_region)
+        y_top -= button_height + gap
     return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
 
 
@@ -978,6 +978,12 @@ def _button_action_kind(value: str) -> HudButtonActionKind:
         return "local_command"
     if value == "select_unit":
         return "select_unit"
+    if value == "placement_submit":
+        return "placement_submit"
+    if value == "placement_clear":
+        return "placement_clear"
+    if value == "placement_next_model":
+        return "placement_next_model"
     return "none"
 
 

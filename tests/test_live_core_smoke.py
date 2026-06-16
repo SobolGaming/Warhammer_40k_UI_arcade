@@ -46,6 +46,35 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     )
 
 
+def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
+    startup = build_live_core_smoke_startup(stop_at_phase="deployment")
+    decision = startup.status.decision
+
+    assert decision is not None
+    assert decision.decision_type == "select_deployment_unit"
+    assert decision.actor_id == "player-b"
+    assert decision.is_parameterized is False
+    assert [option.option_id for option in decision.options] == [
+        "deploy:army-beta:intercessor-unit-2",
+        "deploy:army-beta:intercessor-unit-4",
+    ]
+    assert [
+        _required_object_value(option.payload)["unit_instance_id"] for option in decision.options
+    ] == [
+        "army-beta:intercessor-unit-2",
+        "army-beta:intercessor-unit-4",
+    ]
+    assert startup.viewer_player_id == "player-b"
+    assert {
+        unit_id
+        for unit_id, unit_display in startup.game_view.unit_display_by_id.items()
+        if _required_object_value(unit_display).get("owner_player_id") == "player-b"
+    } == {"army-beta:intercessor-unit-2", "army-beta:intercessor-unit-4"}
+    assert startup.event_cursor > 0
+    assert startup.battlefield_view.table.width == 60.0
+    assert startup.battlefield_view.table.height == 44.0
+
+
 def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> None:
     startup, proposal_decision, payload_preview = _ready_live_core_normal_move_payload()
     witness = _required_object(payload_preview, "witness")

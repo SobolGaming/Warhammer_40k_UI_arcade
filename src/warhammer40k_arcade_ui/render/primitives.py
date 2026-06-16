@@ -18,6 +18,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
+from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState, selected_model, selected_unit
 
 type Color = tuple[int, int, int, int]
@@ -41,6 +42,10 @@ MOVEMENT_GHOST_FILL: Color = (102, 220, 180, 54)
 MOVEMENT_ACTIVE: Color = (132, 232, 255, 255)
 MOVEMENT_ASSIGNED: Color = (122, 214, 156, 210)
 MOVEMENT_UNASSIGNED: Color = (184, 190, 186, 135)
+PLACEMENT_GHOST_FILL: Color = (88, 172, 246, 46)
+PLACEMENT_CURRENT: Color = (132, 232, 255, 255)
+PLACEMENT_PLACED: Color = (88, 172, 246, 220)
+PLACEMENT_UNPLACED: Color = (198, 204, 216, 118)
 ACTION_SUMMARY_DIM: Color = (138, 210, 164, 105)
 ACTION_SUMMARY_REVIEW: Color = (136, 245, 172, 238)
 ACTION_SUMMARY_WARNING_DIM: Color = (255, 178, 92, 125)
@@ -108,6 +113,8 @@ def build_world_primitives(
     selection_state: SelectionState | None = None,
     movement_draft: MovementDraft | None = None,
     action_summary: ActionVisualSummary | None = None,
+    placement_draft: PlacementDraft | None = None,
+    placement_history: tuple[PlacementDraft, ...] = (),
 ) -> tuple[RenderPrimitive, ...]:
     """Build deterministic world-space primitives from a battlefield view model."""
 
@@ -131,10 +138,14 @@ def build_world_primitives(
     primitives.extend(_unit_primitives(view))
     if action_summary is not None:
         primitives.extend(_action_visual_summary_primitives(action_summary))
+    for previous_placement in placement_history:
+        primitives.extend(_placement_draft_primitives(previous_placement, history=True))
     if selection_state is not None:
         primitives.extend(_selection_primitives(view, selection_state))
         if movement_draft is not None:
             primitives.extend(_movement_draft_primitives(selection_state, movement_draft))
+    if placement_draft is not None:
+        primitives.extend(_placement_draft_primitives(placement_draft))
     return tuple(primitives)
 
 
@@ -182,7 +193,38 @@ def _deployment_zone_primitives(view: BattlefieldView) -> tuple[RenderPrimitive,
                 anchor_y="center",
             )
         )
+    primitives.extend(_deployment_side_labels(view))
     return tuple(primitives)
+
+
+def _deployment_side_labels(view: BattlefieldView) -> tuple[TextPrimitive, ...]:
+    visible_zones = tuple(zone for zone in view.deployment_zones if zone.visible)
+    if not visible_zones:
+        return ()
+    left_zone = min(visible_zones, key=lambda zone: _centroid(zone.polygon)[0])
+    right_zone = max(visible_zones, key=lambda zone: _centroid(zone.polygon)[0])
+    return (
+        TextPrimitive(
+            layer="deployment_side_label",
+            text=f"{left_zone.player_id} side",
+            position=(0.0, -1.15),
+            color=_player_color(left_zone.player_id),
+            font_size=9.5,
+            coordinate_space="world",
+            anchor_x="left",
+            anchor_y="top",
+        ),
+        TextPrimitive(
+            layer="deployment_side_label",
+            text=f"{right_zone.player_id} side",
+            position=(view.table.width, -1.15),
+            color=_player_color(right_zone.player_id),
+            font_size=9.5,
+            coordinate_space="world",
+            anchor_x="right",
+            anchor_y="top",
+        ),
+    )
 
 
 def _objective_primitives(view: BattlefieldView) -> tuple[RenderPrimitive, ...]:
@@ -509,7 +551,58 @@ def _movement_assignment_color(state: str) -> Color:
     return MOVEMENT_UNASSIGNED
 
 
+def _placement_draft_primitives(
+    placement_draft: PlacementDraft,
+    *,
+    history: bool = False,
+) -> tuple[RenderPrimitive, ...]:
+    primitives: list[RenderPrimitive] = []
+    for assignment in placement_draft.assignment_views():
+        if assignment.position is None:
+            continue
+        color = _placement_assignment_color(assignment.state)
+        fill_color = (
+            (PLACEMENT_GHOST_FILL[0], PLACEMENT_GHOST_FILL[1], PLACEMENT_GHOST_FILL[2], 30)
+            if history
+            else PLACEMENT_GHOST_FILL
+        )
+        layer_prefix = "placement_history" if history else "placement"
+        primitives.append(
+            CirclePrimitive(
+                layer=f"{layer_prefix}_{assignment.state}_ghost_base",
+                center=assignment.position,
+                radius=assignment.base_radius,
+                fill_color=fill_color,
+                outline_color=color,
+                line_width=1.0 if history else 1.8 if assignment.state == "current" else 1.2,
+            )
+        )
+        primitives.append(
+            CirclePrimitive(
+                layer=f"{layer_prefix}_{assignment.state}_focus_ring",
+                center=assignment.position,
+                radius=assignment.base_radius + 0.22,
+                fill_color=(0, 0, 0, 0),
+                outline_color=color,
+                line_width=0.8 if history else 1.0,
+            )
+        )
+    return tuple(primitives)
+
+
+def _placement_assignment_color(state: str) -> Color:
+    if state == "current":
+        return PLACEMENT_CURRENT
+    if state == "placed":
+        return PLACEMENT_PLACED
+    return PLACEMENT_UNPLACED
+
+
 def _player_color(player_id: str) -> Color:
+    if player_id == "player-a":
+        return PLAYER_1_COLOR
+    if player_id == "player-b":
+        return PLAYER_2_COLOR
     if player_id == "player_1":
         return PLAYER_1_COLOR
     if player_id == "player_2":
