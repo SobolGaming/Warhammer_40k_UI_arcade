@@ -32,6 +32,7 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
     selected_unit = _selected_unit_data(
         card=ergonomics.selected_unit_card,
         rows=ergonomics.selected_unit_rows,
+        stats=ergonomics.selected_unit_stats,
     )
     action_rows = tuple(_icon_text_bar_data(row) for row in ergonomics.action_rows)
     assignment_rows = tuple(_assignment_row_data(row) for row in ergonomics.assignment_rows)
@@ -144,6 +145,7 @@ def _selected_unit_data(
     *,
     card: UnitRailCardView | None,
     rows: tuple[IconTextBarView, ...],
+    stats: JsonObject,
 ) -> JsonObject:
     if card is None:
         return {
@@ -153,7 +155,6 @@ def _selected_unit_data(
             "status": "",
             "stats": {},
         }
-    stats = _unknown_datasheet_stats()
     return {
         "label": card.unit_label,
         "unit_label": card.unit_label,
@@ -163,7 +164,7 @@ def _selected_unit_data(
         "status": card.short_label or card.activation_state,
         "model_count_summary": card.model_count_summary,
         "activation_state": card.activation_state,
-        "stats": stats,
+        "stats": stats if stats else _unknown_datasheet_stats(),
     }
 
 

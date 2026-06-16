@@ -170,6 +170,76 @@ def test_player_units_roster_runtime_data_filters_and_highlights_viewer_units() 
     assert buttons[0]["action_kind"] == "select_unit"
 
 
+def test_selected_unit_datasheet_uses_core_model_display_characteristics() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=view,
+        world_point=(7.0, 18.0),
+        preferences=preferences,
+    )
+    finite_panel = build_finite_decision_panel(
+        pending_decision=None,
+        highlighted_option_index=0,
+        status_message="Idle",
+        diagnostics=(),
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=build_unit_panel(
+            view=view,
+            selection=selection,
+            pending_decision=None,
+        ),
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+        selected_unit_id=selection.selected_unit_id,
+        viewer_player_id="player_1",
+        unit_display_by_id={
+            "intercessor_squad": {
+                "unit_instance_id": "intercessor_squad",
+                "owner_player_id": "player_1",
+                "unit_display_name": "CORE Intercessor-like Infantry",
+                "datasheet_id": "core-intercessor-like-infantry",
+                "model_instance_ids": ["intercessor_1", "intercessor_2", "intercessor_3"],
+            }
+        },
+        model_display_by_id={
+            "intercessor_1": {
+                "model_instance_id": "intercessor_1",
+                "unit_instance_id": "intercessor_squad",
+                "current_characteristics": {
+                    "M": _characteristic("M", "6"),
+                    "T": _characteristic("T", "4"),
+                    "SV": _characteristic("SV", "3+"),
+                    "InSv": _characteristic("InSv", "-"),
+                    "W": _characteristic("W", "2"),
+                    "LD": _characteristic("LD", "6+"),
+                    "OC": _characteristic("OC", "2"),
+                },
+            }
+        },
+    )
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    selected_unit = cast(JsonObject, runtime["selected_unit"])
+    selected_stats = cast(JsonObject, selected_unit["stats"])
+
+    assert selected_unit["unit_label"] == "CORE Intercessor-like Infantry"
+    assert selected_unit["status"] == "core-intercessor-like-infantry"
+    assert selected_stats == {
+        "M": "6",
+        "T": "4",
+        "SV": "3+",
+        "W": "2",
+        "LD": "6+",
+        "OC": "2",
+    }
+
+
 def test_placement_draft_updates_current_action_and_player_units_status() -> None:
     view = default_battlefield_view()
     preferences = default_preferences()
@@ -871,6 +941,20 @@ def _deployment_placement_proposal_decision() -> UiDecision:
             ],
         }
     )
+
+
+def _characteristic(label: str, display_value: str) -> JsonObject:
+    return {
+        "characteristic": label,
+        "label": label,
+        "value_kind": "numeric" if display_value not in {"-", "?"} else "source_dash",
+        "raw": None,
+        "base": None,
+        "final": None,
+        "display_value": display_value,
+        "applied_modifier_ids": [],
+        "redaction": None,
+    }
 
 
 def _text_lines(primitives: tuple[RenderPrimitive, ...]) -> list[str]:
