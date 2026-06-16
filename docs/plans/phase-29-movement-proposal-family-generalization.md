@@ -30,6 +30,8 @@ In scope:
 Out of scope:
 
 - placement proposals, including disembark and reserve arrival;
+- generic `OpportunityWindow` rendering, proactive `InterfaceIntent` capture, and reaction/stratagem
+  trays; those belong to Phase 32;
 - local target legality checks for charge, pile-in, or consolidate;
 - rolling dice locally;
 - resolving attacks or melee declarations.
@@ -46,6 +48,20 @@ The core catalog already exposes these movement-shaped parameterized proposal ro
 The engine is authoritative for maximum distance, target snapshots, required movement modes,
 coherency, terrain, engagement range, and no-move validity. Some families allow explicit no-move
 payloads with empty target/objective context and no witness; others require a complete witness.
+
+Core revision `0531ebe` adds Phase 18B trigger opportunity windows around attack-sequence rerolls
+and optional actions, but it does not add a new movement proposal family. The movement draft tool
+must therefore remain request-driven: it should start drafting only when the current pending request
+is a movement-shaped parameterized proposal. If the engine emits a finite opportunity window,
+reroll request, grant-selection request, or other interrupt before a movement proposal, this phase
+should defer to the finite/current-action, dice, or future opportunity-window UI until the engine
+emits the movement proposal request.
+
+Path shape is also family-profile driven. The UI must not keep a blanket rule that every displaced
+path needs a synthetic midpoint. Endpoint-only paths are valid for families where the active core
+contract accepts them, and invalid diagnostics must be rendered exactly when the core rejects them.
+The UI should synthesize intermediate poses only when the active request profile or adapter
+contract explicitly requires sampled evidence.
 
 ## UX Model
 
@@ -80,9 +96,10 @@ consolidate, or Scout moves. The differences should appear as engine-provided co
 3. **Payload builders**
    - Split payload construction into family-specific builders that consume shared path assignments.
    - Use only pending-request fields for family-specific context.
-   - Preserve the invariant that real displacement paths must contain start, at least one distinct
-     intermediate, and end points while zero-displacement no-op paths are explicit start/end
-     no-ops when witness rows are required.
+   - Preserve explicit start/end no-op paths for unchanged models when witness rows are required.
+   - Let each request profile decide whether displaced paths may be endpoint-only or require
+     sampled/intermediate evidence. Do not add synthetic midpoint poses merely to satisfy stale UI
+     assumptions.
 
 4. **HUD and visual summary**
    - Show the movement family name and any engine-provided budget/target context.
@@ -102,6 +119,8 @@ consolidate, or Scout moves. The differences should appear as engine-provided co
   and Scout Move request fixtures.
 - Family-specific payload fields come from the pending request, not local inference.
 - Allowed no-move choices are represented correctly per family.
+- Endpoint-only versus sampled-path requirements are covered by family-profile tests and follow the
+  current core contract.
 - Mouse hover and HUD interaction do not reset a ready movement draft.
 - The UI never rolls charge, advance, or Scout distances locally.
 
@@ -113,6 +132,8 @@ Add or update tests for:
 - family-specific payload builders;
 - no-move/no-witness versus required-witness behavior;
 - explicit no-op paths for unchanged models when witness rows are required;
+- endpoint-only accepted and endpoint-only rejected behavior where the core exposes those distinct
+  family contracts;
 - retry and diagnostic display after invalid movement-family results;
 - existing movement draft regressions.
 
@@ -133,7 +154,8 @@ uv run pre-commit run --all-files
 - Select an Advance action and verify the UI waits for engine dice/reroll resolution before drafting
   the movement proposal.
 - In Charge phase, select a charging unit and verify the movement draft shows charge context after
-  the core roll creates a reachable target proposal.
+  the core roll creates a reachable target proposal. Do not expect a Command Re-roll opportunity for
+  Charge rolls when the core request marks that reroll forbidden.
 - In Fight phase, draft pile-in and consolidate movement when the core emits those requests.
 - During setup, draft a Scout Move when a pre-battle action request emits it.
 

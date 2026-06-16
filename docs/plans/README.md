@@ -1,7 +1,7 @@
 # Current Phase Plan Index
 
-This folder contains the active forward-looking implementation plans. Historical plans live under
-`docs/legacy/plans/`.
+This folder contains the active forward-looking implementation plans. Finished implementation plans
+live under `docs/plans/finished/`; older superseded planning notes live under `docs/legacy/plans/`.
 
 ## Immediate Thin-Skeleton Sequence
 
@@ -10,13 +10,14 @@ the current core engine decision lifecycle as quickly as possible. Each phase mu
 boundary: the engine owns legality, mutation, events, and replay; the UI renders viewer-scoped
 projection data, collects intent, submits engine requests, and displays diagnostics.
 
-1. [Phase 25: Legacy UI Cleanup](phase-25-legacy-ui-cleanup.md)
-2. [Phase 26: Generic Finite Decision Workbench Polish](phase-26-generic-finite-decision-workbench.md)
-3. [Phase 27: Current Action View And Clickable HUD Buttons](phase-27-current-action-view-and-clickable-hud-buttons.md)
-4. [Phase 28: Generic Placement Proposal Editor](phase-28-generic-placement-proposal-editor.md)
+1. [Phase 25: Legacy UI Cleanup](finished/phase-25-legacy-ui-cleanup.md)
+2. [Phase 26: Generic Finite Decision Workbench Polish](finished/phase-26-generic-finite-decision-workbench.md)
+3. [Phase 27: Current Action View And Clickable HUD Buttons](finished/phase-27-current-action-view-and-clickable-hud-buttons.md)
+4. [Phase 28: Generic Placement Proposal Editor](finished/phase-28-generic-placement-proposal-editor.md)
 5. [Phase 29: Movement Proposal Family Generalization](phase-29-movement-proposal-family-generalization.md)
 6. [Phase 30: Generic Assignment Proposal Editors](phase-30-generic-assignment-proposal-editors.md)
 7. [Phase 31: Scrollable Player Units Roster](phase-31-scrollable-player-units-roster.md)
+8. [Phase 32: Opportunity Window And Interface Intent Tray](phase-32-opportunity-window-and-interface-intent-tray.md)
 
 ## Preliminary Setup-Flow Plans
 

@@ -130,6 +130,7 @@ Build bottom-up:
 29. movement proposal family generalization
 30. generic assignment proposal editors for shooting, melee, and stratagem targets
 31. scrollable player-units roster and reciprocal selection
+32. opportunity window and interface intent tray
 
 When adding shooting, fight, charge, AI, training, or other later-gameplay surfaces, keep them on
 the same trusted decision/proposal path as movement. Do not add private rule logic or local
