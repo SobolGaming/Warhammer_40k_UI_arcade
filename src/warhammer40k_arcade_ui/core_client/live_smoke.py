@@ -20,6 +20,7 @@ from warhammer40k_core.engine.deployment import (
 )
 from warhammer40k_core.engine.event_log import validate_json_value
 from warhammer40k_core.engine.game_state import GameConfig, GameState
+from warhammer40k_core.engine.mission_setup import MissionSetup
 from warhammer40k_core.engine.phase import SetupStep
 from warhammer40k_core.engine.prebattle import (
     SCOUT_MOVE_PROPOSAL_KIND,
@@ -38,6 +39,9 @@ from warhammer40k_core.engine.sequencing import SEQUENCING_DECISION_TYPE
 from warhammer40k_core.engine.setup_flow import SECONDARY_MISSION_DECISION_TYPE
 from warhammer40k_core.geometry.pathing import PathWitness
 from warhammer40k_core.geometry.pose import Pose
+from warhammer40k_core.rules.mission_pack_import import (
+    warhammer_event_companion_2026_06_mission_pack,
+)
 
 from warhammer40k_arcade_ui.core_client.local_session_client import (
     LocalSessionClient,
@@ -57,6 +61,8 @@ from warhammer40k_arcade_ui.render.view_models import BattlefieldView
 
 LIVE_CORE_SMOKE_VIEWER_PLAYER_ID = "player-a"
 LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID = "fixed:assassination:bring_it_down"
+_LIVE_CORE_SMOKE_MISSION_POOL_ENTRY_ID = "mission-take-and-hold-vs-take-and-hold-layout-3"
+_LIVE_CORE_SMOKE_TERRAIN_LAYOUT_ID = "take-and-hold-vs-take-and-hold-layout-3"
 type LiveCoreSmokeStopPhase = Literal[
     "setup",
     "secondary-missions",
@@ -77,6 +83,7 @@ LIVE_CORE_SMOKE_STOP_PHASES: tuple[LiveCoreSmokeStopPhase, ...] = (
     "scout-move",
     "movement",
 )
+type _SmokePlacementRequest = DeploymentPlacementRequest | PreBattleProposalRequest
 
 
 class LiveCoreSmokeError(ValueError):
@@ -561,7 +568,7 @@ def _deployment_proposal_for_request(request: DecisionRequest) -> DeploymentPlac
             model_instance_id=model_instance_id,
             pose=_smoke_deployment_pose(
                 index=index,
-                player_id=request_context.player_id,
+                request_context=request_context,
                 unit_instance_id=request_context.unit_instance_id,
             ),
         )
@@ -606,7 +613,11 @@ def _prebattle_placement_proposal_for_request(
                 player_id=player_id,
                 unit_instance_id=unit_instance_id,
                 model_instance_id=model_instance_id,
-                pose=_smoke_redeploy_pose(index=index),
+                pose=_smoke_redeploy_pose(
+                    index=index,
+                    request_context=request_context,
+                    unit_instance_id=unit_instance_id,
+                ),
             )
             for index, model_instance_id in enumerate(request_context.model_instance_ids)
             for army_id, player_id, unit_instance_id in (
@@ -649,31 +660,91 @@ def _army_id_from_unit_instance_id(unit_instance_id: str) -> str:
 def _smoke_deployment_pose(
     *,
     index: int,
-    player_id: str,
+    request_context: DeploymentPlacementRequest,
     unit_instance_id: str,
 ) -> Pose:
     row = index // 3
     column = index % 3
-    base_y = _deployment_base_y_for_unit(unit_instance_id)
-    if player_id == "player-b":
-        return Pose.at(57.0 - (row * 1.6), base_y + (column * 1.8), 0.0, facing_degrees=180.0)
-    return Pose.at(3.0 + (row * 1.6), base_y + (column * 1.8), 0.0, facing_degrees=0.0)
+    origin_x, origin_y = _deployment_origin_for_unit(
+        request_context=request_context,
+        unit_instance_id=unit_instance_id,
+    )
+    x_direction = _deployment_x_direction(request_context)
+    facing_degrees = 0.0 if x_direction > 0.0 else 180.0
+    return Pose.at(
+        origin_x + (row * 1.6 * x_direction),
+        origin_y + (column * 1.8),
+        0.0,
+        facing_degrees=facing_degrees,
+    )
 
 
-def _deployment_base_y_for_unit(unit_instance_id: str) -> float:
+def _deployment_origin_for_unit(
+    *,
+    request_context: _SmokePlacementRequest,
+    unit_instance_id: str,
+) -> tuple[float, float]:
+    min_x, min_y, max_x, max_y = _deployment_zone_bounds(request_context)
+    width = max_x - min_x
+    margin = min(max(width - 2.0, 1.5), max(_deployment_x_margin_for_unit(unit_instance_id), 1.5))
+    x = min_x + margin if _deployment_x_direction(request_context) > 0.0 else max_x - margin
+    preferred_y = min_y + _deployment_y_offset_for_unit(unit_instance_id)
+    y = min(max(preferred_y, min_y + 2.0), max_y - 2.0)
+    return (x, y)
+
+
+def _deployment_zone_bounds(
+    request_context: _SmokePlacementRequest,
+) -> tuple[float, float, float, float]:
+    min_x = min(zone.min_x for zone in request_context.deployment_zones)
+    min_y = min(zone.min_y for zone in request_context.deployment_zones)
+    max_x = max(zone.max_x for zone in request_context.deployment_zones)
+    max_y = max(zone.max_y for zone in request_context.deployment_zones)
+    return (min_x, min_y, max_x, max_y)
+
+
+def _deployment_x_direction(request_context: _SmokePlacementRequest) -> float:
+    min_x, _, max_x, _ = _deployment_zone_bounds(request_context)
+    table_mid_x = request_context.mission_setup.battlefield_width_inches / 2.0
+    zone_mid_x = (min_x + max_x) / 2.0
+    return 1.0 if zone_mid_x <= table_mid_x else -1.0
+
+
+def _deployment_y_offset_for_unit(unit_instance_id: str) -> float:
     if "deep-strike-unit" in unit_instance_id:
-        return 6.0
+        return 4.0
     if "scout-redeploy-unit" in unit_instance_id:
-        return 16.0
+        return 9.0
     if "strategic-reserve-unit" in unit_instance_id:
-        return 30.0
-    return 16.0
+        return 9.0
+    return 9.0
 
 
-def _smoke_redeploy_pose(*, index: int) -> Pose:
+def _deployment_x_margin_for_unit(unit_instance_id: str) -> float:
+    if "strategic-reserve-unit" in unit_instance_id:
+        return 11.0
+    return 4.0
+
+
+def _smoke_redeploy_pose(
+    *,
+    index: int,
+    request_context: PreBattleProposalRequest,
+    unit_instance_id: str,
+) -> Pose:
     row = index // 3
     column = index % 3
-    return Pose.at(57.0 - (row * 1.8), 24.0 + (column * 1.8), 0.0, facing_degrees=180.0)
+    origin_x, origin_y = _deployment_origin_for_unit(
+        request_context=request_context,
+        unit_instance_id=unit_instance_id,
+    )
+    x_direction = _deployment_x_direction(request_context)
+    return Pose.at(
+        origin_x + (row * 1.8 * x_direction),
+        origin_y + (column * 1.8),
+        0.0,
+        facing_degrees=0.0 if x_direction > 0.0 else 180.0,
+    )
 
 
 def _scout_witness(
@@ -745,4 +816,34 @@ def _assert_expected_pending_decision(
 
 
 def _live_core_smoke_config() -> GameConfig:
-    return canonical_setup_prebattle_smoke_config(game_id="ui-live-smoke-game")
+    config = canonical_setup_prebattle_smoke_config(game_id="ui-live-smoke-game")
+    if config.mission_setup is None:
+        raise LiveCoreSmokeError("Live core smoke config requires a mission setup.")
+    return replace(
+        config,
+        mission_setup=_with_live_core_smoke_battlefield_geometry(config.mission_setup),
+    )
+
+
+def _with_live_core_smoke_battlefield_geometry(base_setup: MissionSetup) -> MissionSetup:
+    geometry_setup = MissionSetup.from_mission_pack(
+        mission_pack=warhammer_event_companion_2026_06_mission_pack(),
+        mission_pool_entry_id=_LIVE_CORE_SMOKE_MISSION_POOL_ENTRY_ID,
+        terrain_layout_id=_LIVE_CORE_SMOKE_TERRAIN_LAYOUT_ID,
+        attacker_player_id="player-a",
+        defender_player_id="player-b",
+    )
+    return replace(
+        base_setup,
+        battlefield_layout_id=geometry_setup.battlefield_layout_id,
+        deployment_map_id=geometry_setup.deployment_map_id,
+        terrain_layout_id=geometry_setup.terrain_layout_id,
+        battlefield_width_inches=geometry_setup.battlefield_width_inches,
+        battlefield_depth_inches=geometry_setup.battlefield_depth_inches,
+        objective_markers=geometry_setup.objective_markers,
+        deployment_zones=geometry_setup.deployment_zones,
+        battlefield_regions=geometry_setup.battlefield_regions,
+        terrain_areas=geometry_setup.terrain_areas,
+        terrain_features=geometry_setup.terrain_features,
+        objective_terrain_areas=geometry_setup.objective_terrain_areas,
+    )

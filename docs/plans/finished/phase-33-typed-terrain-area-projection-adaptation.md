@@ -171,3 +171,8 @@ Implemented in the UI projection layer:
 - Existing `terrain_features[*].display_geometry` parsing remains strict and supported for future
   feature-level terrain.
 - The UI renders from typed `footprint_polygon` data and does not parse `source_id` for geometry.
+- The live-core smoke harness now grafts typed Event Companion battlefield geometry onto the
+  canonical smoke game config because the current core smoke fixture keeps the implemented smoke
+  mission/scoring path but no longer carries typed layout terrain. Smoke deployment poses are
+  derived from the core-provided legal deployment zones so the same harness renders terrain at
+  setup/deployment stop points and remains usable for later movement stop points.

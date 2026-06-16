@@ -35,8 +35,12 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     ]
     assert startup.viewer_player_id == "player-a"
     assert startup.event_cursor > 0
-    assert startup.battlefield_view.table.width == 60.0
-    assert startup.battlefield_view.table.height == 44.0
+    assert startup.battlefield_view.table.width == 44.0
+    assert startup.battlefield_view.table.height == 60.0
+    assert len(startup.battlefield_view.terrain) == 16
+    assert {terrain.source_kind for terrain in startup.battlefield_view.terrain} == {
+        "terrain_area",
+    }
     assert [unit.unit_id for unit in startup.battlefield_view.units] == [
         "army-alpha:deep-strike-unit",
         "army-alpha:scout-redeploy-unit",
@@ -71,8 +75,9 @@ def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
         if _required_object_value(unit_display).get("owner_player_id") == "player-b"
     } == {"army-beta:scout-redeploy-unit"}
     assert startup.event_cursor > 0
-    assert startup.battlefield_view.table.width == 60.0
-    assert startup.battlefield_view.table.height == 44.0
+    assert startup.battlefield_view.table.width == 44.0
+    assert startup.battlefield_view.table.height == 60.0
+    assert len(startup.battlefield_view.terrain) == 16
 
 
 def test_live_core_smoke_supports_setup_prebattle_stop_points() -> None:

@@ -554,13 +554,7 @@ def test_next_deployment_roster_starts_synced_to_current_action_option() -> None
         assert driver.pending_decision_type == "submit_deployment_placement"
         assert driver.window.placement_draft is not None
 
-        for point in (
-            (56.0, 7.0),
-            (56.0, 8.6),
-            (56.0, 10.2),
-            (54.4, 7.8),
-            (54.4, 9.4),
-        ):
+        for point in _LIVE_SMOKE_DEPLOYMENT_POINTS["army-beta:scout-redeploy-unit"]:
             driver.click_world(point)
 
         assert driver.window.placement_draft is not None
@@ -629,25 +623,25 @@ def test_player_units_roster_scroll_region_consumes_wheel_without_zooming() -> N
 
 _LIVE_SMOKE_DEPLOYMENT_POINTS: dict[str, tuple[tuple[float, float], ...]] = {
     "army-beta:scout-redeploy-unit": (
-        (57.0, 16.0),
-        (57.0, 17.8),
-        (57.0, 19.6),
-        (55.4, 16.0),
-        (55.4, 17.8),
+        (40.0, 9.0),
+        (40.0, 10.8),
+        (40.0, 12.6),
+        (38.4, 9.0),
+        (38.4, 10.8),
     ),
     "army-alpha:deep-strike-unit": (
-        (3.0, 6.0),
-        (3.0, 7.8),
-        (3.0, 9.6),
+        (4.0, 34.0),
+        (4.0, 35.8),
+        (4.0, 37.6),
     ),
     "army-alpha:scout-redeploy-unit": (
-        (3.0, 16.0),
-        (3.0, 17.8),
-        (3.0, 19.6),
-        (4.6, 16.0),
-        (4.6, 17.8),
+        (4.0, 39.0),
+        (4.0, 40.8),
+        (4.0, 42.6),
+        (5.6, 39.0),
+        (5.6, 40.8),
     ),
-    "army-alpha:strategic-reserve-unit": ((4.0, 30.0),),
+    "army-alpha:strategic-reserve-unit": ((11.0, 39.0),),
 }
 
 
