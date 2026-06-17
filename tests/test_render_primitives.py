@@ -341,6 +341,25 @@ def test_action_visual_summary_builds_assignment_source_target_lines() -> None:
     assert assignment_lines[0].points[0] == (7.0, 18.0)
 
 
+def test_assignment_target_refs_build_target_unit_highlight() -> None:
+    view = default_battlefield_view()
+
+    primitives = build_world_primitives(
+        view,
+        assignment_target_ref_keys=("unit:guardian_squad",),
+        assignment_target_highlight_color=(220, 54, 64, 72),
+    )
+
+    highlights = [
+        primitive
+        for primitive in primitives
+        if isinstance(primitive, CirclePrimitive)
+        and primitive.layer == "assignment_target_unit_highlight"
+    ]
+    assert len(highlights) == 1
+    assert highlights[0].fill_color == (220, 54, 64, 72)
+
+
 def test_action_visual_summary_review_mode_labels_are_capped() -> None:
     view = default_battlefield_view()
     summary = ActionVisualSummary(

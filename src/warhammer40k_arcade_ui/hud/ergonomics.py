@@ -79,6 +79,7 @@ def build_hud_ergonomics_view(
     viewer_player_id: str | None = None,
     unit_display_by_id: JsonObject | None = None,
     model_display_by_id: JsonObject | None = None,
+    selected_assignment_group_id: str | None = None,
 ) -> HudErgonomicsView:
     """Build a toolkit-backed HUD summary without adding rule semantics."""
 
@@ -134,7 +135,10 @@ def build_hud_ergonomics_view(
             placement_draft_panel=placement_draft_panel,
             preferences=preferences,
         ),
-        assignment_rows=_assignment_rows(assignment_hud_panel),
+        assignment_rows=_assignment_rows(
+            assignment_hud_panel,
+            selected_assignment_group_id=selected_assignment_group_id,
+        ),
         assignment_notice_rows=_assignment_notice_rows(assignment_hud_panel),
         assignment_subtitle=_assignment_subtitle(assignment_hud_panel),
         assignment_color_role=_assignment_color_role(assignment_hud_panel),
@@ -688,8 +692,10 @@ def _assignment_action_buttons(
             label="Clear",
             request_id=assignment_hud_panel.request_id,
             selected=False,
-            enabled=True,
-            disabled_reason="",
+            enabled=assignment_hud_panel.editable,
+            disabled_reason=""
+            if assignment_hud_panel.editable
+            else "Seeded assignment workspaces are not directly editable yet.",
             hovered_hud_button_id=hovered_hud_button_id,
         ),
     ]
@@ -995,16 +1001,29 @@ def _action_rows(
 
 def _assignment_rows(
     assignment_hud_panel: AssignmentHudPanelView | None,
+    *,
+    selected_assignment_group_id: str | None,
 ) -> tuple[ToolkitAssignmentGroupRowView, ...]:
     if assignment_hud_panel is None:
         return ()
     return tuple(
         ToolkitAssignmentGroupRowView(
             component_id=f"assignment_row_{index}",
+            group_id=group.group_id,
             group_label=group.label,
             operation_kind=assignment_hud_panel.operation_kind,
-            state=_assignment_group_toolkit_state(group.state),
+            state="selected"
+            if group.group_id == selected_assignment_group_id
+            else "active"
+            if group.state == "assigned"
+            else _assignment_group_toolkit_state(group.state),
             summary_lines=group.summary_lines,
+            request_id=assignment_hud_panel.request_id,
+            source_ref_keys=group.source_ref_keys,
+            target_ref_keys=group.target_ref_keys,
+            target_unit_id=_first_unit_ref(group.target_ref_keys),
+            selected=group.group_id == selected_assignment_group_id,
+            enabled=bool(group.target_ref_keys),
         )
         for index, group in enumerate(assignment_hud_panel.groups[:3])
     )
@@ -1125,6 +1144,13 @@ def _assignment_group_toolkit_state(state: AssignmentGroupState) -> HudState:
     if state == "unassigned":
         return "normal"
     return state
+
+
+def _first_unit_ref(ref_keys: tuple[str, ...]) -> str | None:
+    for ref_key in ref_keys:
+        if ref_key.startswith("unit:"):
+            return ref_key.removeprefix("unit:")
+    return None
 
 
 def _diagnostic_lines(

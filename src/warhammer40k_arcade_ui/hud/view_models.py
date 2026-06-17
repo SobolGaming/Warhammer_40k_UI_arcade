@@ -161,6 +161,7 @@ class AssignmentHudPanelView:
     chain_lines: tuple[str, ...]
     preference_source_label: str | None
     decline_available: bool = False
+    editable: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -697,7 +698,7 @@ def _generic_assignment_hud_panel(
                 target_ref_keys=row.target_ref_keys,
                 summary_lines=row.summary_lines,
             )
-            for row in assignment_workspace.rows[:5]
+            for row in assignment_workspace.rows
         )
         or (
             AssignmentHudGroupView(
@@ -717,6 +718,7 @@ def _generic_assignment_hud_panel(
         chain_lines=chain_lines,
         preference_source_label=preference_source_label,
         decline_available=assignment_workspace.declinable,
+        editable=assignment_workspace.editable,
     )
 
 

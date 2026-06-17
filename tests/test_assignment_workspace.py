@@ -50,6 +50,51 @@ def test_shooting_assignment_workspace_builds_payload_from_engine_candidates() -
             "shooting_type": "normal",
         }
     ]
+    assert workspace.payload_preview["firing_deck_selection"] is None
+
+
+def test_shooting_assignment_workspace_can_seed_unit_wide_target_candidate() -> None:
+    decision = _shooting_declaration_decision(
+        available_weapons=[
+            {
+                "model_instance_id": "intercessor_1",
+                "wargear_id": "bolt_rifle",
+                "weapon_profile_id": "bolt_rifle_profile",
+                "weapon_profile": {"name": "Bolt Rifle"},
+            },
+            {
+                "model_instance_id": "intercessor_2",
+                "wargear_id": "bolt_rifle",
+                "weapon_profile_id": "bolt_rifle_profile",
+                "weapon_profile": {"name": "Bolt Rifle"},
+            },
+        ],
+        target_candidates=[
+            {
+                "is_legal": True,
+                "attacker_unit_instance_id": "intercessor_squad",
+                "observer_model_id": "intercessor_1",
+                "weapon_profile_id": "bolt_rifle_profile",
+                "target_unit_instance_id": "guardian_squad",
+                "shooting_types": ["normal"],
+                "visibility_cache_key": "visibility-cache-1",
+            }
+        ],
+    )
+
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+
+    assert workspace is not None
+    assert workspace.is_ready is True
+    assert workspace.payload_preview is not None
+    declarations = workspace.payload_preview["declarations"]
+    assert type(declarations) is list
+    declaration_objects = [declaration for declaration in declarations if type(declaration) is dict]
+    assert [declaration["attacker_model_instance_id"] for declaration in declaration_objects] == [
+        "intercessor_1",
+        "intercessor_2",
+    ]
+    assert len(workspace.rows) == 2
 
 
 def test_melee_assignment_workspace_builds_payload_from_engaged_targets() -> None:
@@ -118,6 +163,21 @@ def test_stratagem_assignment_workspace_requires_unambiguous_binding_candidate()
     assert workspace.payload_preview is None
     assert workspace.diagnostic_lines == (
         "Stratagem target binding needs an explicit future target choice.",
+    )
+
+
+def test_stratagem_assignment_workspace_without_binding_shows_catalog_context() -> None:
+    decision = _stratagem_target_binding_decision(target_binding=None, declinable=True)
+
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+
+    assert workspace is not None
+    assert workspace.is_ready is False
+    assert workspace.declinable is True
+    assert workspace.rows[0].label == "Test Stratagem"
+    assert "Stratagem: Test Stratagem" in workspace.rows[0].summary_lines
+    assert workspace.diagnostic_lines == (
+        "Stratagem request does not expose a selectable target binding candidate yet.",
     )
 
 
@@ -267,9 +327,82 @@ def test_current_action_panel_exposes_assignment_submit_and_decline_buttons() ->
     assert first_button["selected"] is True
     assert first_button["enabled"] is True
     assert button_kinds == ["assignment_submit", "assignment_decline", "assignment_clear"]
+    clear_button = buttons[2]
+    assert type(clear_button) is dict
+    assert clear_button["action_kind"] == "assignment_clear"
+    assert clear_button["enabled"] is False
 
 
-def _shooting_declaration_decision() -> UiDecision:
+def test_assignment_runtime_data_exposes_selectable_target_row() -> None:
+    decision = _stratagem_target_binding_decision(declinable=True)
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    preferences = default_preferences()
+    assignment_panel = build_assignment_hud_panel(
+        movement_draft=None,
+        placement_draft=None,
+        assignment_workspace=workspace,
+        pending_decision=decision,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=preferences,
+        preference_source_label="test",
+    )
+    assert assignment_panel is not None
+
+    ergonomics = build_hud_ergonomics_view(
+        view=default_battlefield_view(),
+        preferences=preferences,
+        unit_panel=None,
+        finite_decision_panel=build_finite_decision_panel(
+            pending_decision=decision,
+            highlighted_option_index=0,
+            status_message="Proposal required: stratagem_target_binding",
+            diagnostics=(),
+        ),
+        movement_draft_panel=None,
+        assignment_hud_panel=assignment_panel,
+        event_log_lines=(),
+        selected_assignment_group_id="stratagem-target:stratagem-request-1",
+    )
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    assignment_groups = runtime["assignment_groups"]
+    assert type(assignment_groups) is list
+    first_group = assignment_groups[0]
+    assert type(first_group) is dict
+    assert first_group["action_kind"] == "assignment_select"
+    assert first_group["unit_id"] == "intercessor_squad"
+    assert first_group["selected"] is True
+    current_assignment = runtime["current_assignment"]
+    assert type(current_assignment) is dict
+    assert current_assignment["action_kind"] == "assignment_select"
+
+
+def _shooting_declaration_decision(
+    *,
+    available_weapons: list[dict[str, object]] | None = None,
+    target_candidates: list[dict[str, object]] | None = None,
+) -> UiDecision:
+    if available_weapons is None:
+        available_weapons = [
+            {
+                "model_instance_id": "intercessor_1",
+                "wargear_id": "bolt_rifle",
+                "weapon_profile_id": "bolt_rifle_profile",
+                "weapon_profile": {"name": "Bolt Rifle"},
+            }
+        ]
+    if target_candidates is None:
+        target_candidates = [
+            {
+                "is_legal": True,
+                "observer_model_id": "intercessor_1",
+                "weapon_profile_id": "bolt_rifle_profile",
+                "target_unit_instance_id": "guardian_squad",
+                "shooting_types": ["normal"],
+                "visibility_cache_key": "visibility-cache-1",
+            }
+        ]
     return UiDecision.from_payload(
         {
             "request_id": "shooting-request-1",
@@ -291,24 +424,8 @@ def _shooting_declaration_decision() -> UiDecision:
                     "selected_shooting_type": "normal",
                     "ruleset_descriptor_hash": "rules",
                     "visibility_cache_key": "visibility-cache-1",
-                    "available_weapons": [
-                        {
-                            "model_instance_id": "intercessor_1",
-                            "wargear_id": "bolt_rifle",
-                            "weapon_profile_id": "bolt_rifle_profile",
-                            "weapon_profile": {"name": "Bolt Rifle"},
-                        }
-                    ],
-                    "target_candidates": [
-                        {
-                            "is_legal": True,
-                            "observer_model_id": "intercessor_1",
-                            "weapon_profile_id": "bolt_rifle_profile",
-                            "target_unit_instance_id": "guardian_squad",
-                            "shooting_types": ["normal"],
-                            "visibility_cache_key": "visibility-cache-1",
-                        }
-                    ],
+                    "available_weapons": available_weapons,
+                    "target_candidates": target_candidates,
                 }
             },
             "is_parameterized": True,

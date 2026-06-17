@@ -73,8 +73,10 @@ regions:
         children:
         - type: AssignmentGroupRow
           id: command_bench_assignment_row
-          data_ref: current_assignment
+          data_ref: hud.workbench.assignments.groups
           group_label: Current Assignment
+          button_height: 44
+          button_gap: 6
         - type: CurrentActionPanel
           id: command_bench_current_action_panel
           data_ref: current_action

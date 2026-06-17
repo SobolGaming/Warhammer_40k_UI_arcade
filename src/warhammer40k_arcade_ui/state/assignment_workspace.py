@@ -65,6 +65,7 @@ class AssignmentWorkspace:
     diagnostic_lines: tuple[str, ...]
     declinable: bool = False
     decline_payload: JsonObject | None = None
+    editable: bool = False
 
     @property
     def is_ready(self) -> bool:
@@ -155,6 +156,7 @@ def _shooting_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
             target_candidates=target_candidates,
             model_id=model_id,
             weapon_profile_id=weapon_profile_id,
+            attacker_unit_id=_text(proposal.payload.get("unit_instance_id")),
         )
         if candidate is None:
             continue
@@ -210,6 +212,7 @@ def _shooting_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
     unit_instance_id: str | None = None
     source_decision_request_id: str | None = None
     source_decision_result_id: str | None = None
+    firing_deck_selection: JsonValue | None = None
     if not diagnostics:
         player_id = _required_text_or_diagnostic(
             proposal.payload,
@@ -243,6 +246,17 @@ def _shooting_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
         assert unit_instance_id is not None
         assert source_decision_request_id is not None
         assert source_decision_result_id is not None
+        firing_deck_selection = _firing_deck_selection_preview(
+            request_payload=proposal.payload,
+            declarations=declarations,
+            diagnostics=diagnostics,
+        )
+    if not diagnostics:
+        assert player_id is not None
+        assert battle_round is not None
+        assert unit_instance_id is not None
+        assert source_decision_request_id is not None
+        assert source_decision_result_id is not None
         payload = _validate_json_object(
             {
                 "proposal_request_id": proposal.request_id,
@@ -253,6 +267,7 @@ def _shooting_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
                 "source_decision_request_id": source_decision_request_id,
                 "source_decision_result_id": source_decision_result_id,
                 "declarations": declarations,
+                "firing_deck_selection": firing_deck_selection,
                 "visibility_cache_key": visibility_cache_key,
             }
         )
@@ -401,6 +416,10 @@ def _stratagem_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
     )
     rows: tuple[AssignmentWorkspaceRow, ...] = ()
     payload = None
+    stratagem_hint_lines = _stratagem_hint_lines(
+        proposal_payload=proposal.payload,
+        catalog_record=catalog_record,
+    )
     if target_binding is not None:
         target_kind = _text(target_binding.get("target_kind")) or "unknown"
         target_ref_keys = _stratagem_target_ref_keys(target_binding)
@@ -413,6 +432,7 @@ def _stratagem_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
                 summary_lines=(
                     f"Target kind: {target_kind}",
                     f"Target player: {_text(target_binding.get('target_player_id')) or 'none'}",
+                    *stratagem_hint_lines[:2],
                 ),
             ),
         )
@@ -432,9 +452,20 @@ def _stratagem_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
         diagnostics.append(
             "Stratagem request does not expose a selectable target binding candidate yet."
         )
+        rows = (
+            AssignmentWorkspaceRow(
+                row_id=f"stratagem-target:{proposal.request_id}:missing",
+                label=_stratagem_label(catalog_record=catalog_record),
+                source_ref_keys=_stratagem_source_ref_keys(proposal.payload),
+                target_ref_keys=(),
+                summary_lines=stratagem_hint_lines
+                or ("No selectable target binding candidate was emitted.",),
+            ),
+        )
     hints = [
         "Stratagem target binding is submitted only from engine-emitted binding data.",
     ]
+    hints.extend(stratagem_hint_lines)
     if declinable:
         hints.append("This optional Stratagem window can be declined.")
     return AssignmentWorkspace(
@@ -469,8 +500,10 @@ def _first_legal_shooting_target(
     target_candidates: tuple[JsonObject, ...],
     model_id: str,
     weapon_profile_id: str,
+    attacker_unit_id: str,
 ) -> JsonObject | None:
     matching: list[JsonObject] = []
+    unit_matching: list[JsonObject] = []
     fallback: list[JsonObject] = []
     for candidate in target_candidates:
         if candidate.get("is_legal") is not True:
@@ -480,11 +513,40 @@ def _first_legal_shooting_target(
         observer_model_id = _text(candidate.get("observer_model_id"))
         if observer_model_id == model_id:
             matching.append(candidate)
+        elif (
+            attacker_unit_id
+            and _text(candidate.get("attacker_unit_instance_id")) == attacker_unit_id
+        ):
+            unit_matching.append(candidate)
         elif not observer_model_id:
             fallback.append(candidate)
     if matching:
         return matching[0]
+    if unit_matching:
+        return unit_matching[0]
     return fallback[0] if fallback else None
+
+
+def _firing_deck_selection_preview(
+    *,
+    request_payload: JsonObject,
+    declarations: list[JsonValue],
+    diagnostics: list[str],
+) -> JsonValue | None:
+    explicit_selection = request_payload.get("firing_deck_selection")
+    if explicit_selection is not None:
+        return validate_json_value(explicit_selection)
+    uses_firing_deck = any(
+        type(declaration) is dict
+        and (
+            "firing_deck_source_unit_instance_id" in declaration
+            or "firing_deck_source_model_instance_id" in declaration
+        )
+        for declaration in declarations
+    )
+    if uses_firing_deck:
+        diagnostics.append("Firing Deck selection needs an explicit future UI choice.")
+    return None
 
 
 def _selected_weapon_ability_ids(
@@ -548,6 +610,41 @@ def _target_binding_for_stratagem(
 
 def _stratagem_request_is_declinable(payload: JsonValue) -> bool:
     return type(payload) is dict and payload.get("declinable") is True
+
+
+def _stratagem_label(*, catalog_record: JsonObject | None) -> str:
+    definition = None if catalog_record is None else catalog_record.get("definition")
+    if type(definition) is dict:
+        name = _text(definition.get("name"))
+        if name:
+            return name
+        stratagem_id = _text(definition.get("stratagem_id"))
+        if stratagem_id:
+            return _short(stratagem_id).replace("_", " ").title()
+    return "Stratagem target binding"
+
+
+def _stratagem_hint_lines(
+    *,
+    proposal_payload: JsonObject,
+    catalog_record: JsonObject | None,
+) -> tuple[str, ...]:
+    lines: list[str] = []
+    definition = None if catalog_record is None else catalog_record.get("definition")
+    if type(definition) is dict:
+        name = _text(definition.get("name"))
+        if name:
+            lines.append(f"Stratagem: {name}")
+        cp_cost = definition.get("cp_cost")
+        if type(cp_cost) is int:
+            lines.append(f"CP cost: {cp_cost}")
+        timing = _text(definition.get("timing")) or _text(definition.get("phase"))
+        if timing:
+            lines.append(f"Timing: {timing}")
+    effect_selection = proposal_payload.get("effect_selection")
+    if effect_selection is not None:
+        lines.append("Effect selection is preserved from the engine request.")
+    return tuple(lines[:4])
 
 
 def _stratagem_source_ref_keys(payload: JsonObject) -> tuple[str, ...]:

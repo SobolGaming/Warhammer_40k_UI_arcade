@@ -280,6 +280,8 @@ def _component_shell_with_hit_regions(
             data_value=data_value,
             scroll_offsets=scroll_offsets,
         )
+    if node.widget_type == "AssignmentGroupRow":
+        return _assignment_group_row(node, rect=rect, theme=theme, data_value=data_value)
     return HudCompositionRenderResult(
         _component_shell(node, rect=rect, theme=theme, sample_data=sample_data),
         (),
@@ -347,7 +349,12 @@ def _labelled_box(
 ) -> tuple[RenderPrimitive, ...]:
     title = _component_title(node, data_value=data_value)
     subtitle = _component_subtitle(node, data_value=data_value)
-    color_role = _attribute_text(node, "color_role", default=None)
+    data = _data_object(data_value)
+    color_role = _attribute_text(
+        node,
+        "color_role",
+        default=json_text(data.get("color_role")),
+    )
     accent = theme.color_for_role(color_role)
     overflow = _overflow_policy(node)
     primitives: list[RenderPrimitive] = [
@@ -554,6 +561,79 @@ def _current_action_panel(
             )
         )
     return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
+
+
+def _assignment_group_row(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    data_value: JsonValue | None,
+) -> HudCompositionRenderResult:
+    rows = _object_items(data_value)
+    if rows:
+        return _assignment_group_row_list(node, rect=rect, theme=theme, rows=rows)
+    data = _data_object(data_value)
+    primitives = _labelled_box(node, rect=rect, theme=theme, data_value=data_value)
+    hit_region = _hit_region_for_button(
+        node.widget_id,
+        _assignment_group_button_data(node, data),
+        rect,
+    )
+    return HudCompositionRenderResult(
+        primitives,
+        () if hit_region is None else (hit_region,),
+    )
+
+
+def _assignment_group_row_list(
+    node: HudComponentNode,
+    *,
+    rect: ScreenRect,
+    theme: HudTheme,
+    rows: tuple[JsonObject, ...],
+) -> HudCompositionRenderResult:
+    gap = max(0.0, _attribute_float(node, "button_gap", default=6.0))
+    row_height = min(
+        rect.height,
+        max(24.0, _attribute_float(node, "button_height", default=42.0)),
+    )
+    primitives: list[RenderPrimitive] = []
+    hit_regions: list[HudButtonHitRegion] = []
+    y_top = rect.top
+    for index, row in enumerate(rows):
+        row_rect = ScreenRect(rect.x, y_top - row_height, rect.width, row_height)
+        if row_rect.y < rect.y:
+            break
+        row_node = replace(node, widget_id=f"{node.widget_id}_{index}")
+        primitives.extend(_labelled_box(row_node, rect=row_rect, theme=theme, data_value=row))
+        hit_region = _hit_region_for_button(
+            row_node.widget_id,
+            _assignment_group_button_data(row_node, row),
+            row_rect,
+        )
+        if hit_region is not None:
+            hit_regions.append(hit_region)
+        y_top -= row_height + gap
+    return HudCompositionRenderResult(tuple(primitives), tuple(hit_regions))
+
+
+def _assignment_group_button_data(node: HudComponentNode, data: JsonObject) -> JsonObject:
+    button_id = json_text(data.get("button_id"), default=json_text(data.get("id")))
+    return {
+        "button_id": button_id,
+        "command_id": json_text(data.get("command_id"), default="select_assignment_group"),
+        "action_kind": json_text(data.get("action_kind"), default="assignment_select"),
+        "option_id": json_text(data.get("option_id"), default=button_id),
+        "request_id": json_text(data.get("request_id")),
+        "unit_id": json_text(data.get("unit_id")),
+        "enabled": _attribute_bool(
+            node,
+            "enabled",
+            default=_button_bool(data, "enabled", default=bool(button_id)),
+        ),
+        "disabled_reason": json_text(data.get("disabled_reason")),
+    }
 
 
 def _action_button(
@@ -990,6 +1070,8 @@ def _button_action_kind(value: str) -> HudButtonActionKind:
         return "assignment_decline"
     if value == "assignment_clear":
         return "assignment_clear"
+    if value == "assignment_select":
+        return "assignment_select"
     return "none"
 
 

@@ -100,6 +100,8 @@ Assignment review settings:
 - `assignment_hud_mode`: `compact` or `detailed`.
 - `show_assignment_warning_markers`: show color-independent warning markers for advisory hints and
   diagnostics.
+- `assignment_target_highlight_color`: RGBA integer list used for the advisory battlefield target
+  highlight when a shooting, melee, or Stratagem assignment row is selected.
 - `action_summary_default`: `hidden`, `dim`, or `review` for the advisory battlefield summary
   overlay when the UI starts.
 - `action_summary_max_labels`: maximum number of bright review labels drawn over the battlefield

@@ -22,6 +22,7 @@ type AssignmentHudMode = Literal["compact", "detailed"]
 type ActionSummaryDefault = Literal["hidden", "dim", "review"]
 type HudLayoutPreset = Literal["compass_ring", "command_bench"]
 type MovementBudgetRingMode = Literal["total", "split"]
+type RgbaColor = tuple[int, int, int, int]
 
 _VALID_MODIFIERS = frozenset(("ctrl", "alt", "shift", "meta"))
 _VALID_MOUSE_BUTTONS = frozenset(("left", "right", "middle"))
@@ -170,6 +171,7 @@ class HudPreferences:
     show_assignment_hud: bool
     assignment_hud_mode: AssignmentHudMode
     show_assignment_warning_markers: bool
+    assignment_target_highlight_color: RgbaColor
     action_summary_default: ActionSummaryDefault
     action_summary_max_labels: int
     movement_budget_ring_mode: MovementBudgetRingMode
@@ -191,6 +193,7 @@ class HudPreferences:
             "show_assignment_hud": self.show_assignment_hud,
             "assignment_hud_mode": self.assignment_hud_mode,
             "show_assignment_warning_markers": self.show_assignment_warning_markers,
+            "assignment_target_highlight_color": list(self.assignment_target_highlight_color),
             "action_summary_default": self.action_summary_default,
             "action_summary_max_labels": self.action_summary_max_labels,
             "movement_budget_ring_mode": self.movement_budget_ring_mode,
@@ -505,6 +508,7 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
                 "show_assignment_hud",
                 "assignment_hud_mode",
                 "show_assignment_warning_markers",
+                "assignment_target_highlight_color",
                 "action_summary_default",
                 "action_summary_max_labels",
                 "movement_budget_ring_mode",
@@ -570,6 +574,13 @@ def _parse_hud(payload: object, diagnostics: list[PreferenceDiagnostic]) -> HudP
             "show_assignment_warning_markers",
             diagnostics,
             "hud",
+        ),
+        assignment_target_highlight_color=_rgba_color(
+            section,
+            "assignment_target_highlight_color",
+            diagnostics,
+            "hud",
+            default=(220, 54, 64, 72),
         ),
         action_summary_default=_action_summary_default(
             section,
@@ -988,6 +999,58 @@ def _movement_budget_ring_mode(
         )
     )
     return "total"
+
+
+def _rgba_color(
+    payload: dict[str, object],
+    key: str,
+    diagnostics: list[PreferenceDiagnostic],
+    prefix: str,
+    *,
+    default: RgbaColor,
+) -> RgbaColor:
+    field = f"{prefix}.{key}"
+    value: object | None = payload.get(key)
+    if value is None:
+        return default
+    if type(value) is not list:
+        diagnostics.append(
+            _diagnostic(
+                severity="error",
+                code="invalid_rgba_color",
+                field=field,
+                message=f"{field} must be a four-item RGBA integer list.",
+                value=str(value),
+            )
+        )
+        return default
+    channel_values = cast(list[object], value)
+    if len(channel_values) != 4:
+        diagnostics.append(
+            _diagnostic(
+                severity="error",
+                code="invalid_rgba_color",
+                field=field,
+                message=f"{field} must be a four-item RGBA integer list.",
+                value=str(cast(object, value)),
+            )
+        )
+        return default
+    channels: list[int] = []
+    for channel in channel_values:
+        if type(channel) is not int or channel < 0 or channel > 255:
+            diagnostics.append(
+                _diagnostic(
+                    severity="error",
+                    code="invalid_rgba_color",
+                    field=field,
+                    message=f"{field} channels must be integers between 0 and 255.",
+                    value=str(cast(object, value)),
+                )
+            )
+            return default
+        channels.append(channel)
+    return (channels[0], channels[1], channels[2], channels[3])
 
 
 def _string_list(
