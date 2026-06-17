@@ -64,8 +64,8 @@ LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID = "fixed:assassination:bring_it_down"
 _LIVE_CORE_SMOKE_MISSION_POOL_ENTRY_ID = "mission-take-and-hold-vs-take-and-hold-layout-1"
 _LIVE_CORE_SMOKE_TERRAIN_LAYOUT_ID = "take-and-hold-vs-take-and-hold-layout-1"
 _LIVE_CORE_SMOKE_MONSTER_UNIT_ID = "army-alpha:strategic-reserve-unit"
-_LIVE_CORE_SMOKE_MONSTER_MOVEMENT_X = 15.0
-_LIVE_CORE_SMOKE_MONSTER_MOVEMENT_Y = 40.1
+_LIVE_CORE_SMOKE_MONSTER_MOVEMENT_X = 10.0
+_LIVE_CORE_SMOKE_MONSTER_MOVEMENT_Y = 50.0
 type LiveCoreSmokeStopPhase = Literal[
     "setup",
     "secondary-missions",

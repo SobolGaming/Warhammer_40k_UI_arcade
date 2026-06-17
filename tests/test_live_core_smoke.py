@@ -55,7 +55,7 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
         for unit in startup.battlefield_view.units
         if unit.unit_id == "army-alpha:strategic-reserve-unit"
     )
-    assert monster.models[0].position == (15.0, 40.1)
+    assert monster.models[0].position == (10.0, 50.0)
 
 
 def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
