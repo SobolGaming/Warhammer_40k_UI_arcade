@@ -35,8 +35,12 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     ]
     assert startup.viewer_player_id == "player-a"
     assert startup.event_cursor > 0
-    assert startup.battlefield_view.table.width == 60.0
-    assert startup.battlefield_view.table.height == 44.0
+    assert startup.battlefield_view.table.width == 44.0
+    assert startup.battlefield_view.table.height == 60.0
+    assert len(startup.battlefield_view.terrain) == 16
+    assert {terrain.source_kind for terrain in startup.battlefield_view.terrain} == {
+        "terrain_area",
+    }
     assert [unit.unit_id for unit in startup.battlefield_view.units] == [
         "army-alpha:deep-strike-unit",
         "army-alpha:scout-redeploy-unit",
@@ -46,6 +50,12 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     assert startup.battlefield_view.units[1].models[0].model_id == (
         "army-alpha:scout-redeploy-unit:core-intercessor-like:001"
     )
+    monster = next(
+        unit
+        for unit in startup.battlefield_view.units
+        if unit.unit_id == "army-alpha:strategic-reserve-unit"
+    )
+    assert monster.models[0].position == (10.0, 50.0)
 
 
 def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
@@ -71,8 +81,9 @@ def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
         if _required_object_value(unit_display).get("owner_player_id") == "player-b"
     } == {"army-beta:scout-redeploy-unit"}
     assert startup.event_cursor > 0
-    assert startup.battlefield_view.table.width == 60.0
-    assert startup.battlefield_view.table.height == 44.0
+    assert startup.battlefield_view.table.width == 44.0
+    assert startup.battlefield_view.table.height == 60.0
+    assert len(startup.battlefield_view.terrain) == 16
 
 
 def test_live_core_smoke_supports_setup_prebattle_stop_points() -> None:
@@ -124,6 +135,71 @@ def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> N
         "select_reinforcement_unit",
         "start_mission_action",
     }
+    assert "movement_activation_completed" in _event_types(event_delta.events)
+
+
+def test_live_core_smoke_monster_advance_is_inside_current_movement_bridge() -> None:
+    startup = build_live_core_smoke_startup(stop_at_phase="movement")
+    unit_decision = startup.status.decision
+    assert unit_decision is not None
+
+    action_status = startup.core_client.submit_finite(
+        request_id=unit_decision.request_id,
+        selected_option_id="army-alpha:strategic-reserve-unit",
+        result_id="ui-test-live-smoke-monster-unit",
+    )
+    action_decision = action_status.decision
+    assert action_decision is not None
+    assert action_decision.decision_type == "select_movement_action"
+
+    proposal_status = startup.core_client.submit_finite(
+        request_id=action_decision.request_id,
+        selected_option_id="advance",
+        result_id="ui-test-live-smoke-monster-advance",
+    )
+    proposal_decision = proposal_status.decision
+    assert proposal_decision is not None
+    assert proposal_decision.decision_type == "submit_movement_proposal"
+
+    monster = next(
+        unit
+        for unit in startup.battlefield_view.units
+        if unit.unit_id == "army-alpha:strategic-reserve-unit"
+    )
+    model = monster.models[0]
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_at(
+        view=startup.battlefield_view,
+        world_point=model.position,
+        preferences=preferences,
+    )
+    draft = MovementDraft.start_for_pending(
+        view=startup.battlefield_view,
+        selection=selection,
+        pending_decision=proposal_decision,
+    )
+    assert draft is not None
+    ready_draft = (
+        draft.select_current_group(view=startup.battlefield_view)
+        .add_waypoint(
+            view=startup.battlefield_view,
+            world_point=(model.position[0], model.position[1] - 1.0),
+        )
+        .mark_ready(view=startup.battlefield_view)
+    )
+    assert ready_draft.payload_preview is not None
+
+    accepted_status = startup.core_client.submit_movement_payload(
+        request_id=proposal_decision.request_id,
+        payload=ready_draft.payload_preview,
+        result_id="ui-test-live-smoke-monster-advance-payload",
+    )
+    event_delta = startup.core_client.get_events_since(
+        startup.event_cursor,
+        startup.viewer_player_id,
+    )
+
+    assert accepted_status.status_kind == "waiting_for_decision"
     assert "movement_activation_completed" in _event_types(event_delta.events)
 
 

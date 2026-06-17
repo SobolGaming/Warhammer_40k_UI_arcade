@@ -1,6 +1,6 @@
 # Phase 33: Typed Terrain Area Projection Adaptation
 
-Status: Proposed
+Status: Implemented
 
 ## Purpose
 
@@ -155,3 +155,24 @@ uv run pytest
 Review should focus on projection fidelity. This phase should make the UI render the core's typed
 terrain geometry, not create a local terrain catalog, parse provenance strings, or infer terrain
 rules.
+
+## Implementation Notes
+
+Implemented in the UI projection layer:
+
+- `mission_setup.terrain_areas[*].footprint_polygon` now builds `TerrainFootprintView` entries
+  when current live core layouts expose typed layout area geometry and leave `terrain_features`
+  empty.
+- `TerrainFootprintView` carries advisory `source_kind` and `objective_marker_ids` metadata so
+  review/debug surfaces can distinguish typed layout terrain areas from future feature-level
+  terrain footprints.
+- `objective_terrain_areas` links are parsed as non-authoritative cross-reference metadata and
+  render as a thin advisory outline over the linked area footprint.
+- Existing `terrain_features[*].display_geometry` parsing remains strict and supported for future
+  feature-level terrain.
+- The UI renders from typed `footprint_polygon` data and does not parse `source_id` for geometry.
+- The live-core smoke harness now grafts typed Event Companion battlefield geometry onto the
+  canonical smoke game config because the current core smoke fixture keeps the implemented smoke
+  mission/scoring path but no longer carries typed layout terrain. Smoke deployment poses are
+  derived from the core-provided legal deployment zones so the same harness renders terrain at
+  setup/deployment stop points and remains usable for later movement stop points.

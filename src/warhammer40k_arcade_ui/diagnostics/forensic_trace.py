@@ -290,6 +290,17 @@ class JsonLinesTraceWriter:
 
     config: ForensicTraceConfig
 
+    def __post_init__(self) -> None:
+        """Prepare the trace file for a fresh UI session."""
+
+        if not self.enabled:
+            return
+        trace_path = self.trace_path
+        if trace_path is None:
+            raise TraceConfigurationError("Enabled trace writer requires a trace_path.")
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        trace_path.write_text("", encoding="utf-8")
+
     @property
     def enabled(self) -> bool:
         """Return whether writes should emit rows."""
@@ -373,7 +384,8 @@ class JsonLinesTraceWriter:
     def _rotate_if_needed(self, *, trace_path: Path, next_line_size: int) -> None:
         if self.config.max_bytes <= 0 or not trace_path.exists():
             return
-        if trace_path.stat().st_size + next_line_size <= self.config.max_bytes:
+        trace_size = trace_path.stat().st_size
+        if trace_size == 0 or trace_size + next_line_size <= self.config.max_bytes:
             return
         rotated_path = _rotated_trace_path(trace_path)
         rotated_path.unlink(missing_ok=True)

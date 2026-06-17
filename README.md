@@ -224,8 +224,10 @@ Trace levels:
 
 If no file is specified, trace files are written under
 `~/.local/state/warhammer40k-arcade-ui/event-traces/`. Set `EVENT_TRACE_DIR` to choose another
-directory, or `EVENT_TRACE_FILE` / `--event-trace-file` for an exact file. Files rotate when they
-reach `EVENT_TRACE_MAX_BYTES` bytes, defaulting to 5 MB.
+directory, or `EVENT_TRACE_FILE` / `--event-trace-file` for an exact file. A configured trace file
+is overwritten at the start of each traced UI session so stale rows from earlier runs are not mixed
+with the current reproduction. Files rotate when they reach `EVENT_TRACE_MAX_BYTES` bytes,
+defaulting to 5 MB.
 
 Trace rows can be filtered by exact event name or category when a trace would otherwise be too
 noisy. Include filters switch the trace to allow-list mode; only matching events or categories are

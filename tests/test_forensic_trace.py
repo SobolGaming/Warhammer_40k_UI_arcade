@@ -86,6 +86,21 @@ def test_payload_trace_records_json_safe_ui_core_payloads(tmp_path: Path) -> Non
     }
 
 
+def test_trace_writer_overwrites_existing_trace_file_on_start(tmp_path: Path) -> None:
+    trace_path = tmp_path / "existing-trace.jsonl"
+    trace_path.write_text('{"event_name":"stale.previous_run"}\n', encoding="utf-8")
+
+    writer = JsonLinesTraceWriter(ForensicTraceConfig(level="summary", trace_path=trace_path))
+
+    assert trace_path.read_text(encoding="utf-8") == ""
+
+    writer.write_event(category="test", event_name="test.current_run")
+
+    trace_text = trace_path.read_text(encoding="utf-8")
+    assert "stale.previous_run" not in trace_text
+    assert "test.current_run" in trace_text
+
+
 def test_trace_writer_rejects_non_json_safe_payload(tmp_path: Path) -> None:
     writer = JsonLinesTraceWriter(
         ForensicTraceConfig(level="payload", trace_path=tmp_path / "bad-trace.jsonl")

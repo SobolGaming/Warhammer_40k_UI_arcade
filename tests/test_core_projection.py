@@ -41,6 +41,137 @@ def test_core_projection_uses_structured_terrain_display_geometry() -> None:
     assert not math.isclose(footprint[1][1], footprint[0][1], rel_tol=0.0, abs_tol=1.0e-9)
 
 
+def test_core_projection_uses_typed_terrain_areas_when_features_are_empty() -> None:
+    footprint = _axis_aligned_rectangle_points(center=(20.0, 12.0), size=(6.0, 4.0))
+    view = battlefield_view_from_game_view(
+        _game_view(
+            None,
+            objective_markers=[
+                {
+                    "objective_marker_id": "objective-alpha",
+                    "name": "Alpha",
+                    "x_inches": 20.0,
+                    "y_inches": 12.0,
+                    "marker_diameter_mm": 40.0,
+                }
+            ],
+            terrain_areas=[
+                _terrain_area(
+                    terrain_area_id="terrain-area-alpha",
+                    classification="light",
+                    footprint_template_id="light-6x4",
+                    center=(20.0, 12.0),
+                    rotation_degrees=45.0,
+                    local_transform="identity",
+                    footprint=footprint,
+                )
+            ],
+            objective_terrain_areas=[
+                {
+                    "objective_marker_id": "objective-alpha",
+                    "objective_role": "center",
+                    "terrain_area_ids": ["terrain-area-alpha"],
+                    "source_id": "objective-alpha-source",
+                }
+            ],
+        )
+    )
+
+    assert view.terrain[0].terrain_id == "terrain-area-alpha"
+    assert view.terrain[0].label == "light"
+    assert view.terrain[0].source_kind == "terrain_area"
+    assert view.terrain[0].objective_marker_ids == ("objective-alpha",)
+    assert view.terrain[0].footprint == footprint
+
+
+def test_core_projection_supports_mixed_terrain_areas_and_features() -> None:
+    view = battlefield_view_from_game_view(
+        _game_view(
+            _terrain_feature(
+                center=(10.0, 20.0),
+                size=(6.0, 4.0),
+            ),
+            terrain_areas=[
+                _terrain_area(
+                    terrain_area_id="terrain-area-alpha",
+                    classification="dense",
+                    footprint_template_id="dense-10x5",
+                    center=(30.0, 12.0),
+                    rotation_degrees=0.0,
+                    local_transform="mirror_y_axis",
+                    footprint=_axis_aligned_rectangle_points(
+                        center=(30.0, 12.0),
+                        size=(10.0, 5.0),
+                    ),
+                )
+            ],
+        )
+    )
+
+    assert [terrain.source_kind for terrain in view.terrain] == [
+        "terrain_area",
+        "terrain_feature",
+    ]
+    assert [terrain.label for terrain in view.terrain] == ["dense", "ruins"]
+
+
+def test_core_projection_rejects_malformed_terrain_area_footprint() -> None:
+    with pytest.raises(
+        CoreProjectionRenderError,
+        match="terrain area footprint_polygon must be unclosed",
+    ):
+        battlefield_view_from_game_view(
+            _game_view(
+                None,
+                terrain_areas=[
+                    _terrain_area(
+                        terrain_area_id="terrain-area-alpha",
+                        classification="light",
+                        footprint_template_id="light-6x4",
+                        center=(20.0, 12.0),
+                        rotation_degrees=0.0,
+                        local_transform="identity",
+                        footprint=((17.0, 10.0), (23.0, 10.0), (17.0, 10.0)),
+                    )
+                ],
+            )
+        )
+
+
+def test_core_projection_rejects_unknown_objective_terrain_area_link() -> None:
+    with pytest.raises(
+        CoreProjectionRenderError,
+        match="objective_terrain_areas references unknown terrain area: terrain-area-missing",
+    ):
+        battlefield_view_from_game_view(
+            _game_view(
+                None,
+                terrain_areas=[
+                    _terrain_area(
+                        terrain_area_id="terrain-area-alpha",
+                        classification="light",
+                        footprint_template_id="light-6x4",
+                        center=(20.0, 12.0),
+                        rotation_degrees=0.0,
+                        local_transform="identity",
+                        footprint=_axis_aligned_rectangle_points(
+                            center=(20.0, 12.0),
+                            size=(6.0, 4.0),
+                        ),
+                    )
+                ],
+                objective_terrain_areas=[
+                    {
+                        "objective_marker_id": "objective-alpha",
+                        "objective_role": "center",
+                        "terrain_area_ids": ["terrain-area-missing"],
+                        "source_id": "objective-alpha-source",
+                    }
+                ],
+            )
+        )
+
+
 def test_core_projection_rejects_missing_terrain_display_geometry() -> None:
     terrain_feature = _terrain_feature(
         center=(10.0, 20.0),
@@ -224,12 +355,16 @@ def test_core_projection_rejects_source_terrain_footprint_bound_mismatch() -> No
 
 
 def _game_view(
-    terrain_feature: JsonObject,
+    terrain_feature: JsonObject | None,
     *,
     deployment_zones: list[JsonObject] | None = None,
+    objective_markers: list[JsonObject] | None = None,
+    terrain_areas: list[JsonObject] | None = None,
+    objective_terrain_areas: list[JsonObject] | None = None,
     placed_armies: list[JsonObject] | None = None,
     model_display_by_id: JsonObject | None = None,
 ) -> UiGameView:
+    terrain_features = [] if terrain_feature is None else [terrain_feature]
     return UiGameView(
         viewer_player_id="player-a",
         game_id="projection-test-game",
@@ -258,8 +393,12 @@ def _game_view(
                 "battlefield_width_inches": 60.0,
                 "battlefield_depth_inches": 44.0,
                 "deployment_zones": [] if deployment_zones is None else deployment_zones,
-                "objective_markers": [],
-                "terrain_features": [terrain_feature],
+                "objective_markers": [] if objective_markers is None else objective_markers,
+                "terrain_areas": [] if terrain_areas is None else terrain_areas,
+                "objective_terrain_areas": []
+                if objective_terrain_areas is None
+                else objective_terrain_areas,
+                "terrain_features": terrain_features,
             },
         ),
         public_secondary_mission_choices=(),
@@ -337,6 +476,38 @@ def _terrain_feature(
             "walls": [],
             "floors": [],
             "source_id": "custom-terrain-source",
+        },
+    )
+
+
+def _terrain_area(
+    *,
+    terrain_area_id: str,
+    classification: str,
+    footprint_template_id: str,
+    center: tuple[float, float],
+    rotation_degrees: float,
+    local_transform: str,
+    footprint: tuple[tuple[float, float], ...],
+) -> JsonObject:
+    return cast(
+        JsonObject,
+        {
+            "terrain_area_id": terrain_area_id,
+            "classification": classification,
+            "footprint_template_id": footprint_template_id,
+            "terrain_feature_kind": "ruins",
+            "center_x_inches": center[0],
+            "center_y_inches": center[1],
+            "rotation_degrees": rotation_degrees,
+            "local_transform": local_transform,
+            "footprint_polygon": [
+                {"x_inches": point[0], "y_inches": point[1]} for point in footprint
+            ],
+            "source_layout_id": "layout-1",
+            "source_id": f"source:{terrain_area_id}",
+            "source_transform": "identity",
+            "symmetry_axis": "none",
         },
     )
 

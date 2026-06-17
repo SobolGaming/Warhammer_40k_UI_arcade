@@ -309,6 +309,16 @@ def _terrain_primitives(view: BattlefieldView) -> tuple[RenderPrimitive, ...]:
                 anchor_y="center",
             )
         )
+        if terrain.objective_marker_ids:
+            primitives.append(
+                PolygonPrimitive(
+                    layer="objective_terrain_link",
+                    points=terrain.footprint,
+                    fill_color=(0, 0, 0, 0),
+                    outline_color=(235, 199, 79, 220),
+                    line_width=1.5,
+                )
+            )
     return tuple(primitives)
 
 
