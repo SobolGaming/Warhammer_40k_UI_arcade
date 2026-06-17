@@ -984,6 +984,12 @@ def _button_action_kind(value: str) -> HudButtonActionKind:
         return "placement_clear"
     if value == "placement_next_model":
         return "placement_next_model"
+    if value == "assignment_submit":
+        return "assignment_submit"
+    if value == "assignment_decline":
+        return "assignment_decline"
+    if value == "assignment_clear":
+        return "assignment_clear"
     return "none"
 
 

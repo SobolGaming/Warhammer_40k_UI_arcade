@@ -140,7 +140,7 @@ def build_world_primitives(
     primitives.extend(_terrain_primitives(view))
     primitives.extend(_unit_primitives(view))
     if action_summary is not None:
-        primitives.extend(_action_visual_summary_primitives(action_summary))
+        primitives.extend(_action_visual_summary_primitives(action_summary, view))
     for previous_placement in placement_history:
         primitives.extend(_placement_draft_primitives(previous_placement, history=True))
     if selection_state is not None:
@@ -529,6 +529,7 @@ def _movement_budget_ring_primitives(
 
 def _action_visual_summary_primitives(
     summary: ActionVisualSummary,
+    view: BattlefieldView,
 ) -> tuple[RenderPrimitive, ...]:
     primitives: list[RenderPrimitive] = []
     if summary.operation_kind == "unsupported":
@@ -546,6 +547,18 @@ def _action_visual_summary_primitives(
                     line_width=line_width,
                 )
             )
+        elif group.source_ref_keys and group.target_ref_keys:
+            source_center = _first_ref_center(view, group.source_ref_keys)
+            target_center = _first_ref_center(view, group.target_ref_keys)
+            if source_center is not None and target_center is not None:
+                primitives.append(
+                    PolylinePrimitive(
+                        layer=f"action_summary_{summary.intensity}_assignment_line",
+                        points=(source_center, target_center),
+                        color=color,
+                        line_width=line_width,
+                    )
+                )
         if group.ghost_center is not None and group.ghost_radius is not None:
             primitives.append(
                 CirclePrimitive(
@@ -576,6 +589,29 @@ def _action_visual_summary_primitives(
             )
             label_count += 1
     return tuple(primitives)
+
+
+def _first_ref_center(view: BattlefieldView, ref_keys: tuple[str, ...]) -> WorldPoint | None:
+    for ref_key in ref_keys:
+        center = _ref_center(view, ref_key)
+        if center is not None:
+            return center
+    return None
+
+
+def _ref_center(view: BattlefieldView, ref_key: str) -> WorldPoint | None:
+    if ref_key.startswith("unit:"):
+        unit_id = ref_key.removeprefix("unit:")
+        for unit in view.units:
+            if unit.unit_id == unit_id:
+                return _unit_center(unit)
+    if ref_key.startswith("model:"):
+        model_id = ref_key.removeprefix("model:")
+        for unit in view.units:
+            for model in unit.models:
+                if model.model_id == model_id:
+                    return model.position
+    return None
 
 
 def _action_summary_color(

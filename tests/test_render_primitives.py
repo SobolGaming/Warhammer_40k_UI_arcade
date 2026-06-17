@@ -303,6 +303,44 @@ def test_action_visual_summary_builds_dim_path_and_ghost_primitives() -> None:
     assert "action_summary_dim_ghost_base" in circle_layers
 
 
+def test_action_visual_summary_builds_assignment_source_target_lines() -> None:
+    view = default_battlefield_view()
+    summary = ActionVisualSummary(
+        request_id="shooting-request-1",
+        operation_kind="assignment",
+        intensity="review",
+        groups=(
+            ActionVisualSummaryGroup(
+                group_id="shooting:intercessor_1",
+                label="intercessor_1 -> guardian_squad",
+                state="assigned",
+                source_ref_keys=("model:intercessor_1",),
+                target_ref_keys=("unit:guardian_squad",),
+                path_points=(),
+                ghost_center=None,
+                ghost_radius=None,
+                icon_id="action.summary",
+                color_role="assignment",
+                summary_lines=("Weapon profile: bolt_rifle_profile",),
+            ),
+        ),
+        diagnostic_lines=(),
+        ready=True,
+        max_labels=6,
+    )
+
+    primitives = build_world_primitives(view, action_summary=summary)
+
+    lines = [primitive for primitive in primitives if type(primitive) is PolylinePrimitive]
+    assignment_lines = [
+        primitive
+        for primitive in lines
+        if primitive.layer == "action_summary_review_assignment_line"
+    ]
+    assert len(assignment_lines) == 1
+    assert assignment_lines[0].points[0] == (7.0, 18.0)
+
+
 def test_action_visual_summary_review_mode_labels_are_capped() -> None:
     view = default_battlefield_view()
     summary = ActionVisualSummary(

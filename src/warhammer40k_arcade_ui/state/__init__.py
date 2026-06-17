@@ -1,5 +1,19 @@
 """Local-only UI state."""
 
+from warhammer40k_arcade_ui.state.assignment_submission import (
+    AssignmentProposalSubmission,
+    AssignmentSubmissionResult,
+    prepare_assignment_submission,
+    submit_assignment_workspace,
+)
+from warhammer40k_arcade_ui.state.assignment_workspace import (
+    ASSIGNMENT_DECISION_TYPES,
+    ASSIGNMENT_PROPOSAL_KINDS,
+    AssignmentWorkspace,
+    AssignmentWorkspaceError,
+    AssignmentWorkspaceRow,
+    is_assignment_parameterized_decision,
+)
 from warhammer40k_arcade_ui.state.entity_selection import (
     EntityAliasRule,
     EntityLayerDefinition,
@@ -70,6 +84,13 @@ from warhammer40k_arcade_ui.state.selection import (
 )
 
 __all__ = [
+    "ASSIGNMENT_DECISION_TYPES",
+    "ASSIGNMENT_PROPOSAL_KINDS",
+    "AssignmentProposalSubmission",
+    "AssignmentSubmissionResult",
+    "AssignmentWorkspace",
+    "AssignmentWorkspaceError",
+    "AssignmentWorkspaceRow",
     "EntityAliasRule",
     "EntityLayerDefinition",
     "EntityRef",
@@ -103,6 +124,7 @@ __all__ = [
     "entity_ref_for_unit",
     "finite_unit_entity_selection_profile",
     "inspection_entity_selection_profile",
+    "is_assignment_parameterized_decision",
     "model_entity_ref",
     "model_hits_at",
     "movement_entity_selection_profile",
@@ -110,12 +132,14 @@ __all__ = [
     "movement_proposal_context_diagnostic_line",
     "movement_proposal_for_selected_unit",
     "placement_proposal_for_selected_unit",
+    "prepare_assignment_submission",
     "prepare_movement_submission",
     "prepare_placement_submission",
     "refresh_submission_projection",
     "refresh_viewer_player_id_for_status",
     "selected_model",
     "selected_unit",
+    "submit_assignment_workspace",
     "submit_finite_option",
     "submit_movement_draft",
     "submit_placement_draft",

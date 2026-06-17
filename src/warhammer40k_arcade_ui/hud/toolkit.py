@@ -50,6 +50,9 @@ type HudButtonActionKind = Literal[
     "placement_submit",
     "placement_clear",
     "placement_next_model",
+    "assignment_submit",
+    "assignment_decline",
+    "assignment_clear",
 ]
 type HudButtonShape = Literal["rect", "rounded_rect", "pill", "square"]
 type HudButtonIconSide = Literal["left", "right", "both", "center", "none"]

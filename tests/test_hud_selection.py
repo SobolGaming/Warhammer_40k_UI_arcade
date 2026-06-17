@@ -19,6 +19,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
+from warhammer40k_arcade_ui.state.assignment_workspace import AssignmentWorkspace
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
@@ -219,15 +220,27 @@ def test_movement_draft_panel_shows_measurements_and_ready_state() -> None:
     assert not any("synthetic midpoint witness evidence" in hint for hint in panel.hint_lines)
 
 
-def test_movement_draft_panel_reports_unsupported_parameterized_request() -> None:
+def test_assignment_parameterized_request_routes_away_from_movement_panel() -> None:
+    decision = _shooting_proposal_decision()
     panel = build_movement_draft_panel(
         movement_draft=None,
-        pending_decision=_shooting_proposal_decision(),
+        pending_decision=decision,
+    )
+    assignment_workspace = AssignmentWorkspace.start_for_pending(decision)
+    assignment_panel = build_assignment_hud_panel(
+        movement_draft=None,
+        assignment_workspace=assignment_workspace,
+        pending_decision=decision,
+        highlighted_option_index=0,
+        diagnostics=(),
+        preferences=default_preferences(),
+        preference_source_label="default.yaml",
     )
 
-    assert panel is not None
-    assert panel.status_line == "Unsupported proposal tool: shooting_declaration"
-    assert panel.proposal_kind == "shooting_declaration"
+    assert panel is None
+    assert assignment_workspace is not None
+    assert assignment_panel is not None
+    assert assignment_panel.operation_kind == "shooting_declaration"
 
 
 def test_movement_draft_panel_surfaces_authoritative_diagnostics() -> None:
