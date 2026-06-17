@@ -202,6 +202,13 @@ def _assignment_row_data(row: AssignmentGroupRowView) -> JsonObject:
     summary = " | ".join(row.summary_lines[:2])
     return {
         "id": row.component_id,
+        "component_id": row.component_id,
+        "button_id": row.group_id,
+        "command_id": "select_assignment_group",
+        "action_kind": "assignment_select",
+        "option_id": row.group_id,
+        "request_id": row.request_id or "",
+        "unit_id": row.target_unit_id or "",
         "label": row.group_label,
         "title": row.group_label,
         "group_label": row.group_label,
@@ -210,6 +217,14 @@ def _assignment_row_data(row: AssignmentGroupRowView) -> JsonObject:
         "status": row.state,
         "operation_kind": row.operation_kind,
         "state": row.state,
+        "color_role": "selected" if row.selected else "disabled" if not row.enabled else row.state,
+        "visual_role": "selected" if row.selected else "disabled" if not row.enabled else row.state,
+        "selected": row.selected,
+        "focused": row.selected,
+        "enabled": row.enabled,
+        "disabled_reason": "" if row.enabled else "Assignment has no target entity to highlight.",
+        "source_ref_keys": list(row.source_ref_keys),
+        "target_ref_keys": list(row.target_ref_keys),
     }
 
 
@@ -310,16 +325,19 @@ def _current_assignment_data(
     subtitle: str,
     color_role: str,
 ) -> JsonObject:
+    if assignment_rows:
+        selected = tuple(
+            row for row in assignment_rows if row.get("selected") is True and type(row) is dict
+        )
+        assignment = dict(selected[0] if selected else assignment_rows[0])
+        assignment["status"] = subtitle
+        assignment.setdefault("color_role", color_role)
+        return assignment
     if notice_rows:
         notice = dict(notice_rows[0])
         notice["status"] = subtitle
         notice["color_role"] = color_role
         return notice
-    if assignment_rows:
-        assignment = dict(assignment_rows[0])
-        assignment["status"] = subtitle
-        assignment["color_role"] = color_role
-        return assignment
     return {
         "label": "Assignments",
         "summary": subtitle,

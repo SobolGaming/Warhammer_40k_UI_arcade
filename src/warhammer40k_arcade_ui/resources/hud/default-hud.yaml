@@ -66,9 +66,12 @@ regions:
         stat_cell_gap: 4
       - type: AssignmentGroupRow
         id: current_assignment_row
-        data_ref: current_assignment
+        data_ref: hud.workbench.assignments.groups
         group_label: Current Assignment
         operation_kind: movement
+        height: 140px
+        button_height: 44
+        button_gap: 6
   bottom_workbench:
     widget:
       type: HudContainer

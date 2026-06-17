@@ -27,6 +27,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
+from warhammer40k_arcade_ui.state.assignment_workspace import AssignmentWorkspace
 from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState, submit_finite_option
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.movement_submission import prepare_movement_submission
@@ -77,7 +78,7 @@ def test_phase21a_pending_proposal_metadata_is_required(missing_key: str) -> Non
         ("stratagem_counteroffensive", "stratagem_target_binding"),
     ],
 )
-def test_phase21a_unsupported_parameterized_requests_render_without_draft(
+def test_phase21a_assignment_parameterized_requests_render_without_movement_draft(
     proposal_name: str,
     expected_kind: str,
 ) -> None:
@@ -93,8 +94,10 @@ def test_phase21a_unsupported_parameterized_requests_render_without_draft(
         movement_draft=draft,
         pending_decision=decision,
     )
+    assignment_workspace = AssignmentWorkspace.start_for_pending(decision)
     assignment_panel = build_assignment_hud_panel(
         movement_draft=draft,
+        assignment_workspace=assignment_workspace,
         pending_decision=decision,
         highlighted_option_index=0,
         diagnostics=(),
@@ -103,16 +106,12 @@ def test_phase21a_unsupported_parameterized_requests_render_without_draft(
     )
 
     assert draft is None
-    assert movement_panel is not None
-    assert movement_panel.status_line == f"Unsupported proposal tool: {expected_kind}"
-    assert movement_panel.proposal_kind == expected_kind
+    assert movement_panel is None
+    assert assignment_workspace is not None
     assert assignment_panel is not None
-    assert assignment_panel.operation_kind == "unsupported"
+    assert assignment_panel.operation_kind == expected_kind
     assert assignment_panel.proposal_kind == expected_kind
-    assert assignment_panel.groups[0].label == f"Unsupported proposal tool: {expected_kind}"
-    assert assignment_panel.advisory_lines == (
-        "Visible request only; no local assignment payload will be built.",
-    )
+    assert assignment_panel.operation_kind != "unsupported"
 
 
 @pytest.mark.parametrize(

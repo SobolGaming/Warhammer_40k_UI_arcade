@@ -200,6 +200,7 @@ def test_assignment_hud_preferences_round_trip() -> None:
     assert result.preferences.hud.show_assignment_hud is True
     assert result.preferences.hud.assignment_hud_mode == "compact"
     assert result.preferences.hud.show_assignment_warning_markers is True
+    assert result.preferences.hud.assignment_target_highlight_color == (220, 54, 64, 72)
     assert result.preferences.hud.action_summary_default == "dim"
     assert result.preferences.hud.action_summary_max_labels == 6
     assert result.preferences.hud.movement_budget_ring_mode == "total"
@@ -228,6 +229,18 @@ def test_invalid_movement_budget_ring_mode_is_diagnostic() -> None:
 
     assert result.preferences is not None
     assert "invalid_movement_budget_ring_mode" in _codes(result.diagnostics)
+
+
+def test_invalid_assignment_target_highlight_color_is_diagnostic() -> None:
+    payload = default_preferences().to_payload()
+    hud = payload["hud"]
+    assert type(hud) is dict
+    hud["assignment_target_highlight_color"] = [220, 54, 64, 999]
+
+    result = parse_preferences_payload(payload)
+
+    assert result.preferences is not None
+    assert "invalid_rgba_color" in _codes(result.diagnostics)
 
 
 def test_invalid_action_summary_preferences_are_diagnostic() -> None:
