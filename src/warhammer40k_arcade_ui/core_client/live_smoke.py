@@ -63,6 +63,9 @@ LIVE_CORE_SMOKE_VIEWER_PLAYER_ID = "player-a"
 LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID = "fixed:assassination:bring_it_down"
 _LIVE_CORE_SMOKE_MISSION_POOL_ENTRY_ID = "mission-take-and-hold-vs-take-and-hold-layout-1"
 _LIVE_CORE_SMOKE_TERRAIN_LAYOUT_ID = "take-and-hold-vs-take-and-hold-layout-1"
+_LIVE_CORE_SMOKE_MONSTER_UNIT_ID = "army-alpha:strategic-reserve-unit"
+_LIVE_CORE_SMOKE_MONSTER_MOVEMENT_X = 15.0
+_LIVE_CORE_SMOKE_MONSTER_MOVEMENT_Y = 40.1
 type LiveCoreSmokeStopPhase = Literal[
     "setup",
     "secondary-missions",
@@ -179,6 +182,8 @@ def build_live_core_smoke_startup(
             stop_phase=stop_phase,
             viewer_player_id=viewer_player_id,
         )
+    if stop_phase == "movement":
+        _nudge_live_smoke_monster_for_movement_bridge(client)
     expected_decision = (
         SUBMIT_SCOUT_MOVE_DECISION_TYPE if stop_phase == "scout-move" else "select_movement_unit"
     )
@@ -189,6 +194,35 @@ def build_live_core_smoke_startup(
         stop_phase=stop_phase,
         viewer_player_id=viewer_player_id,
     )
+
+
+def _nudge_live_smoke_monster_for_movement_bridge(client: LocalSessionClient) -> None:
+    """Keep the smoke Monster inside the current core movement bridge edge."""
+
+    # Deployment must stay legal first. Until the core movement resolver uses the
+    # mission setup's 44x60 dimensions for normal/advance submissions, nudge this
+    # large smoke-test model inward after setup so Monster movement remains testable.
+    state = client.session.lifecycle.state
+    if state is None:
+        raise LiveCoreSmokeError("Live smoke Monster nudge requires a started game state.")
+    battlefield_state = state.battlefield_state
+    if battlefield_state is None:
+        raise LiveCoreSmokeError("Live smoke Monster nudge requires battlefield state.")
+    unit_placement = battlefield_state.unit_placement_by_id(_LIVE_CORE_SMOKE_MONSTER_UNIT_ID)
+    nudged_placement = unit_placement.with_model_placements(
+        tuple(
+            placement.with_pose(
+                Pose.at(
+                    _LIVE_CORE_SMOKE_MONSTER_MOVEMENT_X,
+                    _LIVE_CORE_SMOKE_MONSTER_MOVEMENT_Y,
+                    0.0,
+                    facing_degrees=placement.pose.facing.degrees,
+                )
+            )
+            for placement in unit_placement.model_placements
+        )
+    )
+    state.replace_battlefield_state(battlefield_state.with_unit_placement(nudged_placement))
 
 
 def _startup_from_status(
