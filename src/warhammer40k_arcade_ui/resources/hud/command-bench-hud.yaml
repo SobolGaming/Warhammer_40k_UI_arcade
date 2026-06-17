@@ -75,6 +75,7 @@ regions:
           id: command_bench_assignment_row
           data_ref: hud.workbench.assignments.groups
           group_label: Current Assignment
+          height: 96px
           button_height: 44
           button_gap: 6
         - type: CurrentActionPanel

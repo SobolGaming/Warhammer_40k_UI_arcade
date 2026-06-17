@@ -1036,12 +1036,13 @@ class ArcadeWarhammerWindow(arcade.Window):
             summary=_hud_button_summary(hit_region),
         )
         if not hit_region.enabled:
-            self._set_finite_state(
-                self._finite_state.with_local_invalid(
-                    violation_code="disabled_hud_button",
-                    message=hit_region.disabled_reason or "HUD button is disabled.",
-                    field="hud_button",
-                )
+            self._trace_event(
+                category="ui",
+                event_name="ui.hud_button_disabled_ignored",
+                summary={
+                    **_hud_button_summary(hit_region),
+                    "disabled_reason": hit_region.disabled_reason,
+                },
             )
             return
         if hit_region.action_kind == "finite_option" and hit_region.option_id is not None:

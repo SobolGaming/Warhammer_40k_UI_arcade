@@ -128,6 +128,34 @@ def test_hud_finite_option_button_click_focuses_matching_projected_unit() -> Non
         driver.close()
 
 
+def test_disabled_hud_assignment_row_click_does_not_mark_state_invalid() -> None:
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+        pending_decision=_stratagem_target_binding_without_target_decision(),
+    )
+    driver = GuiTestDriver(window=window)
+    try:
+        original_status_kind = driver.finite_status_kind
+        driver.window.on_draw()
+        disabled_assignment = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == "assignment_select"
+        )
+        assert disabled_assignment.enabled is False
+        center_x = round((disabled_assignment.bounds[0] + disabled_assignment.bounds[2]) / 2.0)
+        center_y = round((disabled_assignment.bounds[1] + disabled_assignment.bounds[3]) / 2.0)
+
+        driver.click_screen(center_x, center_y)
+
+        assert driver.finite_status_kind == original_status_kind
+        assert driver.finite_status_kind != "invalid"
+    finally:
+        driver.close()
+
+
 def test_keyboard_cycle_finite_option_focuses_matching_projected_unit() -> None:
     window = ArcadeWarhammerWindow(
         config=AppConfig(window_width=1280, window_height=800, resizable=False),
@@ -728,6 +756,51 @@ def _guardian_first_unit_selection_decision() -> UiDecision:
             ),
         ),
         is_parameterized=False,
+    )
+
+
+def _stratagem_target_binding_without_target_decision() -> UiDecision:
+    proposal_request = {
+        "request_id": "stratagem-request-without-target",
+        "decision_type": "submit_stratagem_target_proposal",
+        "actor_id": "player_2",
+        "proposal_kind": "stratagem_target_binding",
+        "context": {
+            "game_id": "game-1",
+            "player_id": "player_2",
+            "battle_round": 1,
+            "phase": "movement",
+            "active_player_id": "player_1",
+            "trigger_kind": "end_phase",
+            "trigger_payload": {"moved_unit_instance_id": "intercessor_squad"},
+        },
+        "catalog_record": {
+            "record_id": "fire-overwatch",
+            "definition": {
+                "name": "Fire Overwatch",
+                "command_point_cost": 1,
+                "target_descriptor": "one eligible unit from the player's army that can shoot",
+                "effect_descriptor": "the target unit shoots as if it were the shooting phase",
+                "when_descriptor": "end of the opponent movement phase",
+            },
+        },
+        "target_binding": None,
+    }
+    return UiDecision.from_payload(
+        {
+            "request_id": "stratagem-request-without-target",
+            "decision_type": "submit_stratagem_target_proposal",
+            "actor_id": "player_2",
+            "payload": {"proposal_request": proposal_request, "declinable": True},
+            "is_parameterized": True,
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
     )
 
 

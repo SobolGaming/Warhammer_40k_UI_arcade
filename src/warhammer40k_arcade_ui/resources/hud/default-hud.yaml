@@ -69,6 +69,7 @@ regions:
         data_ref: hud.workbench.assignments.groups
         group_label: Current Assignment
         operation_kind: movement
+        height: 140px
         button_height: 44
         button_gap: 6
   bottom_workbench:

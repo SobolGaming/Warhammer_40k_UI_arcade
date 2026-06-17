@@ -594,15 +594,36 @@ def _assignment_group_row_list(
     rows: tuple[JsonObject, ...],
 ) -> HudCompositionRenderResult:
     gap = max(0.0, _attribute_float(node, "button_gap", default=6.0))
+    header_height = theme.line_height_px + theme.inner_padding_px + 6.0
+    title = _component_title(node, data_value=None)
     row_height = min(
-        rect.height,
+        max(0.0, rect.height - header_height),
         max(24.0, _attribute_float(node, "button_height", default=42.0)),
     )
-    primitives: list[RenderPrimitive] = []
+    primitives: list[RenderPrimitive] = [
+        _panel(rect, theme=theme),
+        TextPrimitive(
+            layer="hud_widget_text",
+            text=title,
+            position=(
+                rect.x + theme.inner_padding_px,
+                rect.top - theme.inner_padding_px,
+            ),
+            color=theme.text,
+            font_size=theme.title_font_size_px,
+            anchor_x="left",
+            anchor_y="top",
+            coordinate_space="screen",
+        ),
+    ]
     hit_regions: list[HudButtonHitRegion] = []
-    y_top = rect.top
+    if row_height <= 0.0:
+        return HudCompositionRenderResult(tuple(primitives), ())
+    y_top = rect.top - header_height
+    row_x = rect.x + theme.inner_padding_px
+    row_width = max(0.0, rect.width - (theme.inner_padding_px * 2.0))
     for index, row in enumerate(rows):
-        row_rect = ScreenRect(rect.x, y_top - row_height, rect.width, row_height)
+        row_rect = ScreenRect(row_x, y_top - row_height, row_width, row_height)
         if row_rect.y < rect.y:
             break
         row_node = replace(node, widget_id=f"{node.widget_id}_{index}")

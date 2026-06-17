@@ -176,6 +176,20 @@ def test_stratagem_assignment_workspace_without_binding_shows_catalog_context() 
     assert workspace.declinable is True
     assert workspace.rows[0].label == "Test Stratagem"
     assert "Stratagem: Test Stratagem" in workspace.rows[0].summary_lines
+    assert "No selectable target is exposed yet; decline is available." in (
+        workspace.rows[0].summary_lines
+    )
+    assert workspace.diagnostic_lines == ()
+
+
+def test_required_stratagem_assignment_without_binding_is_invalid() -> None:
+    decision = _stratagem_target_binding_decision(target_binding=None, declinable=False)
+
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+
+    assert workspace is not None
+    assert workspace.is_ready is False
+    assert workspace.declinable is False
     assert workspace.diagnostic_lines == (
         "Stratagem request does not expose a selectable target binding candidate yet.",
     )

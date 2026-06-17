@@ -449,9 +449,16 @@ def _stratagem_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
                 }
             )
     if target_binding is None and not diagnostics:
-        diagnostics.append(
+        target_binding_missing_line = (
             "Stratagem request does not expose a selectable target binding candidate yet."
         )
+        if declinable:
+            stratagem_hint_lines = (
+                *stratagem_hint_lines,
+                "No selectable target is exposed yet; decline is available.",
+            )
+        else:
+            diagnostics.append(target_binding_missing_line)
         rows = (
             AssignmentWorkspaceRow(
                 row_id=f"stratagem-target:{proposal.request_id}:missing",
@@ -635,16 +642,24 @@ def _stratagem_hint_lines(
         name = _text(definition.get("name"))
         if name:
             lines.append(f"Stratagem: {name}")
-        cp_cost = definition.get("cp_cost")
+        cp_cost = definition.get("command_point_cost")
+        if not isinstance(cp_cost, int):
+            cp_cost = definition.get("cp_cost")
         if type(cp_cost) is int:
             lines.append(f"CP cost: {cp_cost}")
-        timing = _text(definition.get("timing")) or _text(definition.get("phase"))
-        if timing:
-            lines.append(f"Timing: {timing}")
+        when_descriptor = _text(definition.get("when_descriptor"))
+        if when_descriptor:
+            lines.append(f"When: {when_descriptor}")
+        target_descriptor = _text(definition.get("target_descriptor"))
+        if target_descriptor:
+            lines.append(f"Target: {target_descriptor}")
+        effect_descriptor = _text(definition.get("effect_descriptor"))
+        if effect_descriptor:
+            lines.append(f"Effect: {effect_descriptor}")
     effect_selection = proposal_payload.get("effect_selection")
     if effect_selection is not None:
         lines.append("Effect selection is preserved from the engine request.")
-    return tuple(lines[:4])
+    return tuple(lines[:6])
 
 
 def _stratagem_source_ref_keys(payload: JsonObject) -> tuple[str, ...]:
@@ -654,8 +669,10 @@ def _stratagem_source_ref_keys(payload: JsonObject) -> tuple[str, ...]:
     trigger_payload = context.get("trigger_payload")
     if type(trigger_payload) is not dict:
         return ()
-    unit_id = _text(trigger_payload.get("affected_unit_instance_id")) or _text(
-        trigger_payload.get("unit_instance_id")
+    unit_id = (
+        _text(trigger_payload.get("affected_unit_instance_id"))
+        or _text(trigger_payload.get("unit_instance_id"))
+        or _text(trigger_payload.get("moved_unit_instance_id"))
     )
     if unit_id:
         return (f"unit:{unit_id}",)
