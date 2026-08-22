@@ -6,7 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
+from tests.support.contract_fixtures import decision_from_fixture
+from warhammer40k_arcade_ui.core_client.protocol import UiDecision
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.state.entity_selection import (
     EntityRef,
@@ -231,24 +232,26 @@ def _unit_ref(unit_id: str) -> EntityRef:
 
 
 def _finite_unit_decision() -> UiDecision:
-    return UiDecision(
-        request_id="decision-request-000004",
-        decision_type="select_target_unit",
-        actor_id="player_1",
-        payload=None,
-        options=(
-            UiFiniteOption(
-                option_id="target:intercessor_squad",
-                label="Intercessors",
-                payload={"unit_instance_id": "intercessor_squad"},
-            ),
-            UiFiniteOption(
-                option_id="target:guardian_squad",
-                label="Guardians",
-                payload={"unit_instance_id": "guardian_squad"},
-            ),
-        ),
-        is_parameterized=False,
+    return decision_from_fixture(
+        {
+            "request_id": "decision-request-000004",
+            "decision_type": "select_target_unit",
+            "actor_id": "player_1",
+            "payload": None,
+            "options": [
+                {
+                    "option_id": "target:intercessor_squad",
+                    "label": "Intercessors",
+                    "payload": {"unit_instance_id": "intercessor_squad"},
+                },
+                {
+                    "option_id": "target:guardian_squad",
+                    "label": "Guardians",
+                    "payload": {"unit_instance_id": "guardian_squad"},
+                },
+            ],
+            "is_parameterized": False,
+        }
     )
 
 
@@ -256,7 +259,7 @@ def _movement_proposal_decision(
     *,
     request_id: str = "decision-request-000005",
 ) -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": request_id,
             "decision_type": "submit_movement_proposal",

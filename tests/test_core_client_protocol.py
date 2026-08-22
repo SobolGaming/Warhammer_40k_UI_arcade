@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import pytest
 
+from tests.support.contract_fixtures import (
+    current_decision_payload,
+    current_game_view_payload,
+    decision_from_fixture,
+)
 from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
 from warhammer40k_arcade_ui.core_client.protocol import (
     UiClientProtocolError,
     UiClientStatus,
-    UiDecision,
     UiEventDelta,
-    UiFiniteOption,
     UiGameView,
     UiMovementProposalRequest,
     UiParameterizedProposalRequest,
-    UiPlacementProposalRequest,
 )
+from warhammer40k_arcade_ui.state.interaction_dispatch import interaction_route_for_decision
 
 
 def test_status_represents_no_pending_decision() -> None:
@@ -35,43 +38,31 @@ def test_status_represents_no_pending_decision() -> None:
 
 
 def test_status_represents_finite_decision() -> None:
+    decision_payload = {
+        "request_id": "decision-request-000004",
+        "decision_type": "select_movement_action",
+        "actor_id": "player-a",
+        "payload": {"unit_instance_id": "unit-1"},
+        "is_parameterized": False,
+        "options": [
+            {
+                "option_id": "normal_move",
+                "label": "Normal Move",
+                "payload": {"movement_phase_action": "normal_move"},
+            }
+        ],
+    }
     status = UiClientStatus.from_payload(
         {
             "stage": "battle",
             "status_kind": "waiting_for_decision",
-            "decision_request": {
-                "request_id": "decision-request-000004",
-                "decision_type": "select_movement_action",
-                "actor_id": "player-a",
-                "payload": {"unit_instance_id": "unit-1"},
-                "is_parameterized": False,
-                "options": [
-                    {
-                        "option_id": "normal_move",
-                        "label": "Normal Move",
-                        "payload": {"movement_phase_action": "normal_move"},
-                    }
-                ],
-            },
+            "decision_request": current_decision_payload(decision_payload),
             "message": None,
             "payload": None,
         }
     )
 
-    assert status.decision == UiDecision(
-        request_id="decision-request-000004",
-        decision_type="select_movement_action",
-        actor_id="player-a",
-        payload={"unit_instance_id": "unit-1"},
-        options=(
-            UiFiniteOption(
-                option_id="normal_move",
-                label="Normal Move",
-                payload={"movement_phase_action": "normal_move"},
-            ),
-        ),
-        is_parameterized=False,
-    )
+    assert status.decision == decision_from_fixture(decision_payload)
 
 
 def test_status_represents_movement_proposal_request() -> None:
@@ -81,20 +72,22 @@ def test_status_represents_movement_proposal_request() -> None:
         {
             "stage": "battle",
             "status_kind": "waiting_for_decision",
-            "decision_request": {
-                "request_id": "decision-request-000005",
-                "decision_type": "submit_movement_proposal",
-                "actor_id": "player-a",
-                "payload": {"proposal_request": proposal_payload},
-                "is_parameterized": True,
-                "options": [
-                    {
-                        "option_id": "submit_parameterized_payload",
-                        "label": "Submit Parameterized Payload",
-                        "payload": {"submission_kind": "parameterized"},
-                    }
-                ],
-            },
+            "decision_request": current_decision_payload(
+                {
+                    "request_id": "decision-request-000005",
+                    "decision_type": "submit_movement_proposal",
+                    "actor_id": "player-a",
+                    "payload": {"proposal_request": proposal_payload},
+                    "is_parameterized": True,
+                    "options": [
+                        {
+                            "option_id": "submit_parameterized_payload",
+                            "label": "Submit Parameterized Payload",
+                            "payload": {"submission_kind": "parameterized"},
+                        }
+                    ],
+                }
+            ),
             "message": None,
             "payload": None,
         }
@@ -117,20 +110,22 @@ def test_status_represents_scout_move_as_movement_proposal_request() -> None:
         {
             "stage": "setup",
             "status_kind": "waiting_for_decision",
-            "decision_request": {
-                "request_id": "decision-request-scout-001",
-                "decision_type": "submit_scout_move",
-                "actor_id": "player-a",
-                "payload": {"proposal_request": proposal_payload},
-                "is_parameterized": True,
-                "options": [
-                    {
-                        "option_id": "submit_parameterized_payload",
-                        "label": "Submit Parameterized Payload",
-                        "payload": {"submission_kind": "parameterized"},
-                    }
-                ],
-            },
+            "decision_request": current_decision_payload(
+                {
+                    "request_id": "decision-request-scout-001",
+                    "decision_type": "submit_scout_move",
+                    "actor_id": "player-a",
+                    "payload": {"proposal_request": proposal_payload},
+                    "is_parameterized": True,
+                    "options": [
+                        {
+                            "option_id": "submit_parameterized_payload",
+                            "label": "Submit Parameterized Payload",
+                            "payload": {"submission_kind": "parameterized"},
+                        }
+                    ],
+                }
+            ),
             "message": None,
             "payload": None,
         }
@@ -143,7 +138,7 @@ def test_status_represents_scout_move_as_movement_proposal_request() -> None:
     )
     assert status.decision.movement_proposal is not None
     assert status.decision.movement_proposal.proposal_kind == "scout_move"
-    assert status.decision.movement_proposal.movement_phase_action == "scout_move"
+    assert status.decision.movement_proposal.movement_phase_action is None
     assert status.decision.movement_proposal.scout_distance_inches == 6.0
 
 
@@ -152,28 +147,30 @@ def test_status_represents_generic_parameterized_request_without_movement_shape(
         {
             "stage": "battle",
             "status_kind": "waiting_for_decision",
-            "decision_request": {
-                "request_id": "decision-request-000009",
-                "decision_type": "submit_stratagem_target_proposal",
-                "actor_id": "player-a",
-                "payload": {
-                    "proposal_request": {
-                        "request_id": "decision-request-000009",
-                        "decision_type": "submit_stratagem_target_proposal",
-                        "actor_id": "player-a",
-                        "proposal_kind": "core:smokescreen",
-                        "trigger_window": "after_unit_selected_as_target",
-                    }
-                },
-                "is_parameterized": True,
-                "options": [
-                    {
-                        "option_id": "submit_parameterized_payload",
-                        "label": "Submit Parameterized Payload",
-                        "payload": {"submission_kind": "parameterized"},
-                    }
-                ],
-            },
+            "decision_request": current_decision_payload(
+                {
+                    "request_id": "decision-request-000009",
+                    "decision_type": "submit_stratagem_target_proposal",
+                    "actor_id": "player-a",
+                    "payload": {
+                        "proposal_request": {
+                            "request_id": "decision-request-000009",
+                            "decision_type": "submit_stratagem_target_proposal",
+                            "actor_id": "player-a",
+                            "proposal_kind": "stratagem_target_binding",
+                            "trigger_window": "after_unit_selected_as_target",
+                        }
+                    },
+                    "is_parameterized": True,
+                    "options": [
+                        {
+                            "option_id": "submit_parameterized_payload",
+                            "label": "Submit Parameterized Payload",
+                            "payload": {"submission_kind": "parameterized"},
+                        }
+                    ],
+                }
+            ),
             "message": None,
             "payload": None,
         }
@@ -183,7 +180,7 @@ def test_status_represents_generic_parameterized_request_without_movement_shape(
     assert status.decision.is_parameterized is True
     assert status.decision.movement_proposal is None
     assert status.decision.parameterized_proposal is not None
-    assert status.decision.parameterized_proposal.proposal_kind == "core:smokescreen"
+    assert status.decision.parameterized_proposal.proposal_kind == "stratagem_target_binding"
 
 
 def test_status_represents_placement_proposal_request() -> None:
@@ -193,20 +190,22 @@ def test_status_represents_placement_proposal_request() -> None:
         {
             "stage": "battle",
             "status_kind": "waiting_for_decision",
-            "decision_request": {
-                "request_id": "decision-request-placement-001",
-                "decision_type": "submit_placement_proposal",
-                "actor_id": "player-a",
-                "payload": {"proposal_request": proposal_payload},
-                "is_parameterized": True,
-                "options": [
-                    {
-                        "option_id": "submit_parameterized_payload",
-                        "label": "Submit Parameterized Payload",
-                        "payload": {"submission_kind": "parameterized"},
-                    }
-                ],
-            },
+            "decision_request": current_decision_payload(
+                {
+                    "request_id": "decision-request-placement-001",
+                    "decision_type": "submit_placement_proposal",
+                    "actor_id": "player-a",
+                    "payload": {"proposal_request": proposal_payload},
+                    "is_parameterized": True,
+                    "options": [
+                        {
+                            "option_id": "submit_parameterized_payload",
+                            "label": "Submit Parameterized Payload",
+                            "payload": {"submission_kind": "parameterized"},
+                        }
+                    ],
+                }
+            ),
             "message": None,
             "payload": None,
         }
@@ -215,41 +214,71 @@ def test_status_represents_placement_proposal_request() -> None:
     assert status.decision is not None
     assert status.decision.is_parameterized is True
     assert status.decision.movement_proposal is None
-    assert status.decision.placement_proposal == UiPlacementProposalRequest.from_payload(
-        proposal_payload
-    )
+    assert status.decision.placement_proposal is not None
+    assert status.decision.placement_proposal.request_id == "decision-request-placement-001"
     assert status.decision.parameterized_proposal == UiParameterizedProposalRequest.from_payload(
         proposal_payload
     )
 
 
+def test_status_strictly_parses_cult_ambush_marker_request_before_variant_selection() -> None:
+    proposal_payload = _cult_ambush_marker_request_payload()
+    decision_payload = {
+        "schema_version": "decision-request-view-v5-phase17n-step4",
+        "request_id": "decision-request-marker-001",
+        "decision_type": "submit_cult_ambush_marker_placement",
+        "actor_id": "player-a",
+        "payload": {"proposal_request": proposal_payload},
+        "is_parameterized": True,
+        "options": [
+            {
+                "option_id": "submit_parameterized_payload",
+                "label": "Submit Parameterized Payload",
+                "payload": {"submission_kind": "parameterized"},
+            }
+        ],
+        "interaction": _cult_ambush_marker_interaction_payload(),
+    }
+
+    status = UiClientStatus.from_payload(
+        {
+            "stage": "battle",
+            "status_kind": "waiting_for_decision",
+            "decision_request": decision_payload,
+            "message": None,
+            "payload": None,
+        }
+    )
+
+    assert status.decision is not None
+    proposal = status.decision.placement_proposal
+    assert proposal is not None
+    assert proposal.proposal_kind == "cult_ambush_marker_placement"
+    assert proposal.unit_instance_id == "army-alpha:replacement-unit"
+    assert proposal.context["marker_id"] == "cult-ambush-marker:001"
+    assert status.decision.interaction is not None
+    assert [variant.variant_id for variant in status.decision.interaction.submission_variants] == [
+        "place_marker",
+        "no_marker",
+    ]
+    route = interaction_route_for_decision(status.decision)
+    assert route.supported is False
+    assert route.diagnostic is not None
+    assert "multiple submission variants" in route.diagnostic
+
+
 def test_status_requires_explicit_is_parameterized_even_with_parameterized_option() -> None:
-    with pytest.raises(UiClientProtocolError, match="is_parameterized is required"):
+    decision = current_decision_payload(_stratagem_decision_payload())
+    del decision["is_parameterized"]
+    with pytest.raises(
+        UiClientProtocolError,
+        match="decision request is missing required field: is_parameterized",
+    ):
         UiClientStatus.from_payload(
             {
                 "stage": "battle",
                 "status_kind": "waiting_for_decision",
-                "decision_request": {
-                    "request_id": "decision-request-000009",
-                    "decision_type": "submit_stratagem_target_proposal",
-                    "actor_id": "player-a",
-                    "payload": {
-                        "proposal_request": {
-                            "request_id": "decision-request-000009",
-                            "decision_type": "submit_stratagem_target_proposal",
-                            "actor_id": "player-a",
-                            "proposal_kind": "core:smokescreen",
-                            "trigger_window": "after_unit_selected_as_target",
-                        }
-                    },
-                    "options": [
-                        {
-                            "option_id": "submit_parameterized_payload",
-                            "label": "Submit Parameterized Payload",
-                            "payload": {"submission_kind": "parameterized"},
-                        }
-                    ],
-                },
+                "decision_request": decision,
                 "message": None,
                 "payload": None,
             }
@@ -257,25 +286,29 @@ def test_status_requires_explicit_is_parameterized_even_with_parameterized_optio
 
 
 def test_status_rejects_non_bool_is_parameterized() -> None:
+    decision = current_decision_payload(
+        {
+            "request_id": "decision-request-000004",
+            "decision_type": "select_movement_action",
+            "actor_id": "player-a",
+            "payload": {"unit_instance_id": "unit-1"},
+            "is_parameterized": False,
+            "options": [
+                {
+                    "option_id": "normal_move",
+                    "label": "Normal Move",
+                    "payload": {"movement_phase_action": "normal_move"},
+                }
+            ],
+        }
+    )
+    decision["is_parameterized"] = "false"
     with pytest.raises(UiClientProtocolError, match="is_parameterized must be a bool"):
         UiClientStatus.from_payload(
             {
                 "stage": "battle",
                 "status_kind": "waiting_for_decision",
-                "decision_request": {
-                    "request_id": "decision-request-000004",
-                    "decision_type": "select_movement_action",
-                    "actor_id": "player-a",
-                    "payload": {"unit_instance_id": "unit-1"},
-                    "is_parameterized": "false",
-                    "options": [
-                        {
-                            "option_id": "normal_move",
-                            "label": "Normal Move",
-                            "payload": {"movement_phase_action": "normal_move"},
-                        }
-                    ],
-                },
+                "decision_request": decision,
                 "message": None,
                 "payload": None,
             }
@@ -286,13 +319,11 @@ def test_status_rejects_non_bool_is_parameterized() -> None:
 def test_status_parameterized_proposal_request_requires_nested_identity_envelope(
     missing_key: str,
 ) -> None:
-    proposal_request = {
-        "request_id": "decision-request-000009",
-        "decision_type": "submit_stratagem_target_proposal",
-        "actor_id": "player-a",
-        "proposal_kind": "core:smokescreen",
-        "trigger_window": "after_unit_selected_as_target",
-    }
+    decision = current_decision_payload(_stratagem_decision_payload())
+    decision_payload = decision["payload"]
+    assert type(decision_payload) is dict
+    proposal_request = decision_payload["proposal_request"]
+    assert type(proposal_request) is dict
     del proposal_request[missing_key]
 
     with pytest.raises(UiClientProtocolError, match=f"{missing_key} is required"):
@@ -300,20 +331,7 @@ def test_status_parameterized_proposal_request_requires_nested_identity_envelope
             {
                 "stage": "battle",
                 "status_kind": "waiting_for_decision",
-                "decision_request": {
-                    "request_id": "decision-request-000009",
-                    "decision_type": "submit_stratagem_target_proposal",
-                    "actor_id": "player-a",
-                    "payload": {"proposal_request": proposal_request},
-                    "is_parameterized": True,
-                    "options": [
-                        {
-                            "option_id": "submit_parameterized_payload",
-                            "label": "Submit Parameterized Payload",
-                            "payload": {"submission_kind": "parameterized"},
-                        }
-                    ],
-                },
+                "decision_request": decision,
                 "message": None,
                 "payload": None,
             }
@@ -345,13 +363,11 @@ def test_status_parameterized_proposal_request_identity_must_match_outer_decisio
     replacement_value: str,
     expected_message: str,
 ) -> None:
-    proposal_request = {
-        "request_id": "decision-request-000009",
-        "decision_type": "submit_stratagem_target_proposal",
-        "actor_id": "player-a",
-        "proposal_kind": "core:smokescreen",
-        "trigger_window": "after_unit_selected_as_target",
-    }
+    decision = current_decision_payload(_stratagem_decision_payload())
+    decision_payload = decision["payload"]
+    assert type(decision_payload) is dict
+    proposal_request = decision_payload["proposal_request"]
+    assert type(proposal_request) is dict
     proposal_request[identity_key] = replacement_value
 
     with pytest.raises(UiClientProtocolError, match=expected_message):
@@ -359,20 +375,7 @@ def test_status_parameterized_proposal_request_identity_must_match_outer_decisio
             {
                 "stage": "battle",
                 "status_kind": "waiting_for_decision",
-                "decision_request": {
-                    "request_id": "decision-request-000009",
-                    "decision_type": "submit_stratagem_target_proposal",
-                    "actor_id": "player-a",
-                    "payload": {"proposal_request": proposal_request},
-                    "is_parameterized": True,
-                    "options": [
-                        {
-                            "option_id": "submit_parameterized_payload",
-                            "label": "Submit Parameterized Payload",
-                            "payload": {"submission_kind": "parameterized"},
-                        }
-                    ],
-                },
+                "decision_request": decision,
                 "message": None,
                 "payload": None,
             }
@@ -380,34 +383,17 @@ def test_status_parameterized_proposal_request_identity_must_match_outer_decisio
 
 
 def test_status_parameterized_outer_actor_id_is_required_for_identity_match() -> None:
+    decision = current_decision_payload(_stratagem_decision_payload())
+    del decision["actor_id"]
     with pytest.raises(
         UiClientProtocolError,
-        match=r"decision_request\.actor_id is required for parameterized proposals",
+        match="decision request is missing required field: actor_id",
     ):
         UiClientStatus.from_payload(
             {
                 "stage": "battle",
                 "status_kind": "waiting_for_decision",
-                "decision_request": {
-                    "request_id": "decision-request-000009",
-                    "decision_type": "submit_stratagem_target_proposal",
-                    "payload": {
-                        "proposal_request": {
-                            "request_id": "decision-request-000009",
-                            "decision_type": "submit_stratagem_target_proposal",
-                            "actor_id": "player-a",
-                            "proposal_kind": "core:smokescreen",
-                        }
-                    },
-                    "is_parameterized": True,
-                    "options": [
-                        {
-                            "option_id": "submit_parameterized_payload",
-                            "label": "Submit Parameterized Payload",
-                            "payload": {"submission_kind": "parameterized"},
-                        }
-                    ],
-                },
+                "decision_request": decision,
                 "message": None,
                 "payload": None,
             }
@@ -591,31 +577,46 @@ def test_status_represents_terminal_state() -> None:
 
 
 def test_game_view_represents_viewer_projection() -> None:
+    decision = {
+        "request_id": "decision-request-000005",
+        "decision_type": "submit_movement_proposal",
+        "actor_id": "player-a",
+        "payload": {"proposal_request": _movement_proposal_request_payload()},
+        "is_parameterized": True,
+        "options": [
+            {
+                "option_id": "submit_parameterized_payload",
+                "label": "Submit Parameterized Payload",
+                "payload": {"submission_kind": "parameterized"},
+            }
+        ],
+    }
     view = UiGameView.from_payload(
-        {
-            "viewer_player_id": "player-a",
-            "game_id": "phase2-game",
-            "stage": "battle",
-            "battle_round": 1,
-            "active_player_id": "player-a",
-            "current_setup_step": None,
-            "current_battle_phase": "movement",
-            "player_ids": ["player-a", "player-b"],
-            "battlefield_state": None,
-            "mission_setup": None,
-            "public_secondary_mission_choices": [],
-            "public_secondary_mission_card_states": [],
-            "public_command_point_ledgers": [],
-            "public_victory_point_ledgers": [],
-            "public_stratagem_use_records": [],
-            "pending_decision": None,
-            "pending_proposal": _movement_proposal_request_payload(),
-            "event_count": 3,
-        }
+        current_game_view_payload(
+            {
+                "viewer_player_id": "player-a",
+                "game_id": "phase2-game",
+                "stage": "battle",
+                "battle_round": 1,
+                "active_player_id": "player-a",
+                "current_setup_step": None,
+                "current_battle_phase": "movement",
+                "player_ids": ["player-a", "player-b"],
+                "battlefield_state": None,
+                "mission_setup": None,
+                "public_secondary_mission_choices": [],
+                "public_secondary_mission_card_states": [],
+                "public_command_point_ledgers": [],
+                "public_victory_point_ledgers": [],
+                "public_stratagem_use_records": [],
+                "pending_decision": decision,
+                "pending_proposal": None,
+            }
+        )
     )
 
     assert view.viewer_player_id == "player-a"
-    assert view.pending_decision is None
+    assert view.pending_decision is not None
     assert view.pending_proposal is not None
     assert view.pending_proposal.request_id == "decision-request-000005"
     assert view.pending_proposal.proposal_kind == "normal_move"
@@ -625,35 +626,36 @@ def test_game_view_represents_viewer_projection() -> None:
 
 def test_game_view_preserves_optional_display_maps() -> None:
     view = UiGameView.from_payload(
-        {
-            "viewer_player_id": "player-a",
-            "game_id": "phase28-game",
-            "stage": "setup",
-            "battle_round": 1,
-            "active_player_id": None,
-            "current_setup_step": "deployment",
-            "current_battle_phase": None,
-            "player_ids": ["player-a", "player-b"],
-            "battlefield_state": None,
-            "mission_setup": None,
-            "public_secondary_mission_choices": [],
-            "public_secondary_mission_card_states": [],
-            "public_command_point_ledgers": [],
-            "public_victory_point_ledgers": [],
-            "public_stratagem_use_records": [],
-            "pending_decision": None,
-            "pending_proposal": None,
-            "event_count": 3,
-            "unit_display_by_id": {
-                "unit-1": {
-                    "unit_instance_id": "unit-1",
-                    "owner_player_id": "player-a",
-                    "unit_display_name": "Battleline Infantry",
-                    "model_instance_ids": ["model-1", "model-2"],
-                }
-            },
-            "model_display_by_id": {"model-1": {"model_instance_id": "model-1"}},
-        }
+        current_game_view_payload(
+            {
+                "viewer_player_id": "player-a",
+                "game_id": "phase28-game",
+                "stage": "setup",
+                "battle_round": 1,
+                "active_player_id": None,
+                "current_setup_step": "deployment",
+                "current_battle_phase": None,
+                "player_ids": ["player-a", "player-b"],
+                "battlefield_state": None,
+                "mission_setup": None,
+                "public_secondary_mission_choices": [],
+                "public_secondary_mission_card_states": [],
+                "public_command_point_ledgers": [],
+                "public_victory_point_ledgers": [],
+                "public_stratagem_use_records": [],
+                "pending_decision": None,
+                "pending_proposal": None,
+                "unit_display_by_id": {
+                    "unit-1": {
+                        "unit_instance_id": "unit-1",
+                        "owner_player_id": "player-a",
+                        "unit_display_name": "Battleline Infantry",
+                        "model_instance_ids": ["model-1", "model-2"],
+                    }
+                },
+                "model_display_by_id": {"model-1": {"model_instance_id": "model-1"}},
+            }
+        )
     )
 
     assert view.unit_display_by_id["unit-1"] == {
@@ -671,45 +673,49 @@ def test_game_view_pending_proposal_missing_request_id_fails_fast() -> None:
         actor_id="player-b",
     )
 
-    with pytest.raises(UiClientProtocolError, match="request_id is required"):
-        UiGameView.from_payload(
-            {
-                "viewer_player_id": "player-a",
-                "game_id": "ui-live-smoke-game",
-                "stage": "battle",
-                "battle_round": 1,
-                "active_player_id": "player-a",
-                "current_setup_step": None,
-                "current_battle_phase": "movement",
-                "player_ids": ["player-a", "player-b"],
-                "battlefield_state": None,
-                "mission_setup": None,
-                "public_secondary_mission_choices": [],
-                "public_secondary_mission_card_states": [],
-                "public_command_point_ledgers": [],
-                "public_victory_point_ledgers": [],
-                "public_stratagem_use_records": [],
-                "pending_decision": {
-                    "request_id": "decision-request-000006",
-                    "decision_type": "submit_stratagem_target_proposal",
-                    "actor_id": "player-b",
-                    "payload": {
-                        "proposal_request": nested_proposal,
-                        "declinable": True,
-                    },
-                    "options": [
-                        {
-                            "option_id": "submit_parameterized_payload",
-                            "label": "Submit Parameterized Payload",
-                            "payload": {"submission_kind": "parameterized"},
-                        }
-                    ],
-                    "is_parameterized": True,
+    view_payload = current_game_view_payload(
+        {
+            "viewer_player_id": "player-a",
+            "game_id": "ui-live-smoke-game",
+            "stage": "battle",
+            "battle_round": 1,
+            "active_player_id": "player-a",
+            "current_setup_step": None,
+            "current_battle_phase": "movement",
+            "player_ids": ["player-a", "player-b"],
+            "battlefield_state": None,
+            "mission_setup": None,
+            "public_secondary_mission_choices": [],
+            "public_secondary_mission_card_states": [],
+            "public_command_point_ledgers": [],
+            "public_victory_point_ledgers": [],
+            "public_stratagem_use_records": [],
+            "pending_decision": {
+                "request_id": "decision-request-000006",
+                "decision_type": "submit_stratagem_target_proposal",
+                "actor_id": "player-b",
+                "payload": {
+                    "proposal_request": nested_proposal,
+                    "declinable": True,
                 },
-                "pending_proposal": _stratagem_target_proposal_request_payload(),
-                "event_count": 49,
-            }
-        )
+                "options": [
+                    {
+                        "option_id": "submit_parameterized_payload",
+                        "label": "Submit Parameterized Payload",
+                        "payload": {"submission_kind": "parameterized"},
+                    }
+                ],
+                "is_parameterized": True,
+            },
+            "pending_proposal": None,
+        }
+    )
+    pending_proposal = view_payload["pending_proposal"]
+    assert type(pending_proposal) is dict
+    del pending_proposal["request_id"]
+
+    with pytest.raises(UiClientProtocolError, match="request_id is required"):
+        UiGameView.from_payload(view_payload)
 
 
 def test_fake_core_client_records_explicit_submission_ids() -> None:
@@ -765,6 +771,7 @@ def _movement_proposal_request_payload() -> dict[str, object]:
         "source_decision_result_id": "ui-result-000017",
         "movement_phase_action": "normal_move",
         "placement_kinds": [],
+        "spatial_context_hash": "fixture-spatial-context-hash",
         "context": {
             "source_selected_option_id": "normal_move",
             "movement_mode": "normal",
@@ -808,11 +815,82 @@ def _placement_proposal_request_payload() -> dict[str, object]:
         "proposal_kind": "reinforcement_placement",
         "source_decision_request_id": "decision-request-unit-001",
         "source_decision_result_id": "ui-result-unit-001",
+        "battle_round": 1,
+        "phase": "movement",
+        "movement_phase_action": None,
+        "spatial_context_hash": "fixture-spatial-context-hash",
         "placement_kinds": ["reinforcement"],
-        "model_instance_ids": ["model-1", "model-2"],
         "context": {
             "placement_kind": "reinforcement",
             "reserve_state": "strategic_reserves",
+        },
+    }
+
+
+def _cult_ambush_marker_request_payload() -> dict[str, object]:
+    return {
+        "request_id": "decision-request-marker-001",
+        "decision_type": "submit_cult_ambush_marker_placement",
+        "actor_id": "player-a",
+        "source_rule_id": "core:cult-ambush",
+        "marker_id": "cult-ambush-marker:001",
+        "player_id": "player-a",
+        "replacement_unit_instance_id": "army-alpha:replacement-unit",
+        "destroyed_unit_instance_id": "army-alpha:destroyed-unit",
+        "marker_diameter_inches": 32.0 / 25.4,
+        "required_enemy_horizontal_distance_inches": 9.0,
+        "source_decision_request_id": "decision-request-resurgence-001",
+        "source_decision_result_id": "decision-result-resurgence-001",
+    }
+
+
+def _cult_ambush_marker_interaction_payload() -> dict[str, object]:
+    return {
+        "schema_version": "interaction-descriptor-v2-variants",
+        "interaction_kind": "battlefield_point_placement",
+        "submission_kind": "parameterized",
+        "proposal_kind": "cult_ambush_marker_placement",
+        "selected_entity_ids": [],
+        "required_inputs": [],
+        "submission_variants": [
+            {
+                "variant_id": "place_marker",
+                "interaction_kind": "battlefield_point_placement",
+                "required_inputs": ["battlefield_point"],
+                "proposal_schema_ref": (
+                    "proposal-payload.schema.json#/$defs/cult_ambush_marker_point"
+                ),
+                "display_label": "Place Marker",
+            },
+            {
+                "variant_id": "no_marker",
+                "interaction_kind": "confirmation",
+                "required_inputs": ["no_marker_reason"],
+                "proposal_schema_ref": (
+                    "proposal-payload.schema.json#/$defs/cult_ambush_no_marker"
+                ),
+                "display_label": "No Legal Marker Position",
+            },
+        ],
+        "constraints": {
+            "candidate_option_ids": ["submit_parameterized_payload"],
+            "entity_kinds": ["marker"],
+            "minimum_selections": None,
+            "maximum_selections": None,
+            "maximum_distance_in": None,
+            "minimum_enemy_distance_in": 9.0,
+            "exact_model_count": None,
+            "must_preserve_coherency": None,
+            "may_enter_engagement_range": None,
+            "placement_kinds": [],
+            "submission_schema_ref": "parameterized-submission.schema.json",
+            "proposal_schema_ref": (
+                "proposal-payload.schema.json#/$defs/cult_ambush_marker_placement"
+            ),
+        },
+        "display_hints": {
+            "confirm_label": "Place Point",
+            "decline_label": "No Legal Marker Position",
         },
     }
 
@@ -866,3 +944,28 @@ def _stratagem_target_proposal_request_payload_with_identity(
         }
     )
     return payload
+
+
+def _stratagem_decision_payload() -> dict[str, object]:
+    return {
+        "request_id": "decision-request-000009",
+        "decision_type": "submit_stratagem_target_proposal",
+        "actor_id": "player-a",
+        "payload": {
+            "proposal_request": {
+                "request_id": "decision-request-000009",
+                "decision_type": "submit_stratagem_target_proposal",
+                "actor_id": "player-a",
+                "proposal_kind": "stratagem_target_binding",
+                "trigger_window": "after_unit_selected_as_target",
+            }
+        },
+        "is_parameterized": True,
+        "options": [
+            {
+                "option_id": "submit_parameterized_payload",
+                "label": "Submit Parameterized Payload",
+                "payload": {"submission_kind": "parameterized"},
+            }
+        ],
+    }

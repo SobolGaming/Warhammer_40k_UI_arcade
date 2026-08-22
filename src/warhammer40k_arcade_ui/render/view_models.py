@@ -60,6 +60,7 @@ class DeploymentZoneView:
     label: str
     polygon: Polygon
     visible: bool
+    cutouts: tuple[Polygon, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "zone_id", _non_empty_string("zone_id", self.zone_id))
@@ -68,6 +69,13 @@ class DeploymentZoneView:
         object.__setattr__(self, "polygon", _validate_polygon("polygon", self.polygon))
         if type(self.visible) is not bool:
             raise RenderViewModelError("visible must be a bool.")
+        if type(self.cutouts) is not tuple:
+            raise RenderViewModelError("cutouts must be a tuple.")
+        object.__setattr__(
+            self,
+            "cutouts",
+            tuple(_validate_polygon("cutout", cutout) for cutout in self.cutouts),
+        )
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -78,6 +86,9 @@ class DeploymentZoneView:
             label=_required_string(zone, "label"),
             polygon=_required_polygon(zone, "polygon"),
             visible=_required_bool(zone, "visible"),
+            cutouts=tuple(
+                _validate_polygon("cutout", cutout) for cutout in _optional_list(zone, "cutouts")
+            ),
         )
 
 
@@ -119,6 +130,7 @@ class TerrainFootprintView:
     label: str
     footprint: Polygon
     source_kind: str = "terrain_feature"
+    logical_terrain_area_id: str | None = None
     objective_marker_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -127,6 +139,14 @@ class TerrainFootprintView:
         object.__setattr__(self, "footprint", _validate_polygon("footprint", self.footprint))
         if self.source_kind not in {"terrain_feature", "terrain_area"}:
             raise RenderViewModelError("source_kind must be terrain_feature or terrain_area.")
+        object.__setattr__(
+            self,
+            "logical_terrain_area_id",
+            _optional_non_empty_string(
+                "logical_terrain_area_id",
+                self.logical_terrain_area_id,
+            ),
+        )
         if type(self.objective_marker_ids) is not tuple:
             raise RenderViewModelError("objective_marker_ids must be a tuple.")
         object.__setattr__(
@@ -146,6 +166,10 @@ class TerrainFootprintView:
             label=_required_string(terrain, "label"),
             footprint=_required_polygon(terrain, "footprint"),
             source_kind=_optional_string(terrain, "source_kind") or "terrain_feature",
+            logical_terrain_area_id=_optional_string(
+                terrain,
+                "logical_terrain_area_id",
+            ),
             objective_marker_ids=tuple(
                 _required_string_item("objective_marker_id", marker_id)
                 for marker_id in _optional_list(terrain, "objective_marker_ids")
@@ -155,13 +179,15 @@ class TerrainFootprintView:
 
 @dataclass(frozen=True, slots=True)
 class ModelBaseView:
-    """Model base rendered as a circular footprint."""
+    """Model presentation with distinct support and measurement geometry."""
 
     model_id: str
     label: str
     position: Point
     base_radius: float
     base_movement_inches: float | None = None
+    support_footprint: Polygon | None = None
+    measurement_footprints: tuple[Polygon, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "model_id", _non_empty_string("model_id", self.model_id))
@@ -170,6 +196,22 @@ class ModelBaseView:
         _validate_positive_float("base_radius", self.base_radius)
         if self.base_movement_inches is not None:
             _validate_positive_float("base_movement_inches", self.base_movement_inches)
+        if self.support_footprint is not None:
+            object.__setattr__(
+                self,
+                "support_footprint",
+                _validate_polygon("support_footprint", self.support_footprint),
+            )
+        if type(self.measurement_footprints) is not tuple:
+            raise RenderViewModelError("measurement_footprints must be a tuple.")
+        object.__setattr__(
+            self,
+            "measurement_footprints",
+            tuple(
+                _validate_polygon("measurement_footprint", footprint)
+                for footprint in self.measurement_footprints
+            ),
+        )
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -180,6 +222,15 @@ class ModelBaseView:
             position=_required_point(model, "position"),
             base_radius=_required_positive_float(model, "base_radius"),
             base_movement_inches=_optional_positive_float(model, "base_movement_inches"),
+            support_footprint=(
+                None
+                if model.get("support_footprint") is None
+                else _required_polygon(model, "support_footprint")
+            ),
+            measurement_footprints=tuple(
+                _validate_polygon("measurement_footprint", footprint)
+                for footprint in _optional_list(model, "measurement_footprints")
+            ),
         )
 
 
@@ -265,6 +316,70 @@ class HudView:
 
 
 @dataclass(frozen=True, slots=True)
+class MeasurementOverlayView:
+    """Viewer-safe engine-authored distance overlay in battlefield coordinates."""
+
+    overlay_id: str
+    start: Point
+    end: Point
+    distance_inches: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "overlay_id", _non_empty_string("overlay_id", self.overlay_id))
+        object.__setattr__(self, "start", _validate_point("start", self.start))
+        object.__setattr__(self, "end", _validate_point("end", self.end))
+        _validate_non_negative_float("distance_inches", self.distance_inches)
+
+
+@dataclass(frozen=True, slots=True)
+class PathOverlayView:
+    """Viewer-safe engine-authored path overlay in battlefield coordinates."""
+
+    overlay_id: str
+    model_id: str
+    points: tuple[Point, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "overlay_id", _non_empty_string("overlay_id", self.overlay_id))
+        object.__setattr__(self, "model_id", _non_empty_string("model_id", self.model_id))
+        if type(self.points) is not tuple or len(self.points) < 2:
+            raise RenderViewModelError("path overlay points must contain at least two points.")
+        object.__setattr__(
+            self,
+            "points",
+            tuple(_validate_point("path overlay point", point) for point in self.points),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RenderHintView:
+    """Engine-authored presentation asset hint retained for asset resolution."""
+
+    entity_id: str
+    asset_id: str | None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "entity_id", _non_empty_string("entity_id", self.entity_id))
+        object.__setattr__(
+            self,
+            "asset_id",
+            _optional_non_empty_string("asset_id", self.asset_id),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class HitRegionView:
+    """Engine-authored hit-test region retained independently from rules geometry."""
+
+    entity_id: str
+    footprint: Polygon
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "entity_id", _non_empty_string("entity_id", self.entity_id))
+        object.__setattr__(self, "footprint", _validate_polygon("footprint", self.footprint))
+
+
+@dataclass(frozen=True, slots=True)
 class BattlefieldView:
     """Complete renderable battlefield projection."""
 
@@ -274,6 +389,13 @@ class BattlefieldView:
     terrain: tuple[TerrainFootprintView, ...]
     units: tuple[UnitView, ...]
     hud: HudView
+    interaction_request_id: str | None = None
+    selected_or_acting_entity_ids: tuple[str, ...] = ()
+    legal_candidate_refs: tuple[tuple[str, str], ...] = ()
+    measurement_overlays: tuple[MeasurementOverlayView, ...] = ()
+    path_overlays: tuple[PathOverlayView, ...] = ()
+    render_hints: tuple[RenderHintView, ...] = ()
+    hit_regions: tuple[HitRegionView, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.table) is not TableView:
@@ -288,6 +410,32 @@ class BattlefieldView:
             raise RenderViewModelError("units must be a tuple.")
         if type(self.hud) is not HudView:
             raise RenderViewModelError("hud must be a HudView.")
+        object.__setattr__(
+            self,
+            "interaction_request_id",
+            _optional_non_empty_string("interaction_request_id", self.interaction_request_id),
+        )
+        object.__setattr__(
+            self,
+            "selected_or_acting_entity_ids",
+            _validated_string_tuple(
+                "selected_or_acting_entity_ids",
+                self.selected_or_acting_entity_ids,
+            ),
+        )
+        if type(self.legal_candidate_refs) is not tuple:
+            raise RenderViewModelError("legal_candidate_refs must be a tuple.")
+        for reference_kind, reference_id in self.legal_candidate_refs:
+            _non_empty_string("reference_kind", reference_kind)
+            _non_empty_string("reference_id", reference_id)
+        _validate_typed_tuple(
+            "measurement_overlays",
+            self.measurement_overlays,
+            MeasurementOverlayView,
+        )
+        _validate_typed_tuple("path_overlays", self.path_overlays, PathOverlayView)
+        _validate_typed_tuple("render_hints", self.render_hints, RenderHintView)
+        _validate_typed_tuple("hit_regions", self.hit_regions, HitRegionView)
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -552,6 +700,28 @@ def _validate_positive_float(name: str, value: float) -> None:
         raise RenderViewModelError(f"{name} must be finite and positive.")
 
 
+def _validate_non_negative_float(name: str, value: float) -> None:
+    if value < 0 or not math.isfinite(value):
+        raise RenderViewModelError(f"{name} must be finite and non-negative.")
+
+
 def _validate_finite_float(name: str, value: float) -> None:
     if not math.isfinite(value):
         raise RenderViewModelError(f"{name} must be finite.")
+
+
+def _validated_string_tuple(name: str, value: object) -> tuple[str, ...]:
+    if type(value) is not tuple:
+        raise RenderViewModelError(f"{name} must be a tuple.")
+    return tuple(_non_empty_string(name, item) for item in cast(tuple[object, ...], value))
+
+
+def _validate_typed_tuple(
+    name: str,
+    value: object,
+    expected_type: type[object],
+) -> None:
+    if type(value) is not tuple:
+        raise RenderViewModelError(f"{name} must be a tuple.")
+    if any(type(item) is not expected_type for item in cast(tuple[object, ...], value)):
+        raise RenderViewModelError(f"{name} must contain {expected_type.__name__} items.")

@@ -21,6 +21,8 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiCoreClient,
     UiDecision,
     UiGameView,
+    UiRulesCatalogView,
+    UiSupportProfile,
 )
 from warhammer40k_arcade_ui.diagnostics.crash_report import (
     CrashReportContext,
@@ -184,6 +186,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         pending_decision: UiDecision | None = None,
         initial_status: UiClientStatus | None = None,
         initial_game_view: UiGameView | None = None,
+        initial_rules_catalog: UiRulesCatalogView | None = None,
+        initial_support_profile: UiSupportProfile | None = None,
         core_client: UiCoreClient | None = None,
         viewer_player_id: str = "player_1",
         event_cursor: int = 0,
@@ -218,6 +222,10 @@ class ArcadeWarhammerWindow(arcade.Window):
         self.background_color = arcade.color.DARK_SLATE_GRAY
         self._battlefield_view = resolved_battlefield_view
         self._last_game_view = initial_game_view
+        self._rules_catalog = initial_rules_catalog
+        self._support_profiles_by_viewer: dict[str, UiSupportProfile] = {}
+        if initial_support_profile is not None:
+            self._support_profiles_by_viewer[viewer_player_id] = initial_support_profile
         self._known_unit_display_by_id: JsonObject = (
             {} if initial_game_view is None else dict(initial_game_view.unit_display_by_id)
         )
@@ -299,6 +307,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         self._sync_selection_to_highlighted_option(source="initial_state")
         self._sync_assignment_workspace()
+        if initial_game_view is not None:
+            self._refresh_public_contract_data(initial_game_view)
 
     @property
     def camera(self) -> WorldCamera:
@@ -323,6 +333,18 @@ class ArcadeWarhammerWindow(arcade.Window):
         """Current viewer-scoped battlefield projection."""
 
         return self._battlefield_view
+
+    @property
+    def rules_catalog(self) -> UiRulesCatalogView | None:
+        """Current source-hashed public rules catalog used by HUD consumers."""
+
+        return self._rules_catalog
+
+    @property
+    def support_profile(self) -> UiSupportProfile | None:
+        """Current viewer-redacted support evidence used by diagnostics and HUDs."""
+
+        return self._support_profiles_by_viewer.get(self._viewer_player_id)
 
     @property
     def pending_decision(self) -> UiDecision | None:
@@ -520,6 +542,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             unit_display_by_id=self._known_unit_display_by_id,
             model_display_by_id=self._known_model_display_by_id,
             selected_assignment_group_id=self._selected_assignment_group_id,
+            game_view=self._last_game_view,
         )
         world_primitives = build_world_primitives(
             self._battlefield_view,
@@ -1405,6 +1428,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 movement_draft=self._movement_draft,
                 client=self._core_client,
                 viewer_player_id=self._viewer_player_id,
+                projection_state_hash=self._current_projection_state_hash(),
             )
         except UiClientProtocolError as exc:
             self._set_finite_state(self._fatal_game_engine_state(exc))
@@ -1470,6 +1494,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 placement_draft=self._placement_draft,
                 client=self._core_client,
                 viewer_player_id=self._viewer_player_id,
+                projection_state_hash=self._current_projection_state_hash(),
             )
         except UiClientProtocolError as exc:
             self._set_finite_state(self._fatal_game_engine_state(exc))
@@ -1682,28 +1707,15 @@ class ArcadeWarhammerWindow(arcade.Window):
         if current is not None and current.is_for(
             selection=self._selection_state,
             pending_decision=self._pending_decision,
+            projection_state_hash=self._current_projection_state_hash(),
         ):
             self._movement_draft = current.with_recomputed_hints(view=self._battlefield_view)
-            return
-        if (
-            current is not None
-            and self._pending_decision is not None
-            and self._selection_state.selected_unit_id == current.selected_unit_id
-            and current.can_retry_for(pending_decision=self._pending_decision)
-        ):
-            self._movement_draft = current.with_retry_request(
-                view=self._battlefield_view,
-                pending_decision=self._pending_decision,
-            )
-            self._selection_state = self._selection_state.with_movement_draft_overlays(
-                self._preferences
-            )
-            self._trace_movement_draft_event("ui.movement_draft_retry_request")
             return
         next_draft = MovementDraft.start_for_pending(
             view=self._battlefield_view,
             selection=self._selection_state,
             pending_decision=self._pending_decision,
+            projection_state_hash=self._current_projection_state_hash(),
         )
         if next_draft is not None:
             self._movement_draft = next_draft
@@ -1738,7 +1750,10 @@ class ArcadeWarhammerWindow(arcade.Window):
 
     def _sync_placement_draft(self) -> None:
         current = self._placement_draft
-        if current is not None and current.is_for(pending_decision=self._pending_decision):
+        if current is not None and current.is_for(
+            pending_decision=self._pending_decision,
+            projection_state_hash=self._current_projection_state_hash(),
+        ):
             self._placement_draft = current.with_recomputed_hints()
             return
         next_draft = PlacementDraft.start_for_pending(
@@ -1746,6 +1761,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             selection=self._selection_state,
             pending_decision=self._pending_decision,
             model_display_by_id=self._known_model_display_by_id,
+            projection_state_hash=self._current_projection_state_hash(),
         )
         if next_draft is not None:
             self._movement_draft = None
@@ -1769,6 +1785,11 @@ class ArcadeWarhammerWindow(arcade.Window):
                 event_name="ui.placement_draft_cleared",
                 summary={"reason": "context_mismatch"},
             )
+
+    def _current_projection_state_hash(self) -> str | None:
+        """Return the authoritative projection identity bound to local drafts."""
+
+        return None if self._last_game_view is None else self._last_game_view.projection_state_hash
 
     def _sync_assignment_workspace(self) -> None:
         current = self._assignment_workspace
@@ -1939,6 +1960,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         state: FiniteDecisionUiState,
     ) -> None:
         self._last_game_view = view
+        self._refresh_public_contract_data(view)
         self._known_unit_display_by_id = {
             **self._known_unit_display_by_id,
             **view.unit_display_by_id,
@@ -1975,9 +1997,44 @@ class ArcadeWarhammerWindow(arcade.Window):
             summary={
                 "phase_label": view.current_battle_phase or view.stage,
                 "active_player_id": view.active_player_id or "none",
-                "event_count": view.event_count,
+                "projection_schema": view.projection_schema,
+                "projection_state_hash": view.projection_state_hash,
             },
         )
+
+    def _refresh_public_contract_data(self, view: UiGameView) -> None:
+        if self._core_client is None:
+            return
+        if view.projection_schema == "ui-fixture-v1":
+            return
+        catalog_reference = view.rules_catalog
+        if catalog_reference is None:
+            raise UiClientProtocolError("Current game projection is missing rules_catalog.")
+        if (
+            self._rules_catalog is None
+            or self._rules_catalog.catalog_id != catalog_reference.catalog_id
+            or self._rules_catalog.source_hash != catalog_reference.source_hash
+        ):
+            catalog = self._core_client.get_rules_catalog()
+            if (
+                catalog.catalog_id != catalog_reference.catalog_id
+                or catalog.source_hash != catalog_reference.source_hash
+                or catalog.source_package_id != catalog_reference.source_package_id
+            ):
+                raise UiClientProtocolError(
+                    "Rules catalog projection does not match the game-view catalog reference."
+                )
+            self._rules_catalog = catalog
+        if self._viewer_player_id not in self._support_profiles_by_viewer:
+            profile = self._core_client.get_support_profile(self._viewer_player_id)
+            if (
+                profile.game_id != view.game_id
+                or profile.catalog_id != catalog_reference.catalog_id
+            ):
+                raise UiClientProtocolError(
+                    "Viewer support profile does not match the current game projection."
+                )
+            self._support_profiles_by_viewer[self._viewer_player_id] = profile
 
     def _trace_event(
         self,
@@ -2015,6 +2072,9 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "assigned_model_count": draft.assigned_model_count,
                 "unchanged_model_count": draft.unchanged_model_count,
                 "ready": draft.is_ready,
+                "submission_variant_id": draft.submission_variant_id,
+                "spatial_context_hash": draft.spatial_context_hash,
+                "projection_state_hash": draft.projection_state_hash,
             }
         if extra_summary is not None:
             summary.update(extra_summary)
@@ -2046,6 +2106,9 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "placed_model_count": draft.placed_model_count,
                 "total_model_count": draft.total_model_count,
                 "ready": draft.is_ready,
+                "submission_variant_id": draft.submission_variant_id,
+                "spatial_context_hash": draft.spatial_context_hash,
+                "projection_state_hash": draft.projection_state_hash,
             }
         if extra_summary is not None:
             summary.update(extra_summary)
@@ -2113,12 +2176,25 @@ class ArcadeWarhammerWindow(arcade.Window):
             game_id = placement_proposal.game_id
         elif movement_proposal is not None:
             game_id = movement_proposal.game_id
+        interaction = None if decision is None else decision.interaction
+        submission_variant_id = None
+        spatial_context_hash = None
+        if movement_draft is not None:
+            submission_variant_id = movement_draft.submission_variant_id
+            spatial_context_hash = movement_draft.spatial_context_hash
+        elif placement_draft is not None:
+            submission_variant_id = placement_draft.submission_variant_id
+            spatial_context_hash = placement_draft.spatial_context_hash
         return TraceContext(
             viewer_player_id=self._viewer_player_id,
             game_id=game_id,
             request_id=request_id,
             status_kind=self._finite_state.status_kind,
             event_cursor=self._event_cursor,
+            interaction_kind=None if interaction is None else interaction.interaction_kind,
+            submission_variant_id=submission_variant_id,
+            spatial_context_hash=spatial_context_hash,
+            projection_state_hash=self._current_projection_state_hash(),
         )
 
     def _current_crash_report_context(self) -> CrashReportContext:
@@ -2157,6 +2233,8 @@ def _context_menu_action_at(
 
 
 def _can_rebuild_core_projection(view: UiGameView) -> bool:
+    if view.projection_schema != "ui-fixture-v1":
+        return True
     return type(view.mission_setup) is dict and type(view.battlefield_state) is dict
 
 

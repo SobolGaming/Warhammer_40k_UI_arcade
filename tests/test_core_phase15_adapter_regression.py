@@ -9,6 +9,7 @@ from typing import cast
 
 import pytest
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
@@ -44,7 +45,7 @@ def test_phase21a_current_core_pending_proposals_are_strict_and_json_safe() -> N
 
     for name, proposal in pending_proposals.items():
         parsed = UiParameterizedProposalRequest.from_payload(proposal)
-        decision = UiDecision.from_payload(_parameterized_decision_payload(proposal))
+        decision = decision_from_fixture(_parameterized_decision_payload(proposal))
 
         assert parsed.request_id == _required_str(proposal, "request_id"), name
         assert parsed.decision_type == _required_str(proposal, "decision_type"), name
@@ -222,10 +223,8 @@ def test_phase29_stale_normal_move_draft_rejects_other_movement_contexts(
 
     assert submission is None
     assert invalid_status is not None
-    assert invalid_status.invalid_diagnostics[0].violation_code == (
-        "movement_proposal_context_drift"
-    )
-    assert invalid_status.invalid_diagnostics[0].field == "proposal_request"
+    assert invalid_status.invalid_diagnostics[0].violation_code == "stale_spatial_context_hash"
+    assert invalid_status.invalid_diagnostics[0].field == "spatial_context_hash"
     assert next_result_index == 4
 
 
@@ -289,19 +288,19 @@ def _proposal(name: str) -> JsonObject:
 
 
 def _finite_decision(name: str) -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         _copy_object(_object_section(_fixture(), "finite_decisions")[name])
     )
 
 
 def _parameterized_decision(name: str) -> UiDecision:
-    return UiDecision.from_payload(_parameterized_decision_payload(_proposal(name)))
+    return decision_from_fixture(_parameterized_decision_payload(_proposal(name)))
 
 
 def _parameterized_decision_with_request_id(*, proposal_name: str, request_id: str) -> UiDecision:
     proposal = _proposal(proposal_name)
     proposal["request_id"] = request_id
-    return UiDecision.from_payload(_parameterized_decision_payload(proposal))
+    return decision_from_fixture(_parameterized_decision_payload(proposal))
 
 
 def _parameterized_decision_payload(proposal: JsonObject) -> JsonObject:
@@ -322,7 +321,7 @@ def _parameterized_decision_payload(proposal: JsonObject) -> JsonObject:
 
 
 def _normal_move_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-normal-move-001",
             "decision_type": "submit_movement_proposal",
@@ -383,6 +382,20 @@ def _selected_intercessors() -> SelectionState:
 
 def _game_view_payload(*, pending_proposal: JsonValue) -> JsonObject:
     return {
+        "projection_schema": "game-view-v11-phase17n-step4",
+        "projection_state_hash": "fixture-projection-state-hash",
+        "rules_catalog": {
+            "catalog_id": "phase21a-fixture-catalog",
+            "projection_schema": "rules-catalog-view-v2",
+            "ruleset_id": {
+                "edition": "11e",
+                "game": "warhammer_40000",
+                "version": "phase21a-fixture",
+            },
+            "source_hash": "phase21a-fixture-source-hash",
+            "source_package_id": "phase21a-fixture-package",
+        },
+        "viewer_role": "player",
         "viewer_player_id": "player_1",
         "game_id": "phase21a-game",
         "stage": "battle",
@@ -395,12 +408,16 @@ def _game_view_payload(*, pending_proposal: JsonValue) -> JsonObject:
         "mission_setup": None,
         "public_secondary_mission_choices": [],
         "public_secondary_mission_card_states": [],
+        "primary_rules_unit_turn_start_snapshots": [],
+        "primary_mission_progress_state": None,
         "public_command_point_ledgers": [],
         "public_victory_point_ledgers": [],
         "public_stratagem_use_records": [],
+        "unit_display_by_id": {},
+        "model_display_by_id": {},
         "pending_decision": None,
         "pending_proposal": pending_proposal,
-        "event_count": 0,
+        "nested_interaction_requests": [],
     }
 
 
@@ -423,7 +440,6 @@ def _game_view(*, pending_decision: UiDecision | None) -> UiGameView:
         public_stratagem_use_records=(),
         pending_decision=pending_decision,
         pending_proposal=None,
-        event_count=0,
     )
 
 

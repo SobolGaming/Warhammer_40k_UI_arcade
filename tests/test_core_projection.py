@@ -408,7 +408,6 @@ def _game_view(
         public_stratagem_use_records=(),
         pending_decision=None,
         pending_proposal=None,
-        event_count=1,
         model_display_by_id={} if model_display_by_id is None else model_display_by_id,
     )
 

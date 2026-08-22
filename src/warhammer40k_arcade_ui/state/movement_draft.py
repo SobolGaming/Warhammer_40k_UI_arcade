@@ -24,6 +24,10 @@ from warhammer40k_arcade_ui.state.entity_selection import (
     entity_ref_for_model,
     unit_entity_ref,
 )
+from warhammer40k_arcade_ui.state.interaction_dispatch import (
+    MOVEMENT_EDITOR,
+    interaction_route_for_decision,
+)
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
 MOVEMENT_PROPOSAL_DECISION_TYPE = "submit_movement_proposal"
@@ -267,7 +271,7 @@ class MovementDraft:
     movement_mode: str | None
     fall_back_mode: str | None
     game_id: str
-    phase: str
+    phase: str | None
     player_id: str | None
     setup_step: str | None
     action_kind: str | None
@@ -284,6 +288,9 @@ class MovementDraft:
     movement_budget_inches: float | None
     base_movement_budget_inches: float | None
     local_hint_lines: tuple[str, ...]
+    submission_variant_id: str | None = None
+    spatial_context_hash: str | None = None
+    projection_state_hash: str | None = None
     ready_payload: JsonObject | None = None
     next_assignment_group_index: int = 1
 
@@ -326,7 +333,7 @@ class MovementDraft:
             _optional_string("fall_back_mode", self.fall_back_mode),
         )
         object.__setattr__(self, "game_id", _non_empty_string("game_id", self.game_id))
-        object.__setattr__(self, "phase", _non_empty_string("phase", self.phase))
+        object.__setattr__(self, "phase", _optional_string("phase", self.phase))
         object.__setattr__(self, "player_id", _optional_string("player_id", self.player_id))
         object.__setattr__(self, "setup_step", _optional_string("setup_step", self.setup_step))
         object.__setattr__(self, "action_kind", _optional_string("action_kind", self.action_kind))
@@ -397,6 +404,21 @@ class MovementDraft:
             "local_hint_lines",
             tuple(_non_empty_string("hint", hint) for hint in self.local_hint_lines),
         )
+        object.__setattr__(
+            self,
+            "submission_variant_id",
+            _optional_string("submission_variant_id", self.submission_variant_id),
+        )
+        object.__setattr__(
+            self,
+            "spatial_context_hash",
+            _optional_string("spatial_context_hash", self.spatial_context_hash),
+        )
+        object.__setattr__(
+            self,
+            "projection_state_hash",
+            _optional_string("projection_state_hash", self.projection_state_hash),
+        )
         if self.ready_payload is not None:
             object.__setattr__(
                 self,
@@ -416,6 +438,7 @@ class MovementDraft:
         view: BattlefieldView,
         selection: SelectionState,
         pending_decision: UiDecision | None,
+        projection_state_hash: str | None = None,
     ) -> MovementDraft | None:
         """Create a movement draft for the current movement proposal."""
 
@@ -429,12 +452,15 @@ class MovementDraft:
             return None
         if selection.selected_unit_id != unit.unit_id:
             return None
-        if proposal.movement_phase_action is None:
-            raise MovementDraftError("Movement proposal requires movement_phase_action.")
+        editor_action = _proposal_editor_action(proposal)
         movement_mode = _proposal_movement_mode(proposal)
         fall_back_mode = _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY)
         if movement_proposal_context_diagnostic(proposal) is not None:
             return None
+        route = interaction_route_for_decision(pending_decision)
+        if route.editor_id != MOVEMENT_EDITOR or not route.supported:
+            return None
+        submission_variant_id = route.submission_variant_id
         entity_selection = _seed_entity_selection(
             view=view,
             selection=selection,
@@ -446,7 +472,7 @@ class MovementDraft:
             proposal_request_id=proposal.request_id,
             decision_type=proposal.decision_type,
             proposal_kind=proposal.proposal_kind,
-            movement_phase_action=proposal.movement_phase_action,
+            movement_phase_action=editor_action,
             movement_mode=movement_mode,
             fall_back_mode=fall_back_mode,
             game_id=proposal.game_id,
@@ -480,6 +506,9 @@ class MovementDraft:
                 unit=unit,
             ),
             local_hint_lines=(),
+            submission_variant_id=submission_variant_id,
+            spatial_context_hash=proposal.spatial_context_hash,
+            projection_state_hash=projection_state_hash,
         )
         return draft.with_recomputed_hints(view=view)
 
@@ -622,71 +651,51 @@ class MovementDraft:
 
         return self.ready_payload
 
-    def is_for(self, *, selection: SelectionState, pending_decision: UiDecision | None) -> bool:
+    def is_for(
+        self,
+        *,
+        selection: SelectionState,
+        pending_decision: UiDecision | None,
+        projection_state_hash: str | None = None,
+    ) -> bool:
         """Return whether this draft still matches the selected unit and pending request."""
 
         if selection.selected_unit_id != self.selected_unit_id:
             return False
-        return self.matches_proposal_context(pending_decision=pending_decision)
+        return self.matches_proposal_context(
+            pending_decision=pending_decision,
+            projection_state_hash=projection_state_hash,
+        )
 
-    def matches_proposal_context(self, *, pending_decision: UiDecision | None) -> bool:
+    def matches_proposal_context(
+        self,
+        *,
+        pending_decision: UiDecision | None,
+        projection_state_hash: str | None = None,
+    ) -> bool:
         """Return whether this draft matches the current movement proposal context."""
 
         proposal = None if pending_decision is None else pending_decision.movement_proposal
+        route = (
+            None if pending_decision is None else interaction_route_for_decision(pending_decision)
+        )
+        variant_id = None if route is None else route.submission_variant_id
         return (
             proposal is not None
             and proposal.decision_type == self.decision_type
             and proposal.unit_instance_id == self.selected_unit_id
             and proposal.request_id == self.proposal_request_id
             and proposal.proposal_kind == self.proposal_kind
-            and proposal.movement_phase_action == self.movement_phase_action
+            and _proposal_editor_action(proposal) == self.movement_phase_action
             and _proposal_movement_mode(proposal) == self.movement_mode
             and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
+            and proposal.spatial_context_hash == self.spatial_context_hash
+            and variant_id == self.submission_variant_id
+            and (
+                self.projection_state_hash is None
+                or projection_state_hash == self.projection_state_hash
+            )
         )
-
-    def can_retry_for(self, *, pending_decision: UiDecision | None) -> bool:
-        """Return whether a fresh movement request can safely reuse this draft's paths."""
-
-        proposal = None if pending_decision is None else pending_decision.movement_proposal
-        return (
-            proposal is not None
-            and proposal.decision_type == self.decision_type
-            and proposal.unit_instance_id == self.selected_unit_id
-            and proposal.proposal_kind == self.proposal_kind
-            and proposal.source_decision_request_id == self.source_decision_request_id
-            and proposal.source_decision_result_id == self.source_decision_result_id
-            and proposal.movement_phase_action == self.movement_phase_action
-            and _proposal_movement_mode(proposal) == self.movement_mode
-            and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
-        )
-
-    def with_retry_request(
-        self,
-        *,
-        view: BattlefieldView,
-        pending_decision: UiDecision,
-    ) -> MovementDraft:
-        """Retarget drafted paths to a fresh same-context retry proposal request."""
-
-        if not self.can_retry_for(pending_decision=pending_decision):
-            raise MovementDraftError("Retry movement draft must match the new proposal context.")
-        proposal = pending_decision.movement_proposal
-        if proposal is None:
-            raise MovementDraftError("Retry movement draft requires a movement proposal.")
-        return replace(
-            self,
-            proposal_request_id=proposal.request_id,
-            ready_payload=None,
-            cursor_preview_point=None,
-            movement_budget_inches=_proposal_movement_budget_inches(
-                proposal=proposal,
-                unit=_unit_by_id(view, proposal.unit_instance_id),
-            ),
-            base_movement_budget_inches=_proposal_base_movement_budget_inches(
-                proposal=proposal,
-                unit=_unit_by_id(view, proposal.unit_instance_id),
-            ),
-        ).with_recomputed_hints(view=view)
 
     def replace_model_selection(
         self,
@@ -923,6 +932,8 @@ class MovementDraft:
     def to_payload(self) -> JsonObject:
         """Build the JSON-safe movement proposal payload for the committed draft."""
 
+        if self.proposal_kind == "scout_move":
+            return self._scout_move_payload()
         if not self.has_assignments and self.proposal_profile.allows_no_witness_no_move:
             return self._no_witness_no_move_payload()
         requires_sampled_witness = self.proposal_profile.requires_sampled_witness
@@ -971,6 +982,44 @@ class MovementDraft:
         elif self.fall_back_mode is not None:
             body["fall_back_mode"] = self.fall_back_mode
         return _json_object("movement proposal payload", body)
+
+    def _scout_move_payload(self) -> JsonObject:
+        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
+        body: JsonObject = {
+            "proposal_request_id": self.proposal_request_id,
+            "proposal_kind": self.proposal_kind,
+            "game_id": self.game_id,
+            "ruleset_descriptor_hash": _non_empty_string(
+                "ruleset_descriptor_hash",
+                self.ruleset_descriptor_hash,
+            ),
+            "setup_step": _non_empty_string("setup_step", self.setup_step),
+            "player_id": _non_empty_string("player_id", self.player_id),
+            "unit_instance_id": self.selected_unit_id,
+            "action_kind": _non_empty_string("action_kind", self.action_kind),
+            "source_rule_id": _non_empty_string("source_rule_id", self.source_rule_id),
+            "scout_distance_inches": _validated_finite_float(
+                "scout_distance_inches",
+                self.scout_distance_inches,
+            ),
+            "witness": {
+                "model_paths": [
+                    {
+                        "model_id": path.model_id,
+                        "poses": [
+                            _pose_payload(point)
+                            for point in path.payload_points(
+                                requires_sampled_witness=requires_sampled_witness
+                            )
+                        ],
+                    }
+                    for path in self.model_paths
+                ],
+            },
+        }
+        if self.proposal_context:
+            body["context"] = self.proposal_context
+        return _json_object("Scout Move proposal payload", body)
 
     def _no_witness_no_move_payload(self) -> JsonObject:
         body: JsonObject = {
@@ -1023,25 +1072,6 @@ class MovementDraft:
                 )
                 if consolidation_mode is not None:
                     body["consolidation_mode"] = consolidation_mode
-        elif self.proposal_kind == "scout_move":
-            body.update(
-                {
-                    "game_id": self.game_id,
-                    "ruleset_descriptor_hash": _non_empty_string(
-                        "ruleset_descriptor_hash",
-                        self.ruleset_descriptor_hash,
-                    ),
-                    "setup_step": _non_empty_string("setup_step", self.setup_step),
-                    "player_id": _non_empty_string("player_id", self.player_id),
-                    "action_kind": _non_empty_string("action_kind", self.action_kind),
-                    "source_rule_id": _non_empty_string("source_rule_id", self.source_rule_id),
-                    "scout_distance_inches": _validated_finite_float(
-                        "scout_distance_inches",
-                        self.scout_distance_inches,
-                    ),
-                    "context": self.proposal_context,
-                }
-            )
 
     def _with_entity_selection(
         self,
@@ -1095,6 +1125,9 @@ def movement_proposal_for_selected_unit(
     del view
     if selection.selected_unit_id is None or pending_decision is None:
         return None
+    route = interaction_route_for_decision(pending_decision)
+    if route.editor_id != MOVEMENT_EDITOR or not route.supported:
+        return None
     proposal = pending_decision.movement_proposal
     if proposal is None:
         return None
@@ -1135,6 +1168,9 @@ def movement_proposal_context_diagnostic_line(
 def _draftable_movement_proposal(
     pending_decision: UiDecision,
 ) -> UiMovementProposalRequest | None:
+    route = interaction_route_for_decision(pending_decision)
+    if route.editor_id != MOVEMENT_EDITOR or not route.supported:
+        return None
     proposal = pending_decision.movement_proposal
     if proposal is None:
         return None
@@ -1299,6 +1335,12 @@ def _proposal_movement_mode(proposal: UiMovementProposalRequest) -> str | None:
     if proposal.proposal_kind == "scout_move":
         return proposal.action_kind
     return None
+
+
+def _proposal_editor_action(proposal: UiMovementProposalRequest) -> str:
+    if proposal.decision_type == SCOUT_MOVE_DECISION_TYPE:
+        return _non_empty_string("action_kind", proposal.action_kind)
+    return _non_empty_string("movement_phase_action", proposal.movement_phase_action)
 
 
 def _unit_by_id(view: BattlefieldView, unit_id: str) -> UnitView | None:

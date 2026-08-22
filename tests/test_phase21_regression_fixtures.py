@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 from typing import cast
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
     UiClientStatus,
-    UiDecision,
     UiParameterizedProposalRequest,
     validate_json_value,
 )
@@ -25,7 +25,7 @@ def test_phase21_regression_fixture_sections_are_json_safe_and_parseable() -> No
 
     validate_json_value(fixture)
     for name, decision_payload in _object_section(fixture, "decision_requests").items():
-        decision = UiDecision.from_payload(decision_payload)
+        decision = decision_from_fixture(decision_payload)
         assert decision.request_id == _required_str(decision_payload, "request_id"), name
         assert decision.decision_type == _required_str(decision_payload, "decision_type"), name
         assert decision.actor_id == _required_str(decision_payload, "actor_id"), name

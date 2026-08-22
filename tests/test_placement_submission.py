@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
 from warhammer40k_arcade_ui.core_client.protocol import (
     UiClientStatus,
@@ -211,7 +212,7 @@ def _active_draft(decision: UiDecision) -> PlacementDraft:
 
 
 def _placement_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-placement-001",
             "decision_type": "submit_placement_proposal",
@@ -265,5 +266,4 @@ def _game_view(
         public_stratagem_use_records=(),
         pending_decision=pending_decision,
         pending_proposal=None,
-        event_count=0,
     )

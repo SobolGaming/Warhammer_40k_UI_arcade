@@ -20,6 +20,8 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiCoreClient,
     UiEventDelta,
     UiGameView,
+    UiRulesCatalogView,
+    UiSupportProfile,
     validate_json_value,
 )
 
@@ -70,6 +72,10 @@ class TraceContext:
     request_id: str | None = None
     status_kind: str | None = None
     event_cursor: int | None = None
+    interaction_kind: str | None = None
+    submission_variant_id: str | None = None
+    spatial_context_hash: str | None = None
+    projection_state_hash: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -443,19 +449,66 @@ class TracedCoreClient:
                 "game_id": view.game_id,
                 "stage": view.stage,
                 "battle_round": view.battle_round,
-                "event_count": view.event_count,
+                "projection_schema": view.projection_schema,
+                "projection_state_hash": view.projection_state_hash,
+                "interaction_kind": (
+                    None
+                    if view.pending_decision is None or view.pending_decision.interaction is None
+                    else view.pending_decision.interaction.interaction_kind
+                ),
                 "has_pending_decision": view.pending_decision is not None,
                 "has_pending_proposal": view.pending_proposal is not None,
             },
             payload=json_value_from_object(view),
-            context=TraceContext(
-                viewer_player_id=view.viewer_player_id,
-                game_id=view.game_id,
-                request_id=_view_request_id(view),
-                event_cursor=view.event_count,
-            ),
+            context=_view_trace_context(view),
         )
         return view
+
+    def get_rules_catalog(self) -> UiRulesCatalogView:
+        """Return and trace the source-hashed rules catalog projection."""
+
+        self.trace_writer.write_event(
+            category="core_client",
+            event_name="core.get_rules_catalog.request",
+        )
+        catalog = self.inner.get_rules_catalog()
+        self.trace_writer.write_event(
+            category="core_client",
+            event_name="core.get_rules_catalog.response",
+            summary={
+                "projection_schema": catalog.projection_schema,
+                "catalog_id": catalog.catalog_id,
+                "source_hash": catalog.source_hash,
+            },
+            payload=json_value_from_object(catalog),
+        )
+        return catalog
+
+    def get_support_profile(self, viewer_player_id: str) -> UiSupportProfile:
+        """Return and trace only the already viewer-redacted support profile."""
+
+        self.trace_writer.write_event(
+            category="core_client",
+            event_name="core.get_support_profile.request",
+            summary={"viewer_player_id": viewer_player_id},
+            context=TraceContext(viewer_player_id=viewer_player_id),
+        )
+        profile = self.inner.get_support_profile(viewer_player_id)
+        self.trace_writer.write_event(
+            category="core_client",
+            event_name="core.get_support_profile.response",
+            summary={
+                "schema_version": profile.schema_version,
+                "game_id": profile.game_id,
+                "catalog_id": profile.catalog_id,
+            },
+            payload=json_value_from_object(profile),
+            context=TraceContext(
+                viewer_player_id=viewer_player_id,
+                game_id=profile.game_id,
+            ),
+        )
+        return profile
 
     def get_events_since(self, cursor: int, viewer_player_id: str) -> UiEventDelta:
         """Return a viewer-scoped event delta and trace the payload."""
@@ -715,6 +768,14 @@ def _apply_context(*, row: JsonObject, context: TraceContext) -> None:
         row["status_kind"] = context.status_kind
     if context.event_cursor is not None:
         row["event_cursor"] = context.event_cursor
+    if context.interaction_kind is not None:
+        row["interaction_kind"] = context.interaction_kind
+    if context.submission_variant_id is not None:
+        row["submission_variant_id"] = context.submission_variant_id
+    if context.spatial_context_hash is not None:
+        row["spatial_context_hash"] = context.spatial_context_hash
+    if context.projection_state_hash is not None:
+        row["projection_state_hash"] = context.projection_state_hash
 
 
 def _json_payload_keys(payload: JsonValue) -> list[JsonValue]:
@@ -729,6 +790,28 @@ def _view_request_id(view: UiGameView) -> str | None:
     if view.pending_proposal is not None:
         return view.pending_proposal.request_id
     return None
+
+
+def _view_trace_context(view: UiGameView) -> TraceContext:
+    decision = view.pending_decision
+    interaction = None if decision is None else decision.interaction
+    variant_id = None
+    if interaction is not None and len(interaction.submission_variants) == 1:
+        variant_id = interaction.submission_variants[0].variant_id
+    spatial_context_hash = None
+    if view.pending_proposal is not None:
+        raw_hash = view.pending_proposal.payload.get("spatial_context_hash")
+        if type(raw_hash) is str and raw_hash:
+            spatial_context_hash = raw_hash
+    return TraceContext(
+        viewer_player_id=view.viewer_player_id,
+        game_id=view.game_id,
+        request_id=_view_request_id(view),
+        interaction_kind=None if interaction is None else interaction.interaction_kind,
+        submission_variant_id=variant_id,
+        spatial_context_hash=spatial_context_hash,
+        projection_state_hash=view.projection_state_hash,
+    )
 
 
 def _non_empty_trace_string(field_name: str, value: object) -> str:

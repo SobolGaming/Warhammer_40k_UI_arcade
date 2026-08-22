@@ -1,56 +1,100 @@
-"""Local in-process core session client."""
+"""Local in-process implementation of the public UI core-client facade."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import cast
 
-from warhammer40k_core.adapters.contracts import FiniteOptionSubmission, ParameterizedSubmission
+from warhammer40k_core.adapters.access_control import ViewerContext
+from warhammer40k_core.adapters.contracts import AdapterGameSession
 from warhammer40k_core.adapters.event_stream import EventStreamCursor
 from warhammer40k_core.adapters.local_session import LocalGameSession
-from warhammer40k_core.engine.decision_request import DecisionRequest
+from warhammer40k_core.adapters.redaction import public_support_profile_payload
+from warhammer40k_core.engine.decision_request import DecisionError
 from warhammer40k_core.engine.game_state import GameConfig
-from warhammer40k_core.engine.phase import LifecycleStatus
+from warhammer40k_core.engine.phase import GameLifecycleError, LifecycleStatus
 
+from warhammer40k_arcade_ui.core_client.compatibility import require_supported_core_contract
 from warhammer40k_arcade_ui.core_client.protocol import (
-    JsonObject,
     JsonValue,
     UiClientProtocolError,
     UiClientStatus,
+    UiClientSubmissionError,
     UiDecision,
     UiEventDelta,
     UiGameView,
+    UiRulesCatalogView,
+    UiSupportProfile,
+    invalid_diagnostics_from_status,
     validate_json_value,
 )
 
-_MOVEMENT_PROPOSAL_DECISION_TYPE = "submit_movement_proposal"
+
+def _new_local_session() -> AdapterGameSession:
+    return LocalGameSession()
+
+
+def _new_rules_catalog_cache() -> dict[tuple[str, str], UiRulesCatalogView]:
+    return {}
 
 
 @dataclass(slots=True)
 class LocalSessionClient:
-    """UI-facing facade over the core engine's local in-process session."""
+    """UI-facing facade over only the core's public `AdapterGameSession` methods."""
 
-    session: LocalGameSession = field(default_factory=LocalGameSession)
+    session: AdapterGameSession = field(default_factory=_new_local_session)
+    _last_viewer_player_id: str | None = field(default=None, init=False, repr=False)
+    _rules_catalog_cache: dict[tuple[str, str], UiRulesCatalogView] = field(
+        default_factory=_new_rules_catalog_cache,
+        init=False,
+        repr=False,
+    )
+
+    def __post_init__(self) -> None:
+        require_supported_core_contract()
 
     def start_game(self, config: object) -> UiClientStatus:
-        """Start a local game session."""
+        """Start a local game session through the public adapter facade."""
 
         if type(config) is not GameConfig:
             raise UiClientProtocolError("LocalSessionClient start_game requires a GameConfig.")
-        return status_from_lifecycle(self.session.start(config))
+        self._last_viewer_player_id = None
+        self._rules_catalog_cache.clear()
+        return self._status_from_lifecycle(self.session.start(config))
 
     def advance_until_decision_or_terminal(self) -> UiClientStatus:
-        """Advance until the core lifecycle requests input or reaches a terminal status."""
+        """Advance until the core exposes an adapter-visible boundary."""
 
-        return status_from_lifecycle(self.session.advance_until_decision_or_terminal())
+        return self._status_from_lifecycle(self.session.advance_until_decision_or_terminal())
 
     def get_view(self, viewer_player_id: str) -> UiGameView:
-        """Return a viewer-scoped game projection."""
+        """Return the strict viewer-scoped game projection."""
 
-        return UiGameView.from_payload(self.session.view(viewer_player_id=viewer_player_id))
+        view = UiGameView.from_payload(self.session.view(viewer_player_id=viewer_player_id))
+        self._last_viewer_player_id = viewer_player_id
+        return view
+
+    def get_rules_catalog(self) -> UiRulesCatalogView:
+        """Return the source-hashed catalog display projection."""
+
+        catalog = UiRulesCatalogView.from_payload(self.session.rules_catalog_view())
+        cache_key = (catalog.catalog_id, catalog.source_hash)
+        cached = self._rules_catalog_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        self._rules_catalog_cache[cache_key] = catalog
+        return catalog
+
+    def get_support_profile(self, viewer_player_id: str) -> UiSupportProfile:
+        """Return support evidence redacted for one player viewer."""
+
+        public_payload = public_support_profile_payload(
+            self.session.support_profile(),
+            viewer=ViewerContext.for_player(viewer_player_id),
+        )
+        return UiSupportProfile.from_payload(public_payload)
 
     def get_events_since(self, cursor: int, viewer_player_id: str) -> UiEventDelta:
-        """Return viewer-scoped event records after the supplied cursor."""
+        """Return viewer-scoped event records after the supplied local cursor."""
 
         return UiEventDelta.from_payload(
             self.session.events_since(
@@ -66,38 +110,17 @@ class LocalSessionClient:
         selected_option_id: str,
         result_id: str,
     ) -> UiClientStatus:
-        """Submit a finite option using explicit UI-supplied request and result IDs."""
+        """Submit one current engine-provided finite option."""
 
-        pending_or_status = self._pending_request_for_submission(
-            request_id=request_id,
-            no_pending_message="Finite submission requires a pending DecisionRequest.",
-        )
-        if isinstance(pending_or_status, UiClientStatus):
-            return pending_or_status
-        pending_request = pending_or_status
-        pending_decision = _decision_from_request(pending_request)
-        if pending_request.is_parameterized_submission_request():
-            return self._invalid_submission_status(
-                violation_code="finite_submission_for_parameterized_request",
-                message="Finite submission cannot answer a parameterized request.",
-                field="selected_option_id",
-                decision=pending_decision,
+        try:
+            status = self.session.submit_option(
+                request_id=request_id,
+                option_id=selected_option_id,
+                result_id=result_id,
             )
-        if selected_option_id not in {option.option_id for option in pending_request.options}:
-            return self._invalid_submission_status(
-                violation_code="selected_option_not_pending",
-                message="Finite submission selected option is not pending.",
-                field="selected_option_id",
-                decision=pending_decision,
-            )
-        submission = FiniteOptionSubmission(
-            request_id=request_id,
-            selected_option_id=selected_option_id,
-            result_id=result_id,
-        )
-        return status_from_lifecycle(
-            self.session.lifecycle.submit_decision(submission.to_result(pending_request))
-        )
+        except (DecisionError, GameLifecycleError) as exc:
+            raise UiClientSubmissionError(str(exc)) from exc
+        return self._status_from_lifecycle(status)
 
     def submit_movement_payload(
         self,
@@ -106,37 +129,12 @@ class LocalSessionClient:
         payload: JsonValue,
         result_id: str,
     ) -> UiClientStatus:
-        """Submit a movement payload using explicit UI-supplied request and result IDs."""
+        """Submit movement through the same public parameterized facade."""
 
-        pending_or_status = self._pending_request_for_submission(
+        return self.submit_parameterized_payload(
             request_id=request_id,
-            no_pending_message=("Movement payload submission requires a pending DecisionRequest."),
-        )
-        if isinstance(pending_or_status, UiClientStatus):
-            return pending_or_status
-        pending_request = pending_or_status
-        pending_decision = _decision_from_request(pending_request)
-        if not pending_request.is_parameterized_submission_request():
-            return self._invalid_submission_status(
-                violation_code="movement_payload_for_finite_request",
-                message="Movement payload submission requires a parameterized request.",
-                field="request_id",
-                decision=pending_decision,
-            )
-        if pending_request.decision_type != _MOVEMENT_PROPOSAL_DECISION_TYPE:
-            return self._invalid_submission_status(
-                violation_code="unsupported_parameterized_request",
-                message="submit_movement_payload can answer only movement proposal requests.",
-                field="decision_type",
-                decision=pending_decision,
-            )
-        submission = ParameterizedSubmission(
-            request_id=request_id,
-            payload=validate_json_value(payload),
+            payload=payload,
             result_id=result_id,
-        )
-        return status_from_lifecycle(
-            self.session.lifecycle.submit_decision(submission.to_result(pending_request))
         )
 
     def submit_parameterized_payload(
@@ -146,135 +144,46 @@ class LocalSessionClient:
         payload: JsonValue,
         result_id: str,
     ) -> UiClientStatus:
-        """Submit a generic parameterized proposal payload with explicit request/result IDs."""
+        """Submit a JSON-safe parameterized proposal through the public facade."""
 
-        pending_or_status = self._pending_request_for_submission(
-            request_id=request_id,
-            no_pending_message=("Parameterized payload submission requires a pending request."),
-        )
-        if isinstance(pending_or_status, UiClientStatus):
-            return pending_or_status
-        pending_request = pending_or_status
-        pending_decision = _decision_from_request(pending_request)
-        if not pending_request.is_parameterized_submission_request():
-            return self._invalid_submission_status(
-                violation_code="parameterized_payload_for_finite_request",
-                message="Parameterized payload submission requires a parameterized request.",
-                field="request_id",
-                decision=pending_decision,
+        try:
+            status = self.session.submit_parameterized_payload(
+                request_id=request_id,
+                payload=validate_json_value(payload),
+                result_id=result_id,
             )
-        submission = ParameterizedSubmission(
-            request_id=request_id,
-            payload=validate_json_value(payload),
-            result_id=result_id,
-        )
-        return status_from_lifecycle(
-            self.session.lifecycle.submit_decision(submission.to_result(pending_request))
-        )
+        except (DecisionError, GameLifecycleError) as exc:
+            raise UiClientSubmissionError(str(exc)) from exc
+        return self._status_from_lifecycle(status)
 
-    def _pending_request_for_submission(
-        self,
-        *,
-        request_id: str,
-        no_pending_message: str,
-    ) -> DecisionRequest | UiClientStatus:
-        pending_requests = self.session.lifecycle.decision_controller.queue.pending_requests
-        if not pending_requests:
-            return self._invalid_submission_status(
-                violation_code="no_pending_decision",
-                message=no_pending_message,
-                field="request_id",
-            )
-        queue_head = pending_requests[0]
-        if queue_head.request_id == request_id:
-            return queue_head
-        queue_head_payload: JsonObject = {
-            "submitted_request_id": request_id,
-            "queue_head_request_id": queue_head.request_id,
-        }
-        queue_head_decision = _decision_from_request(queue_head)
-        if any(pending.request_id == request_id for pending in pending_requests[1:]):
-            return self._invalid_submission_status(
-                violation_code="non_head_pending_request",
-                message=(
-                    "Submission request_id matches a queued request that is not the "
-                    "queue head. "
-                    f"submitted_request_id={request_id!r}, "
-                    f"queue_head_request_id={queue_head.request_id!r}."
-                ),
-                field="request_id",
-                decision=queue_head_decision,
-                payload_fields=queue_head_payload,
-            )
-        return self._invalid_submission_status(
-            violation_code="stale_request_id",
-            message=(
-                "Submission request_id does not match any pending request. "
-                f"submitted_request_id={request_id!r}, "
-                f"queue_head_request_id={queue_head.request_id!r}."
-            ),
-            field="request_id",
-            decision=queue_head_decision,
-            payload_fields=queue_head_payload,
-        )
-
-    def _invalid_submission_status(
-        self,
-        *,
-        violation_code: str,
-        message: str,
-        field: str,
-        decision: UiDecision | None = None,
-        payload_fields: JsonObject | None = None,
-    ) -> UiClientStatus:
-        payload: JsonObject = {
-            "invalid_reason": violation_code,
-            "field": field,
-        }
-        if payload_fields is not None:
-            payload.update(payload_fields)
-        return UiClientStatus.invalid(
-            stage=self._current_stage(),
-            violation_code=violation_code,
-            message=message,
-            field=field,
-            payload=payload,
+    def _status_from_lifecycle(self, status: LifecycleStatus) -> UiClientStatus:
+        decision, viewer_player_id = self._projected_decision_for_status(status)
+        if viewer_player_id is not None:
+            self._last_viewer_player_id = viewer_player_id
+        message = status.message
+        payload = validate_json_value(status.payload)
+        status_kind = status.status_kind.value
+        return UiClientStatus(
+            stage=status.stage.value,
+            status_kind=status_kind,
             decision=decision,
+            message=message,
+            payload=payload,
+            invalid_diagnostics=invalid_diagnostics_from_status(
+                status_kind=status_kind,
+                message=message,
+                payload=payload,
+            ),
         )
 
-    def _current_stage(self) -> str:
-        state = self.session.lifecycle.state
-        if state is None:
-            return "setup"
-        return state.stage.value
-
-
-def status_from_lifecycle(status: LifecycleStatus) -> UiClientStatus:
-    return UiClientStatus.from_payload(
-        {
-            "stage": status.stage.value,
-            "status_kind": status.status_kind.value,
-            "decision_request": (
-                None
-                if status.decision_request is None
-                else _decision_payload_from_request(status.decision_request)
-            ),
-            "message": status.message,
-            "payload": status.payload,
-        }
-    )
-
-
-def _decision_from_request(request: DecisionRequest) -> UiDecision:
-    return UiDecision.from_payload(_decision_payload_from_request(request))
-
-
-def _decision_payload_from_request(request: DecisionRequest) -> JsonObject:
-    return {
-        "request_id": request.request_id,
-        "decision_type": request.decision_type,
-        "actor_id": request.actor_id,
-        "payload": request.payload,
-        "options": [cast(JsonValue, option.to_payload()) for option in request.options],
-        "is_parameterized": request.is_parameterized_submission_request(),
-    }
+    def _projected_decision_for_status(
+        self,
+        status: LifecycleStatus,
+    ) -> tuple[UiDecision | None, str | None]:
+        request = status.decision_request
+        actor_id = None if request is None else request.actor_id
+        viewer_player_id = actor_id or self._last_viewer_player_id
+        if viewer_player_id is None:
+            return None, None
+        view = UiGameView.from_payload(self.session.view(viewer_player_id=viewer_player_id))
+        return view.pending_decision, viewer_player_id

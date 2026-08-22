@@ -1,217 +1,122 @@
-"""Tests for the local core session facade."""
+"""Tests for the public local core-session facade."""
 
 from __future__ import annotations
 
 import pytest
 from warhammer40k_core.adapters.local_session import LocalGameSession
-from warhammer40k_core.engine.decision_request import DecisionOption, DecisionRequest
+from warhammer40k_core.adapters.setup_smoke import canonical_setup_prebattle_smoke_config
 
 from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
+from warhammer40k_arcade_ui.core_client.protocol import (
+    UiClientStatus,
+    UiClientSubmissionError,
+    UiDecision,
+)
 
 
 def test_local_session_submit_finite_rejects_stale_explicit_request_id() -> None:
-    client = LocalSessionClient(session=LocalGameSession())
-    client.session.lifecycle.decision_controller.request_decision(_finite_request())
+    client, waiting = _waiting_public_client()
+    decision = _required_decision(waiting)
 
-    status = client.submit_finite(
-        request_id="decision-request-stale",
-        selected_option_id="normal_move",
-        result_id="ui-result-000001",
-    )
+    with pytest.raises(UiClientSubmissionError, match="does not match pending request"):
+        client.submit_finite(
+            request_id="decision-request-stale",
+            selected_option_id=decision.options[0].option_id,
+            result_id="ui-result-stale",
+        )
 
-    assert status.status_kind == "invalid"
-    assert status.invalid_diagnostics[0].violation_code == "stale_request_id"
-    assert status.decision is not None
-    assert status.decision.request_id == "decision-request-000004"
-    assert isinstance(status.payload, dict)
-    assert status.payload["submitted_request_id"] == "decision-request-stale"
-    assert status.payload["queue_head_request_id"] == "decision-request-000004"
-    assert client.session.lifecycle.decision_controller.queue.pending_requests[0].request_id == (
-        "decision-request-000004"
-    )
+    refreshed = client.get_view(_required_actor(decision.actor_id))
+    assert refreshed.pending_decision is not None
+    assert refreshed.pending_decision.request_id == decision.request_id
 
 
 def test_local_session_submit_finite_requires_explicit_result_id() -> None:
-    client = LocalSessionClient(session=LocalGameSession())
-    client.session.lifecycle.decision_controller.request_decision(_finite_request())
+    client, waiting = _waiting_public_client()
+    decision = _required_decision(waiting)
 
     with pytest.raises(TypeError):
         client.submit_finite(  # type: ignore[call-arg]
-            request_id="decision-request-000004",
-            selected_option_id="normal_move",
+            request_id=decision.request_id,
+            selected_option_id=decision.options[0].option_id,
         )
 
 
 def test_local_session_submit_finite_rejects_non_pending_option_id() -> None:
-    client = LocalSessionClient(session=LocalGameSession())
-    client.session.lifecycle.decision_controller.request_decision(_finite_request())
+    client, waiting = _waiting_public_client()
+    decision = _required_decision(waiting)
 
-    status = client.submit_finite(
-        request_id="decision-request-000004",
-        selected_option_id="invented_option",
-        result_id="ui-result-000001",
-    )
-
-    assert status.status_kind == "invalid"
-    assert status.invalid_diagnostics[0].violation_code == "selected_option_not_pending"
-    assert status.invalid_diagnostics[0].field == "selected_option_id"
-
-
-def test_local_session_submit_finite_rejects_matching_non_head_pending_request() -> None:
-    client = LocalSessionClient(session=LocalGameSession())
-    client.session.lifecycle.decision_controller.request_decision(_finite_request())
-    client.session.lifecycle.decision_controller.request_decision(_alternate_finite_request())
-
-    status = client.submit_finite(
-        request_id="decision-request-000006",
-        selected_option_id="advance_move",
-        result_id="ui-result-000002",
-    )
-
-    assert status.status_kind == "invalid"
-    assert status.invalid_diagnostics[0].violation_code == "non_head_pending_request"
-    assert status.invalid_diagnostics[0].field == "request_id"
-    assert status.decision is not None
-    assert status.decision.request_id == "decision-request-000004"
-    assert isinstance(status.payload, dict)
-    assert status.payload["submitted_request_id"] == "decision-request-000006"
-    assert status.payload["queue_head_request_id"] == "decision-request-000004"
-    assert client.session.lifecycle.decision_controller.queue.pending_requests[0].request_id == (
-        "decision-request-000004"
-    )
-
-
-def test_local_session_submit_movement_payload_rejects_finite_request() -> None:
-    client = LocalSessionClient(session=LocalGameSession())
-    client.session.lifecycle.decision_controller.request_decision(_finite_request())
-
-    status = client.submit_movement_payload(
-        request_id="decision-request-000004",
-        payload={"proposal_request_id": "decision-request-000004"},
-        result_id="ui-result-000001",
-    )
-
-    assert status.status_kind == "invalid"
-    assert status.invalid_diagnostics[0].violation_code == "movement_payload_for_finite_request"
-    assert status.invalid_diagnostics[0].field == "request_id"
-
-
-def test_local_session_submit_movement_payload_rejects_stale_explicit_request_id() -> None:
-    client = LocalSessionClient(session=LocalGameSession())
-    client.session.lifecycle.decision_controller.request_decision(_movement_proposal_request())
-
-    status = client.submit_movement_payload(
-        request_id="decision-request-stale",
-        payload={"proposal_request_id": "decision-request-stale"},
-        result_id="ui-result-000001",
-    )
-
-    assert status.status_kind == "invalid"
-    assert status.invalid_diagnostics[0].violation_code == "stale_request_id"
-    assert status.decision is not None
-    assert status.decision.is_parameterized is True
-    assert status.decision.movement_proposal is not None
-    assert status.decision.movement_proposal.request_id == "decision-request-000005"
-    assert isinstance(status.payload, dict)
-    assert status.payload["submitted_request_id"] == "decision-request-stale"
-    assert status.payload["queue_head_request_id"] == "decision-request-000005"
-
-
-def test_local_session_submit_movement_payload_rejects_matching_non_head_request() -> None:
-    client = LocalSessionClient(session=LocalGameSession())
-    client.session.lifecycle.decision_controller.request_decision(_finite_request())
-    client.session.lifecycle.decision_controller.request_decision(_movement_proposal_request())
-
-    status = client.submit_movement_payload(
-        request_id="decision-request-000005",
-        payload={"proposal_request_id": "decision-request-000005"},
-        result_id="ui-result-000002",
-    )
-
-    assert status.status_kind == "invalid"
-    assert status.invalid_diagnostics[0].violation_code == "non_head_pending_request"
-    assert status.invalid_diagnostics[0].field == "request_id"
-    assert status.decision is not None
-    assert status.decision.request_id == "decision-request-000004"
-    assert status.decision.is_parameterized is False
-    assert isinstance(status.payload, dict)
-    assert status.payload["submitted_request_id"] == "decision-request-000005"
-    assert status.payload["queue_head_request_id"] == "decision-request-000004"
-
-
-def test_local_session_submit_movement_payload_requires_explicit_result_id() -> None:
-    client = LocalSessionClient(session=LocalGameSession())
-    client.session.lifecycle.decision_controller.request_decision(_movement_proposal_request())
-
-    with pytest.raises(TypeError):
-        client.submit_movement_payload(  # type: ignore[call-arg]
-            request_id="decision-request-000005",
-            payload={"proposal_request_id": "decision-request-000005"},
+    with pytest.raises(UiClientSubmissionError, match="not in the finite action space"):
+        client.submit_finite(
+            request_id=decision.request_id,
+            selected_option_id="invented_option",
+            result_id="ui-result-invented",
         )
 
 
-def _finite_request() -> DecisionRequest:
-    return DecisionRequest(
-        request_id="decision-request-000004",
-        decision_type="select_movement_action",
-        actor_id="player-a",
-        payload={"unit_instance_id": "unit-1"},
-        options=(
-            DecisionOption(
-                option_id="normal_move",
-                label="Normal Move",
-                payload={"movement_phase_action": "normal_move"},
-            ),
-        ),
+def test_local_session_parameterized_submission_rejects_finite_request() -> None:
+    client, waiting = _waiting_public_client()
+    decision = _required_decision(waiting)
+    assert decision.is_parameterized is False
+
+    with pytest.raises(UiClientSubmissionError, match="requires a parameterized request"):
+        client.submit_parameterized_payload(
+            request_id=decision.request_id,
+            payload={"proposal_request_id": decision.request_id},
+            result_id="ui-result-wrong-kind",
+        )
+
+
+def test_local_session_valid_finite_submission_uses_public_facade() -> None:
+    client, waiting = _waiting_public_client()
+    decision = _required_decision(waiting)
+
+    submitted = client.submit_finite(
+        request_id=decision.request_id,
+        selected_option_id=decision.options[0].option_id,
+        result_id="ui-result-valid",
     )
 
-
-def _alternate_finite_request() -> DecisionRequest:
-    return DecisionRequest(
-        request_id="decision-request-000006",
-        decision_type="select_movement_action",
-        actor_id="player-a",
-        payload={"unit_instance_id": "unit-2"},
-        options=(
-            DecisionOption(
-                option_id="advance_move",
-                label="Advance",
-                payload={"movement_phase_action": "advance_move"},
-            ),
-        ),
-    )
+    assert submitted.status_kind in {"advanced", "waiting_for_decision"}
+    delta = client.get_events_since(0, _required_actor(decision.actor_id))
+    assert delta.next_cursor >= delta.cursor
 
 
-def _movement_proposal_request() -> DecisionRequest:
-    return DecisionRequest(
-        request_id="decision-request-000005",
-        decision_type="submit_movement_proposal",
-        actor_id="player-a",
-        payload={
-            "proposal_request": {
-                "request_id": "decision-request-000005",
-                "decision_type": "submit_movement_proposal",
-                "actor_id": "player-a",
-                "game_id": "phase2-game",
-                "battle_round": 1,
-                "phase": "movement",
-                "unit_instance_id": "unit-1",
-                "proposal_kind": "normal_move",
-                "source_decision_request_id": "decision-request-000004",
-                "source_decision_result_id": "ui-result-000017",
-                "movement_phase_action": "normal_move",
-                "placement_kinds": [],
-                "context": {
-                    "source_selected_option_id": "normal_move",
-                    "movement_mode": "normal",
-                },
-            }
-        },
-        options=(
-            DecisionOption(
-                option_id="submit_parameterized_payload",
-                label="Submit Parameterized Payload",
-                payload={"submission_kind": "parameterized"},
-            ),
-        ),
-    )
+def test_local_session_catalog_is_cached_by_public_identity() -> None:
+    client, _waiting = _waiting_public_client()
+
+    first = client.get_rules_catalog()
+    second = client.get_rules_catalog()
+
+    assert second is first
+    assert first.catalog_id
+    assert first.source_hash
+
+
+def test_local_session_support_profile_is_player_scoped() -> None:
+    client, waiting = _waiting_public_client()
+    actor_id = _required_actor(_required_decision(waiting).actor_id)
+
+    profile = client.get_support_profile(actor_id)
+
+    assert profile.capability_manifest.viewer_scope == actor_id
+    assert profile.capability_manifest.interaction_kinds
+
+
+def _waiting_public_client() -> tuple[LocalSessionClient, UiClientStatus]:
+    client = LocalSessionClient(session=LocalGameSession())
+    client.start_game(canonical_setup_prebattle_smoke_config())
+    waiting = client.advance_until_decision_or_terminal()
+    assert waiting.status_kind == "waiting_for_decision"
+    return client, waiting
+
+
+def _required_decision(status: UiClientStatus) -> UiDecision:
+    decision = status.decision
+    assert decision is not None
+    assert decision.options
+    return decision
+
+
+def _required_actor(actor_id: str | None) -> str:
+    assert actor_id is not None
+    return actor_id

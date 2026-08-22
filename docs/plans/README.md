@@ -19,11 +19,11 @@ projection data, collects intent, submits engine requests, and displays diagnost
 7. [Phase 31: Scrollable Player Units Roster](finished/phase-31-scrollable-player-units-roster.md)
 8. [Phase 32: Opportunity Window And Interface Intent Tray](phase-32-opportunity-window-and-interface-intent-tray.md)
 9. [Phase 33: Typed Terrain Area Projection Adaptation](finished/phase-33-typed-terrain-area-projection-adaptation.md)
-10. [Phase 34: Core Contract 10.2 Adapter And Projection Adaptation](phase-34-core-contract-10-adaptation.md)
+10. [Phase 34: Core Contract 10.2 Adapter And Projection Adaptation](finished/phase-34-core-contract-10-adaptation.md)
 
-Phase 34 is an immediate compatibility gate introduced after Phase 33. It must complete before the
-remaining Phase 32 implementation because Phase 32 now depends on the engine-authored Phase 18I
-interaction descriptor rather than the older `submission_family` routing assumption.
+Phase 34 completed the immediate compatibility gate introduced after Phase 33. The remaining Phase
+32 implementation can now build on the engine-authored interaction descriptor rather than the older
+`submission_family` routing assumption.
 
 ## Core Drift Adaptation
 

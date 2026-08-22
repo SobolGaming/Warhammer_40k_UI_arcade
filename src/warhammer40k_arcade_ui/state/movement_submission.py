@@ -15,6 +15,10 @@ from warhammer40k_arcade_ui.state.finite_decision import (
     FiniteDecisionUiState,
     refresh_submission_projection,
 )
+from warhammer40k_arcade_ui.state.interaction_dispatch import (
+    MOVEMENT_EDITOR,
+    interaction_route_for_decision,
+)
 from warhammer40k_arcade_ui.state.movement_draft import (
     SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES,
     SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS,
@@ -48,6 +52,7 @@ def prepare_movement_submission(
     movement_draft: MovementDraft | None,
     pending_decision: UiDecision | None,
     next_result_index: int,
+    projection_state_hash: str | None = None,
 ) -> tuple[UiClientStatus | None, MovementProposalSubmission | None, int]:
     """Prepare a movement proposal submission or return a UI-boundary invalid status."""
 
@@ -80,6 +85,18 @@ def prepare_movement_submission(
                 violation_code="movement_payload_for_finite_request",
                 message="Movement payload submission requires a parameterized request.",
                 field="request_id",
+            ),
+            None,
+            next_result_index,
+        )
+    route = interaction_route_for_decision(pending_decision)
+    if route.editor_id != MOVEMENT_EDITOR or not route.supported:
+        return (
+            _local_invalid(
+                pending_decision=pending_decision,
+                violation_code="unsupported_interaction_route",
+                message=route.diagnostic or "The current interaction is not a movement editor.",
+                field="interaction.interaction_kind",
             ),
             None,
             next_result_index,
@@ -121,7 +138,46 @@ def prepare_movement_submission(
             None,
             next_result_index,
         )
-    if not movement_draft.matches_proposal_context(pending_decision=pending_decision):
+    if proposal.spatial_context_hash != movement_draft.spatial_context_hash:
+        return (
+            _local_invalid(
+                pending_decision=pending_decision,
+                violation_code="stale_spatial_context_hash",
+                message="Movement draft spatial context no longer matches the pending request.",
+                field="spatial_context_hash",
+            ),
+            None,
+            next_result_index,
+        )
+    if route.submission_variant_id != movement_draft.submission_variant_id:
+        return (
+            _local_invalid(
+                pending_decision=pending_decision,
+                violation_code="stale_submission_variant",
+                message="Movement draft submission variant no longer matches the request.",
+                field="interaction.submission_variants",
+            ),
+            None,
+            next_result_index,
+        )
+    if (
+        movement_draft.projection_state_hash is not None
+        and projection_state_hash != movement_draft.projection_state_hash
+    ):
+        return (
+            _local_invalid(
+                pending_decision=pending_decision,
+                violation_code="stale_projection_state_hash",
+                message="Movement draft was created from an older game projection.",
+                field="projection_state_hash",
+            ),
+            None,
+            next_result_index,
+        )
+    if not movement_draft.matches_proposal_context(
+        pending_decision=pending_decision,
+        projection_state_hash=projection_state_hash,
+    ):
         return (
             _local_invalid(
                 pending_decision=pending_decision,
@@ -162,6 +218,7 @@ def submit_movement_draft(
     movement_draft: MovementDraft | None,
     client: UiCoreClient | None,
     viewer_player_id: str,
+    projection_state_hash: str | None = None,
 ) -> MovementSubmissionResult:
     """Submit a ready movement draft and refresh status, projection, and viewer events."""
 
@@ -181,6 +238,7 @@ def submit_movement_draft(
         movement_draft=movement_draft,
         pending_decision=state.pending_decision,
         next_result_index=state.next_result_index,
+        projection_state_hash=projection_state_hash,
     )
     if submission is None:
         if invalid_status is None:
@@ -228,12 +286,17 @@ def submit_movement_draft(
         client=client,
         fallback_viewer_player_id=viewer_player_id,
     )
+    refreshed_decision = refresh.finite_state.pending_decision
+    same_request = (
+        refreshed_decision is not None and refreshed_decision.request_id == submission.request_id
+    )
+    invalid_submission = submitted_status.status_kind == "invalid"
     return MovementSubmissionResult(
         finite_state=refresh.finite_state,
         refreshed_view=refresh.refreshed_view,
-        clear_movement_draft=submitted_status.status_kind != "invalid",
+        clear_movement_draft=not invalid_submission or not same_request,
         viewer_player_id=refresh.viewer_player_id,
-        reset_movement_draft_ready=submitted_status.status_kind == "invalid",
+        reset_movement_draft_ready=invalid_submission and same_request,
     )
 
 

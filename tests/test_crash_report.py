@@ -15,6 +15,8 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiClientStatus,
     UiEventDelta,
     UiGameView,
+    UiRulesCatalogView,
+    UiSupportProfile,
 )
 from warhammer40k_arcade_ui.debug_fixtures import phase6_debug_pending_decision
 from warhammer40k_arcade_ui.diagnostics.crash_report import (
@@ -191,6 +193,13 @@ class FailingCoreClient:
     def get_events_since(self, cursor: int, viewer_player_id: str) -> UiEventDelta:
         del cursor, viewer_player_id
         raise AssertionError("get_events_since should not be called.")
+
+    def get_rules_catalog(self) -> UiRulesCatalogView:
+        raise AssertionError("get_rules_catalog should not be called.")
+
+    def get_support_profile(self, viewer_player_id: str) -> UiSupportProfile:
+        del viewer_player_id
+        raise AssertionError("get_support_profile should not be called.")
 
     def submit_finite(
         self,

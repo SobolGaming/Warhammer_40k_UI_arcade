@@ -1,57 +1,22 @@
-"""Opt-in real-core startup harness for manual setup/prebattle/movement smoke testing."""
+"""Public-facade live-core startup harness for manual UI smoke testing."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from typing import Literal
+from dataclasses import dataclass
+from typing import Literal, cast
 
 from warhammer40k_core.adapters.setup_smoke import canonical_setup_prebattle_smoke_config
-from warhammer40k_core.engine.battlefield_state import BattlefieldPlacementKind, ModelPlacement
-from warhammer40k_core.engine.decision_request import (
-    PARAMETERIZED_DECISION_OPTION_ID,
-    DecisionRequest,
-)
-from warhammer40k_core.engine.decision_result import DecisionResult
-from warhammer40k_core.engine.deployment import (
-    SELECT_DEPLOYMENT_UNIT_DECISION_TYPE,
-    SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE,
-    DeploymentPlacementProposal,
-    DeploymentPlacementRequest,
-)
-from warhammer40k_core.engine.event_log import validate_json_value
-from warhammer40k_core.engine.game_state import GameConfig, GameState
-from warhammer40k_core.engine.mission_setup import MissionSetup
-from warhammer40k_core.engine.phase import SetupStep
-from warhammer40k_core.engine.prebattle import (
-    SCOUT_MOVE_PROPOSAL_KIND,
-    SELECT_PREBATTLE_ACTION_DECISION_TYPE,
-    SELECT_REDEPLOY_UNIT_DECISION_TYPE,
-    SUBMIT_REDEPLOY_PLACEMENT_DECISION_TYPE,
-    SUBMIT_SCOUT_MOVE_DECISION_TYPE,
-    PreBattlePlacementProposal,
-    PreBattleProposalRequest,
-    ScoutMoveProposal,
-)
-from warhammer40k_core.engine.reserve_declarations import (
-    SELECT_RESERVE_DECLARATION_DECISION_TYPE,
-)
-from warhammer40k_core.engine.sequencing import SEQUENCING_DECISION_TYPE
-from warhammer40k_core.engine.setup_flow import SECONDARY_MISSION_DECISION_TYPE
-from warhammer40k_core.geometry.pathing import PathWitness
-from warhammer40k_core.geometry.pose import Pose
-from warhammer40k_core.rules.mission_pack_import import (
-    warhammer_event_companion_2026_06_mission_pack,
-)
 
-from warhammer40k_arcade_ui.core_client.local_session_client import (
-    LocalSessionClient,
-    status_from_lifecycle,
-)
+from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
+    JsonValue,
     UiClientStatus,
     UiDecision,
     UiGameView,
+    UiRulesCatalogView,
+    UiSupportProfile,
+    validate_json_value,
 )
 from warhammer40k_arcade_ui.render.core_projection import (
     CoreProjectionRenderError,
@@ -61,11 +26,6 @@ from warhammer40k_arcade_ui.render.view_models import BattlefieldView
 
 LIVE_CORE_SMOKE_VIEWER_PLAYER_ID = "player-a"
 LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID = "fixed:assassination:bring_it_down"
-_LIVE_CORE_SMOKE_MISSION_POOL_ENTRY_ID = "mission-take-and-hold-vs-take-and-hold-layout-1"
-_LIVE_CORE_SMOKE_TERRAIN_LAYOUT_ID = "take-and-hold-vs-take-and-hold-layout-1"
-_LIVE_CORE_SMOKE_MONSTER_UNIT_ID = "army-alpha:strategic-reserve-unit"
-_LIVE_CORE_SMOKE_MONSTER_MOVEMENT_X = 20.0
-_LIVE_CORE_SMOKE_MONSTER_MOVEMENT_Y = 35.0
 type LiveCoreSmokeStopPhase = Literal[
     "setup",
     "secondary-missions",
@@ -75,6 +35,9 @@ type LiveCoreSmokeStopPhase = Literal[
     "prebattle",
     "scout-move",
     "movement",
+    "shooting",
+    "charge",
+    "fight",
 ]
 LIVE_CORE_SMOKE_STOP_PHASES: tuple[LiveCoreSmokeStopPhase, ...] = (
     "setup",
@@ -85,12 +48,26 @@ LIVE_CORE_SMOKE_STOP_PHASES: tuple[LiveCoreSmokeStopPhase, ...] = (
     "prebattle",
     "scout-move",
     "movement",
+    "shooting",
+    "charge",
+    "fight",
 )
-type _SmokePlacementRequest = DeploymentPlacementRequest | PreBattleProposalRequest
+
+_SETUP_STOP_DECISION_TYPES = {
+    "setup": "select_secondary_missions",
+    "secondary-missions": "select_secondary_missions",
+    "reserve-declarations": "select_reserve_declaration",
+    "deployment": "select_deployment_unit",
+    "redeploy": "select_redeploy_unit",
+    "prebattle": "select_prebattle_action",
+    "scout-move": "submit_scout_move",
+}
+_BATTLE_STOP_PHASES = {"movement", "shooting", "charge", "fight"}
+_MAX_AUTOMATED_DECISIONS = 200
 
 
 class LiveCoreSmokeError(ValueError):
-    """Raised when the real-core smoke harness cannot reach its expected start state."""
+    """Raised when public decisions cannot reach the requested smoke checkpoint."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +80,8 @@ class LiveCoreSmokeStartup:
     battlefield_view: BattlefieldView
     viewer_player_id: str
     event_cursor: int
+    rules_catalog: UiRulesCatalogView
+    support_profile: UiSupportProfile
 
 
 def build_live_core_smoke_startup(
@@ -110,119 +89,350 @@ def build_live_core_smoke_startup(
     viewer_player_id: str = LIVE_CORE_SMOKE_VIEWER_PLAYER_ID,
     stop_at_phase: str | None = None,
 ) -> LiveCoreSmokeStartup:
-    """Start a real local core session and advance to the requested smoke stop point."""
+    """Start a canonical core session and reach a checkpoint using public decisions only."""
 
     stop_phase = _validated_stop_phase(stop_at_phase)
     client = LocalSessionClient()
-    client.start_game(_live_core_smoke_config())
+    client.start_game(canonical_setup_prebattle_smoke_config())
     status = client.advance_until_decision_or_terminal()
-    if stop_phase in {"setup", "secondary-missions"}:
-        _assert_expected_pending_decision(status, SECONDARY_MISSION_DECISION_TYPE)
-        return _startup_from_status(
-            client=client,
-            status=status,
-            stop_phase=stop_phase,
-            viewer_player_id=viewer_player_id,
-        )
-    status = _submit_expected_finite(
-        client=client,
-        status=status,
-        expected_decision_type=SECONDARY_MISSION_DECISION_TYPE,
-        selected_option_id=LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID,
-        result_id="ui-live-smoke-secondary-player-a",
-    )
-    status = _submit_expected_finite(
-        client=client,
-        status=status,
-        expected_decision_type=SECONDARY_MISSION_DECISION_TYPE,
-        selected_option_id=LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID,
-        result_id="ui-live-smoke-secondary-player-b",
-    )
-    status = _submit_smoke_reserve_declarations(
-        client=client,
-        status=status,
-        stop_at_phase=stop_phase,
-    )
-    if stop_phase == "reserve-declarations":
-        _assert_expected_pending_decision(status, SELECT_RESERVE_DECLARATION_DECISION_TYPE)
-        return _startup_from_status(
-            client=client,
-            status=status,
-            stop_phase=stop_phase,
-            viewer_player_id=viewer_player_id,
-        )
-    status = _submit_smoke_deployments(client=client, status=status, stop_at_phase=stop_phase)
-    if stop_phase == "deployment":
-        _assert_expected_pending_decision(status, SELECT_DEPLOYMENT_UNIT_DECISION_TYPE)
-        return _startup_from_status(
-            client=client,
-            status=status,
-            stop_phase=stop_phase,
-            viewer_player_id=viewer_player_id,
-        )
-    status = _submit_smoke_redeploys(client=client, status=status, stop_at_phase=stop_phase)
-    if stop_phase == "redeploy":
-        _assert_expected_pending_decision(status, SELECT_REDEPLOY_UNIT_DECISION_TYPE)
-        return _startup_from_status(
-            client=client,
-            status=status,
-            stop_phase=stop_phase,
-            viewer_player_id=viewer_player_id,
-        )
-    status = _submit_smoke_prebattle_actions(
-        client=client,
-        status=status,
-        stop_at_phase=stop_phase,
-    )
-    if stop_phase == "prebattle":
-        _assert_expected_pending_decision(status, SELECT_PREBATTLE_ACTION_DECISION_TYPE)
-        return _startup_from_status(
-            client=client,
-            status=status,
-            stop_phase=stop_phase,
-            viewer_player_id=viewer_player_id,
-        )
-    if stop_phase == "movement":
-        _nudge_live_smoke_monster_for_movement_bridge(client)
-    expected_decision = (
-        SUBMIT_SCOUT_MOVE_DECISION_TYPE if stop_phase == "scout-move" else "select_movement_unit"
-    )
-    _assert_expected_pending_decision(status, expected_decision)
+    status = _drive_to_checkpoint(client=client, status=status, stop_phase=stop_phase)
     return _startup_from_status(
         client=client,
         status=status,
         stop_phase=stop_phase,
-        viewer_player_id=viewer_player_id,
+        default_viewer_player_id=viewer_player_id,
     )
 
 
-def _nudge_live_smoke_monster_for_movement_bridge(client: LocalSessionClient) -> None:
-    """Keep the smoke Monster inside the current core movement bridge edge."""
-
-    # Deployment must stay legal first. Until the core movement resolver uses the
-    # mission setup's 44x60 dimensions for normal/advance submissions, nudge this
-    # large smoke-test model inward after setup so Monster movement remains testable.
-    state = client.session.lifecycle.state
-    if state is None:
-        raise LiveCoreSmokeError("Live smoke Monster nudge requires a started game state.")
-    battlefield_state = state.battlefield_state
-    if battlefield_state is None:
-        raise LiveCoreSmokeError("Live smoke Monster nudge requires battlefield state.")
-    unit_placement = battlefield_state.unit_placement_by_id(_LIVE_CORE_SMOKE_MONSTER_UNIT_ID)
-    nudged_placement = unit_placement.with_model_placements(
-        tuple(
-            placement.with_pose(
-                Pose.at(
-                    _LIVE_CORE_SMOKE_MONSTER_MOVEMENT_X,
-                    _LIVE_CORE_SMOKE_MONSTER_MOVEMENT_Y,
-                    0.0,
-                    facing_degrees=placement.pose.facing.degrees,
+def _drive_to_checkpoint(
+    *,
+    client: LocalSessionClient,
+    status: UiClientStatus,
+    stop_phase: LiveCoreSmokeStopPhase,
+) -> UiClientStatus:
+    current = status
+    for result_index in range(1, _MAX_AUTOMATED_DECISIONS + 1):
+        _raise_for_invalid_status(current)
+        decision = current.decision
+        if decision is None:
+            if current.status_kind in {"complete", "terminal"}:
+                raise LiveCoreSmokeError(
+                    f"Game became terminal before smoke checkpoint {stop_phase!r}."
                 )
+            current = client.advance_until_decision_or_terminal()
+            continue
+        viewer_id = decision.actor_id or LIVE_CORE_SMOKE_VIEWER_PLAYER_ID
+        view = client.get_view(viewer_id)
+        if _is_requested_checkpoint(
+            stop_phase=stop_phase,
+            decision=decision,
+            view=view,
+        ):
+            return current
+        result_id = f"ui-live-smoke-{result_index:06d}"
+        if decision.is_parameterized:
+            payload = _automated_parameterized_payload(decision=decision, view=view)
+            current = client.submit_parameterized_payload(
+                request_id=decision.request_id,
+                payload=payload,
+                result_id=result_id,
             )
-            for placement in unit_placement.model_placements
-        )
+        else:
+            current = client.submit_finite(
+                request_id=decision.request_id,
+                selected_option_id=_automated_option_id(decision),
+                result_id=result_id,
+            )
+    raise LiveCoreSmokeError(
+        f"Smoke checkpoint {stop_phase!r} was not reached within "
+        f"{_MAX_AUTOMATED_DECISIONS} public decisions."
     )
-    state.replace_battlefield_state(battlefield_state.with_unit_placement(nudged_placement))
+
+
+def _is_requested_checkpoint(
+    *,
+    stop_phase: LiveCoreSmokeStopPhase,
+    decision: UiDecision,
+    view: UiGameView,
+) -> bool:
+    expected_decision_type = _SETUP_STOP_DECISION_TYPES.get(stop_phase)
+    if expected_decision_type is not None:
+        return decision.decision_type == expected_decision_type
+    return (
+        stop_phase in _BATTLE_STOP_PHASES
+        and view.stage == "battle"
+        and view.current_battle_phase == stop_phase
+    )
+
+
+def _automated_option_id(decision: UiDecision) -> str:
+    option_ids = tuple(option.option_id for option in decision.options)
+    if not option_ids:
+        raise LiveCoreSmokeError(
+            f"Finite smoke decision {decision.decision_type!r} exposes no options."
+        )
+    if decision.decision_type == "select_secondary_missions":
+        return _required_option(decision, LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID)
+    if decision.decision_type == "select_reserve_declaration":
+        return _required_option(decision, "complete_reserve_declarations")
+    if decision.decision_type == "select_deployment_unit":
+        return option_ids[0]
+    if decision.decision_type == "resolve_ordering":
+        player_b_order = next(
+            (option_id for option_id in option_ids if option_id.endswith(":player-b")),
+            None,
+        )
+        return player_b_order or option_ids[0]
+    if decision.decision_type == "select_redeploy_unit":
+        redeploy = next(
+            (option_id for option_id in option_ids if option_id.startswith("redeploy:")),
+            None,
+        )
+        return redeploy or _preferred_completion_option(option_ids)
+    if decision.decision_type == "select_prebattle_action":
+        scout = next(
+            (option_id for option_id in option_ids if option_id.startswith("scout_move:")),
+            None,
+        )
+        return scout or _preferred_completion_option(option_ids)
+    if decision.decision_type == "select_movement_action":
+        return _first_available_option(
+            option_ids,
+            ("remain_stationary", "normal_move", "fall_back"),
+        )
+    return _preferred_completion_option(option_ids)
+
+
+def _preferred_completion_option(option_ids: tuple[str, ...]) -> str:
+    for token in ("complete", "decline", "pass", "skip", "none", "no_"):
+        option = next((value for value in option_ids if token in value.lower()), None)
+        if option is not None:
+            return option
+    return option_ids[0]
+
+
+def _first_available_option(
+    option_ids: tuple[str, ...],
+    preferred: tuple[str, ...],
+) -> str:
+    for option_id in preferred:
+        if option_id in option_ids:
+            return option_id
+    return _preferred_completion_option(option_ids)
+
+
+def _required_option(decision: UiDecision, option_id: str) -> str:
+    if option_id not in {option.option_id for option in decision.options}:
+        raise LiveCoreSmokeError(
+            f"Expected smoke option {option_id!r} for {decision.decision_type!r}."
+        )
+    return option_id
+
+
+def _automated_parameterized_payload(
+    *,
+    decision: UiDecision,
+    view: UiGameView,
+) -> JsonObject:
+    interaction = decision.interaction
+    proposal = decision.parameterized_proposal
+    if interaction is None or proposal is None:
+        raise LiveCoreSmokeError("Parameterized smoke request is missing contract metadata.")
+    if len(interaction.submission_variants) != 1:
+        raise LiveCoreSmokeError(
+            f"Smoke request {decision.decision_type!r} requires explicit variant selection."
+        )
+    kind = interaction.interaction_kind
+    if kind in {"model_pose_placement", "multi_model_placement"}:
+        return _placement_payload(proposal.payload, view=view)
+    if kind == "path_editor" and proposal.proposal_kind == "scout_move":
+        return _scout_move_payload(proposal.payload, view=view)
+    raise LiveCoreSmokeError(
+        f"Smoke automation cannot safely answer {kind!r} for "
+        f"{decision.decision_type!r}; stop at this phase and use the UI."
+    )
+
+
+def _placement_payload(request: JsonObject, *, view: UiGameView) -> JsonObject:
+    decision_type = _required_string(request, "decision_type")
+    unit_id = _required_string(request, "unit_instance_id")
+    player_id = _optional_string(request, "player_id") or _required_string(request, "actor_id")
+    model_ids = tuple(_string_list(request, "model_instance_ids"))
+    if not model_ids:
+        raise LiveCoreSmokeError("Smoke placement request has no model_instance_ids.")
+    model_placements: list[JsonValue] = [
+        {
+            "army_id": unit_id.split(":", maxsplit=1)[0],
+            "player_id": player_id,
+            "unit_instance_id": unit_id,
+            "model_instance_id": model_id,
+            "pose": _placement_pose_payload(
+                index=index,
+                player_id=player_id,
+                unit_id=unit_id,
+                model_id=model_id,
+                view=view,
+            ),
+        }
+        for index, model_id in enumerate(model_ids)
+    ]
+    payload: JsonObject = {
+        "proposal_request_id": _required_string(request, "request_id"),
+        "proposal_kind": _required_string(request, "proposal_kind"),
+        "game_id": _required_string(request, "game_id"),
+        "ruleset_descriptor_hash": _required_string(request, "ruleset_descriptor_hash"),
+        "setup_step": _required_string(request, "setup_step"),
+        "player_id": player_id,
+        "unit_instance_id": unit_id,
+        "placement_kind": _placement_kind(request),
+        "model_placements": model_placements,
+    }
+    if decision_type != "submit_deployment_placement":
+        payload["action_kind"] = _required_string(request, "action_kind")
+        payload["source_rule_id"] = _required_string(request, "source_rule_id")
+    context = _optional_object(request, "context")
+    if context:
+        payload["context"] = context
+    return _json_object(payload)
+
+
+def _placement_pose_payload(
+    *,
+    index: int,
+    player_id: str,
+    unit_id: str,
+    model_id: str,
+    view: UiGameView,
+) -> JsonObject:
+    projected = _projected_model(view, model_id)
+    if projected is not None and projected.get("pose") is not None:
+        return _proposal_pose_from_projected(_required_object(projected, "pose"))
+    row = index // 3
+    column = index % 3
+    unit_slot = _unit_slot(unit_id)
+    if player_id == "player-b":
+        x = 40.0 - (unit_slot * 9.0) - (row * 1.8)
+        y = 8.0 + (column * 1.8)
+        facing = 180.0
+    else:
+        x = 4.0 + (unit_slot * 14.0) + (row * 1.8)
+        y = 51.0 + (column * 1.8)
+        facing = 0.0
+    return _proposal_pose(x=x, y=y, z=0.0, facing_degrees=facing)
+
+
+def _unit_slot(unit_id: str) -> int:
+    if "scout-redeploy" in unit_id:
+        return 0
+    if "strategic-reserve" in unit_id:
+        return 1
+    if "deep-strike" in unit_id:
+        return 2
+    return 0
+
+
+def _scout_move_payload(request: JsonObject, *, view: UiGameView) -> JsonObject:
+    unit_id = _required_string(request, "unit_instance_id")
+    model_ids = tuple(_string_list(request, "model_instance_ids"))
+    if not model_ids:
+        model_ids = _placed_model_ids_for_unit(view, unit_id)
+    model_paths: list[JsonValue] = []
+    for model_id in model_ids:
+        model = _projected_model(view, model_id)
+        if model is None or model.get("pose") is None:
+            raise LiveCoreSmokeError(f"Scout model {model_id!r} has no projected pose.")
+        start = _proposal_pose_from_projected(_required_object(model, "pose"))
+        position = _required_object(start, "position")
+        x = _required_number(position, "x")
+        y = _required_number(position, "y")
+        z = _required_number(position, "z")
+        facing = _required_number(_required_object(start, "facing"), "degrees")
+        model_paths.append(
+            {
+                "model_id": model_id,
+                "poses": [
+                    start,
+                    _proposal_pose(x=x + 0.5, y=y, z=z, facing_degrees=facing),
+                    _proposal_pose(x=x + 1.0, y=y, z=z, facing_degrees=facing),
+                ],
+            }
+        )
+    payload: JsonObject = {
+        "proposal_request_id": _required_string(request, "request_id"),
+        "proposal_kind": _required_string(request, "proposal_kind"),
+        "game_id": _required_string(request, "game_id"),
+        "ruleset_descriptor_hash": _required_string(request, "ruleset_descriptor_hash"),
+        "setup_step": _required_string(request, "setup_step"),
+        "player_id": _required_string(request, "player_id"),
+        "unit_instance_id": unit_id,
+        "action_kind": _required_string(request, "action_kind"),
+        "source_rule_id": _required_string(request, "source_rule_id"),
+        "scout_distance_inches": _required_number(request, "scout_distance_inches"),
+        "witness": {"model_paths": model_paths},
+    }
+    context = _optional_object(request, "context")
+    if context:
+        payload["context"] = context
+    return _json_object(payload)
+
+
+def _projected_model(view: UiGameView, model_id: str) -> JsonObject | None:
+    battlefield = view.battlefield_view
+    if battlefield is None:
+        raise LiveCoreSmokeError("Smoke proposal requires canonical battlefield_view.")
+    models = _required_object(battlefield.authoritative, "models_by_id")
+    value = models.get(model_id)
+    return None if value is None else _required_object(models, model_id)
+
+
+def _placed_model_ids_for_unit(view: UiGameView, unit_id: str) -> tuple[str, ...]:
+    battlefield = view.battlefield_view
+    if battlefield is None:
+        raise LiveCoreSmokeError("Smoke proposal requires canonical battlefield_view.")
+    models = _required_object(battlefield.authoritative, "models_by_id")
+    return tuple(
+        model_id
+        for model_id in sorted(models)
+        if _required_string(_required_object(models, model_id), "unit_instance_id") == unit_id
+        and _required_object(models, model_id).get("pose") is not None
+    )
+
+
+def _proposal_pose_from_projected(pose: JsonObject) -> JsonObject:
+    position = _required_object(pose, "position")
+    return _proposal_pose(
+        x=_required_number(position, "x_inches"),
+        y=_required_number(position, "y_inches"),
+        z=_required_number(position, "z_inches"),
+        facing_degrees=_required_number(pose, "facing_degrees"),
+    )
+
+
+def _proposal_pose(
+    *,
+    x: float,
+    y: float,
+    z: float,
+    facing_degrees: float,
+) -> JsonObject:
+    return {
+        "position": {"x": x, "y": y, "z": z},
+        "facing": {"degrees": facing_degrees},
+    }
+
+
+def _placement_kind(request: JsonObject) -> str:
+    value = _optional_string(request, "placement_kind")
+    if value is not None:
+        return value
+    context = _optional_object(request, "context")
+    value = _optional_string(context, "placement_kind")
+    if value is not None:
+        return value
+    kinds = tuple(_string_list(request, "placement_kinds"))
+    if kinds:
+        return kinds[0]
+    raise LiveCoreSmokeError("Placement request has no placement_kind.")
 
 
 def _startup_from_status(
@@ -230,687 +440,120 @@ def _startup_from_status(
     client: LocalSessionClient,
     status: UiClientStatus,
     stop_phase: LiveCoreSmokeStopPhase,
-    viewer_player_id: str,
+    default_viewer_player_id: str,
 ) -> LiveCoreSmokeStartup:
-    effective_viewer_player_id = _smoke_viewer_player_id(
-        status=status,
-        stop_phase=stop_phase,
-        default_viewer_player_id=viewer_player_id,
-    )
-    game_view = _with_live_smoke_display_maps(client.get_view(effective_viewer_player_id))
-    event_delta = client.get_events_since(0, effective_viewer_player_id)
+    _raise_for_invalid_status(status)
+    decision = _required_decision(status)
+    viewer_player_id = decision.actor_id or default_viewer_player_id
+    game_view = client.get_view(viewer_player_id)
     try:
         battlefield_view = battlefield_view_from_game_view(game_view)
     except CoreProjectionRenderError as exc:
         raise LiveCoreSmokeError(str(exc)) from exc
+    event_delta = client.get_events_since(0, viewer_player_id)
+    rules_catalog = client.get_rules_catalog()
+    catalog_reference = game_view.rules_catalog
+    if catalog_reference is None or (
+        catalog_reference.catalog_id,
+        catalog_reference.source_hash,
+    ) != (rules_catalog.catalog_id, rules_catalog.source_hash):
+        raise LiveCoreSmokeError("Rules catalog projection does not match the game-view reference.")
+    support_profile = client.get_support_profile(viewer_player_id)
+    if support_profile.game_id != game_view.game_id:
+        raise LiveCoreSmokeError("Support profile game_id does not match the game projection.")
+    if not _is_requested_checkpoint(
+        stop_phase=stop_phase,
+        decision=decision,
+        view=game_view,
+    ):
+        raise LiveCoreSmokeError(f"Smoke startup stopped before requested phase {stop_phase!r}.")
     return LiveCoreSmokeStartup(
         core_client=client,
         status=status,
         game_view=game_view,
         battlefield_view=battlefield_view,
-        viewer_player_id=effective_viewer_player_id,
+        viewer_player_id=viewer_player_id,
         event_cursor=event_delta.next_cursor,
+        rules_catalog=rules_catalog,
+        support_profile=support_profile,
     )
 
 
-def _smoke_viewer_player_id(
-    *,
-    status: UiClientStatus,
-    stop_phase: LiveCoreSmokeStopPhase,
-    default_viewer_player_id: str,
-) -> str:
-    del stop_phase
+def _required_decision(status: UiClientStatus) -> UiDecision:
     if status.decision is None:
-        return default_viewer_player_id
-    return status.decision.actor_id or default_viewer_player_id
+        raise LiveCoreSmokeError("Smoke checkpoint does not expose a visible decision.")
+    return status.decision
 
 
-def _with_live_smoke_display_maps(view: UiGameView) -> UiGameView:
-    return replace(
-        view,
-        unit_display_by_id={
-            **_live_smoke_unit_display_by_id(),
-            **view.unit_display_by_id,
-        },
+def _raise_for_invalid_status(status: UiClientStatus) -> None:
+    if status.status_kind != "invalid":
+        return
+    diagnostic = status.invalid_diagnostics[0] if status.invalid_diagnostics else None
+    detail = (
+        status.message
+        if diagnostic is None
+        else f"{diagnostic.violation_code} [{diagnostic.field or 'request'}]: {diagnostic.message}"
     )
-
-
-def _live_smoke_unit_display_by_id() -> JsonObject:
-    units: JsonObject = {}
-    for player_id, army_id, unit_profiles in (
-        (
-            "player-a",
-            "army-alpha",
-            (
-                ("scout-redeploy-unit", "core-intercessor-like", 5),
-                ("strategic-reserve-unit", "core-vehicle-monster", 1),
-                ("deep-strike-unit", "core-deep-strike-model", 3),
-            ),
-        ),
-        (
-            "player-b",
-            "army-beta",
-            (("scout-redeploy-unit", "core-intercessor-like", 5),),
-        ),
-    ):
-        for unit_selection_id, model_profile_id, model_count in unit_profiles:
-            unit_instance_id = f"{army_id}:{unit_selection_id}"
-            units[unit_instance_id] = {
-                "unit_instance_id": unit_instance_id,
-                "owner_player_id": player_id,
-                "visible_status": "visible",
-                "unit_display_name": _live_smoke_unit_display_name(unit_selection_id),
-                "model_instance_ids": [
-                    f"{unit_instance_id}:{model_profile_id}:{index:03d}"
-                    for index in range(1, model_count + 1)
-                ],
-            }
-    return units
-
-
-def _live_smoke_unit_display_name(unit_selection_id: str) -> str:
-    return unit_selection_id.replace("-", " ").title()
-
-
-def _submit_expected_finite(
-    *,
-    client: LocalSessionClient,
-    status: UiClientStatus,
-    expected_decision_type: str,
-    selected_option_id: str,
-    result_id: str,
-) -> UiClientStatus:
-    decision = status.decision
-    if decision is None:
-        raise LiveCoreSmokeError(
-            f"Expected {expected_decision_type} before live-core smoke setup choice."
-        )
-    if decision.decision_type != expected_decision_type:
-        raise LiveCoreSmokeError(
-            f"Expected {expected_decision_type}, got {decision.decision_type}."
-        )
-    if selected_option_id not in {option.option_id for option in decision.options}:
-        raise LiveCoreSmokeError(
-            f"Expected option {selected_option_id} for {expected_decision_type}."
-        )
-    return client.submit_finite(
-        request_id=decision.request_id,
-        selected_option_id=selected_option_id,
-        result_id=result_id,
-    )
-
-
-def _submit_smoke_deployments(
-    *,
-    client: LocalSessionClient,
-    status: UiClientStatus,
-    stop_at_phase: LiveCoreSmokeStopPhase,
-) -> UiClientStatus:
-    current = status
-    result_number = 1
-    while current.decision is not None and current.decision.decision_type in {
-        SELECT_DEPLOYMENT_UNIT_DECISION_TYPE,
-        SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE,
-    }:
-        decision = current.decision
-        result_id = f"ui-live-smoke-deployment-{result_number:06d}"
-        if decision.decision_type == SELECT_DEPLOYMENT_UNIT_DECISION_TYPE:
-            if stop_at_phase == "deployment":
-                return current
-            if not decision.options:
-                raise LiveCoreSmokeError("Expected deployment unit options.")
-            current = client.submit_finite(
-                request_id=decision.request_id,
-                selected_option_id=decision.options[0].option_id,
-                result_id=result_id,
-            )
-        else:
-            request = _pending_core_request(
-                client=client,
-                expected_decision_type=SUBMIT_DEPLOYMENT_PLACEMENT_DECISION_TYPE,
-            )
-            current = _submit_deployment_placement(
-                client=client,
-                request=request,
-                result_id=result_id,
-            )
-        result_number += 1
-    return current
-
-
-def _submit_smoke_reserve_declarations(
-    *,
-    client: LocalSessionClient,
-    status: UiClientStatus,
-    stop_at_phase: LiveCoreSmokeStopPhase,
-) -> UiClientStatus:
-    if stop_at_phase == "reserve-declarations":
-        return status
-    return _submit_expected_finite(
-        client=client,
-        status=status,
-        expected_decision_type=SELECT_RESERVE_DECLARATION_DECISION_TYPE,
-        selected_option_id="complete_reserve_declarations",
-        result_id="ui-live-smoke-reserve-complete",
-    )
-
-
-def _submit_smoke_redeploys(
-    *,
-    client: LocalSessionClient,
-    status: UiClientStatus,
-    stop_at_phase: LiveCoreSmokeStopPhase,
-) -> UiClientStatus:
-    current = _submit_expected_sequencing(
-        client=client,
-        status=status,
-        setup_prefix="prebattle:redeploy_units",
-        result_id="ui-live-smoke-redeploy-sequencing",
-    )
-    if stop_at_phase == "redeploy":
-        return current
-    current = _submit_expected_finite(
-        client=client,
-        status=current,
-        expected_decision_type=SELECT_REDEPLOY_UNIT_DECISION_TYPE,
-        selected_option_id="redeploy:army-beta:scout-redeploy-unit",
-        result_id="ui-live-smoke-redeploy-select",
-    )
-    request = _pending_core_request(
-        client=client,
-        expected_decision_type=SUBMIT_REDEPLOY_PLACEMENT_DECISION_TYPE,
-    )
-    return _submit_prebattle_placement(
-        client=client,
-        request=request,
-        result_id="ui-live-smoke-redeploy-place",
-    )
-
-
-def _submit_smoke_prebattle_actions(
-    *,
-    client: LocalSessionClient,
-    status: UiClientStatus,
-    stop_at_phase: LiveCoreSmokeStopPhase,
-) -> UiClientStatus:
-    current = _submit_expected_finite(
-        client=client,
-        status=status,
-        expected_decision_type=SELECT_REDEPLOY_UNIT_DECISION_TYPE,
-        selected_option_id="complete_redeploys",
-        result_id="ui-live-smoke-redeploy-complete",
-    )
-    current = _submit_expected_sequencing(
-        client=client,
-        status=current,
-        setup_prefix="prebattle:resolve_prebattle_actions",
-        result_id="ui-live-smoke-prebattle-sequencing",
-    )
-    if stop_at_phase == "prebattle":
-        return current
-    current = _submit_expected_finite(
-        client=client,
-        status=current,
-        expected_decision_type=SELECT_PREBATTLE_ACTION_DECISION_TYPE,
-        selected_option_id="scout_move:army-beta:scout-redeploy-unit",
-        result_id="ui-live-smoke-scout-select",
-    )
-    if stop_at_phase == "scout-move":
-        return current
-    request = _pending_core_request(
-        client=client,
-        expected_decision_type=SUBMIT_SCOUT_MOVE_DECISION_TYPE,
-    )
-    current = _submit_scout_move(
-        client=client,
-        request=request,
-        result_id="ui-live-smoke-scout-submit",
-    )
-    return _submit_expected_finite(
-        client=client,
-        status=current,
-        expected_decision_type=SELECT_PREBATTLE_ACTION_DECISION_TYPE,
-        selected_option_id="complete_prebattle_actions",
-        result_id="ui-live-smoke-prebattle-complete",
-    )
+    raise LiveCoreSmokeError(f"Core rejected smoke automation: {detail or 'invalid status'}")
 
 
 def _validated_stop_phase(stop_at_phase: str | None) -> LiveCoreSmokeStopPhase:
-    if stop_at_phase is None:
-        return "movement"
-    if stop_at_phase in LIVE_CORE_SMOKE_STOP_PHASES:
-        return stop_at_phase
-    raise LiveCoreSmokeError(f"Unsupported live-core smoke stop phase: {stop_at_phase}.")
+    value = "movement" if stop_at_phase is None else stop_at_phase
+    if value not in LIVE_CORE_SMOKE_STOP_PHASES:
+        raise LiveCoreSmokeError(f"Unsupported live-core smoke stop phase: {value}.")
+    return value
 
 
-def _submit_expected_sequencing(
-    *,
-    client: LocalSessionClient,
-    status: UiClientStatus,
-    setup_prefix: str,
-    result_id: str,
-) -> UiClientStatus:
-    decision = status.decision
-    if decision is None:
-        raise LiveCoreSmokeError("Expected sequencing decision.")
-    if decision.decision_type != SEQUENCING_DECISION_TYPE:
-        raise LiveCoreSmokeError(
-            f"Expected {SEQUENCING_DECISION_TYPE}, got {decision.decision_type}."
-        )
-    option_id = _option_with_prefix(decision, f"order:{setup_prefix}:player-b")
-    return client.submit_finite(
-        request_id=decision.request_id,
-        selected_option_id=option_id,
-        result_id=result_id,
-    )
+def _json_object(value: object) -> JsonObject:
+    validated = validate_json_value(value)
+    if type(validated) is not dict:
+        raise LiveCoreSmokeError("Smoke payload must be a JSON object.")
+    return validated
 
 
-def _pending_core_request(
-    *,
-    client: LocalSessionClient,
-    expected_decision_type: str,
-) -> DecisionRequest:
-    pending_requests = client.session.lifecycle.decision_controller.queue.pending_requests
-    if len(pending_requests) != 1:
-        raise LiveCoreSmokeError("Expected exactly one pending core decision request.")
-    request = pending_requests[0]
-    if request.decision_type != expected_decision_type:
-        raise LiveCoreSmokeError(f"Expected {expected_decision_type}, got {request.decision_type}.")
-    return request
+def _required_object(payload: JsonObject, key: str) -> JsonObject:
+    value = payload.get(key)
+    if type(value) is not dict:
+        raise LiveCoreSmokeError(f"Smoke payload field {key!r} must be an object.")
+    return value
 
 
-def _submit_deployment_placement(
-    *,
-    client: LocalSessionClient,
-    request: DecisionRequest,
-    result_id: str,
-) -> UiClientStatus:
-    proposal = _deployment_proposal_for_request(request)
-    payload = validate_json_value(proposal.to_payload())
-    return status_from_lifecycle(
-        client.session.lifecycle.submit_decision(
-            DecisionResult(
-                result_id=result_id,
-                request_id=request.request_id,
-                decision_type=request.decision_type,
-                actor_id=request.actor_id,
-                selected_option_id=PARAMETERIZED_DECISION_OPTION_ID,
-                payload=payload,
-            )
-        )
-    )
+def _optional_object(payload: JsonObject, key: str) -> JsonObject:
+    value = payload.get(key)
+    if value is None:
+        return {}
+    if type(value) is not dict:
+        raise LiveCoreSmokeError(f"Smoke payload field {key!r} must be an object.")
+    return value
 
 
-def _submit_prebattle_placement(
-    *,
-    client: LocalSessionClient,
-    request: DecisionRequest,
-    result_id: str,
-) -> UiClientStatus:
-    proposal = _prebattle_placement_proposal_for_request(
-        state=_state(client),
-        request=request,
-    )
-    payload = validate_json_value(proposal.to_payload())
-    return status_from_lifecycle(
-        client.session.lifecycle.submit_decision(
-            DecisionResult(
-                result_id=result_id,
-                request_id=request.request_id,
-                decision_type=request.decision_type,
-                actor_id=request.actor_id,
-                selected_option_id=PARAMETERIZED_DECISION_OPTION_ID,
-                payload=payload,
-            )
-        )
-    )
+def _required_string(payload: JsonObject, key: str) -> str:
+    value = payload.get(key)
+    if type(value) is not str or not value:
+        raise LiveCoreSmokeError(f"Smoke payload field {key!r} must be a string.")
+    return value
 
 
-def _submit_scout_move(
-    *,
-    client: LocalSessionClient,
-    request: DecisionRequest,
-    result_id: str,
-) -> UiClientStatus:
-    proposal = _scout_move_proposal_for_request(
-        state=_state(client),
-        request=request,
-        dx=-1.0,
-    )
-    payload = validate_json_value(proposal.to_payload())
-    return status_from_lifecycle(
-        client.session.lifecycle.submit_decision(
-            DecisionResult(
-                result_id=result_id,
-                request_id=request.request_id,
-                decision_type=request.decision_type,
-                actor_id=request.actor_id,
-                selected_option_id=PARAMETERIZED_DECISION_OPTION_ID,
-                payload=payload,
-            )
-        )
-    )
+def _optional_string(payload: JsonObject, key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if type(value) is not str or not value:
+        raise LiveCoreSmokeError(f"Smoke payload field {key!r} must be a string or null.")
+    return value
 
 
-def _deployment_proposal_for_request(request: DecisionRequest) -> DeploymentPlacementProposal:
-    request_context = DeploymentPlacementRequest.from_decision_request_payload(request.payload)
-    model_placements = tuple(
-        ModelPlacement(
-            army_id=_army_id_from_unit_instance_id(request_context.unit_instance_id),
-            player_id=request_context.player_id,
-            unit_instance_id=request_context.unit_instance_id,
-            model_instance_id=model_instance_id,
-            pose=_smoke_deployment_pose(
-                index=index,
-                request_context=request_context,
-                unit_instance_id=request_context.unit_instance_id,
-            ),
-        )
-        for index, model_instance_id in enumerate(request_context.model_instance_ids)
-    )
-    return DeploymentPlacementProposal(
-        proposal_request_id=request_context.request_id,
-        proposal_kind=request_context.proposal_kind,
-        game_id=request_context.game_id,
-        ruleset_descriptor_hash=request_context.ruleset_descriptor_hash,
-        setup_step=SetupStep.DEPLOY_ARMIES,
-        player_id=request_context.player_id,
-        unit_instance_id=request_context.unit_instance_id,
-        placement_kind=BattlefieldPlacementKind.DEPLOYMENT,
-        model_placements=model_placements,
-        context=request_context.context,
-    )
+def _required_number(payload: JsonObject, key: str) -> float:
+    value = payload.get(key)
+    if type(value) not in {int, float}:
+        raise LiveCoreSmokeError(f"Smoke payload field {key!r} must be numeric.")
+    return float(cast(int | float, value))
 
 
-def _prebattle_placement_proposal_for_request(
-    *,
-    state: GameState,
-    request: DecisionRequest,
-) -> PreBattlePlacementProposal:
-    request_context = PreBattleProposalRequest.from_decision_request_payload(request.payload)
-    if request_context.placement_kind is None:
-        raise LiveCoreSmokeError("Prebattle placement request requires placement_kind.")
-    return PreBattlePlacementProposal(
-        proposal_request_id=request_context.request_id,
-        proposal_kind=request_context.proposal_kind,
-        game_id=request_context.game_id,
-        ruleset_descriptor_hash=request_context.ruleset_descriptor_hash,
-        setup_step=request_context.setup_step,
-        player_id=request_context.player_id,
-        unit_instance_id=request_context.unit_instance_id,
-        action_kind=request_context.action_kind,
-        source_rule_id=request_context.source_rule_id,
-        placement_kind=request_context.placement_kind,
-        model_placements=tuple(
-            ModelPlacement(
-                army_id=army_id,
-                player_id=player_id,
-                unit_instance_id=unit_instance_id,
-                model_instance_id=model_instance_id,
-                pose=_smoke_redeploy_pose(
-                    index=index,
-                    request_context=request_context,
-                    unit_instance_id=unit_instance_id,
-                ),
-            )
-            for index, model_instance_id in enumerate(request_context.model_instance_ids)
-            for army_id, player_id, unit_instance_id in (
-                _model_source_for_id(state=state, model_instance_id=model_instance_id),
-            )
-        ),
-        context=request_context.context,
-    )
-
-
-def _scout_move_proposal_for_request(
-    *,
-    state: GameState,
-    request: DecisionRequest,
-    dx: float,
-) -> ScoutMoveProposal:
-    request_context = PreBattleProposalRequest.from_decision_request_payload(request.payload)
-    if request_context.scout_distance_inches is None:
-        raise LiveCoreSmokeError("Scout move request requires scout_distance_inches.")
-    return ScoutMoveProposal(
-        proposal_request_id=request_context.request_id,
-        proposal_kind=SCOUT_MOVE_PROPOSAL_KIND,
-        game_id=request_context.game_id,
-        ruleset_descriptor_hash=request_context.ruleset_descriptor_hash,
-        setup_step=request_context.setup_step,
-        player_id=request_context.player_id,
-        unit_instance_id=request_context.unit_instance_id,
-        action_kind=request_context.action_kind,
-        source_rule_id=request_context.source_rule_id,
-        scout_distance_inches=request_context.scout_distance_inches,
-        witness=_scout_witness(state=state, request_context=request_context, dx=dx),
-        context=request_context.context,
-    )
-
-
-def _army_id_from_unit_instance_id(unit_instance_id: str) -> str:
-    return unit_instance_id.split(":", 1)[0]
-
-
-def _smoke_deployment_pose(
-    *,
-    index: int,
-    request_context: DeploymentPlacementRequest,
-    unit_instance_id: str,
-) -> Pose:
-    row = index // 3
-    column = index % 3
-    origin_x, origin_y = _deployment_origin_for_unit(
-        request_context=request_context,
-        unit_instance_id=unit_instance_id,
-    )
-    x_direction = _deployment_x_direction(request_context)
-    facing_degrees = 0.0 if x_direction > 0.0 else 180.0
-    return Pose.at(
-        origin_x + (row * 1.6 * x_direction),
-        origin_y + (column * _deployment_y_step(request_context)),
-        0.0,
-        facing_degrees=facing_degrees,
-    )
-
-
-def _deployment_origin_for_unit(
-    *,
-    request_context: _SmokePlacementRequest,
-    unit_instance_id: str,
-) -> tuple[float, float]:
-    min_x, min_y, max_x, max_y = _deployment_zone_bounds(request_context)
-    width = max_x - min_x
-    margin = min(max(width - 2.0, 1.5), max(_deployment_x_margin_for_unit(unit_instance_id), 1.5))
-    x = min_x + margin if _deployment_x_direction(request_context) > 0.0 else max_x - margin
-    preferred_y = min_y + _deployment_y_offset_for_unit(
-        unit_instance_id,
-        zone_min_y=min_y,
-    )
-    y = min(
-        max(preferred_y, min_y + _deployment_y_lower_margin_for_unit(unit_instance_id, min_y)),
-        max_y - 2.0,
-    )
-    return (x, y)
-
-
-def _deployment_zone_bounds(
-    request_context: _SmokePlacementRequest,
-) -> tuple[float, float, float, float]:
-    min_x = min(zone.min_x for zone in request_context.deployment_zones)
-    min_y = min(zone.min_y for zone in request_context.deployment_zones)
-    max_x = max(zone.max_x for zone in request_context.deployment_zones)
-    max_y = max(zone.max_y for zone in request_context.deployment_zones)
-    return (min_x, min_y, max_x, max_y)
-
-
-def _deployment_x_direction(request_context: _SmokePlacementRequest) -> float:
-    min_x, _, max_x, _ = _deployment_zone_bounds(request_context)
-    table_mid_x = request_context.mission_setup.battlefield_width_inches / 2.0
-    zone_mid_x = (min_x + max_x) / 2.0
-    return 1.0 if zone_mid_x <= table_mid_x else -1.0
-
-
-def _deployment_y_offset_for_unit(
-    unit_instance_id: str,
-    *,
-    zone_min_y: float,
-) -> float:
-    if zone_min_y >= 40.0:
-        if "strategic-reserve-unit" in unit_instance_id:
-            return 2.6
-        return 0.8
-    if "deep-strike-unit" in unit_instance_id:
-        return 4.0
-    if "scout-redeploy-unit" in unit_instance_id:
-        return 4.0
-    if "strategic-reserve-unit" in unit_instance_id:
-        return 9.0
-    return 4.0
-
-
-def _deployment_y_step(request_context: _SmokePlacementRequest) -> float:
-    _, min_y, _, _ = _deployment_zone_bounds(request_context)
-    if min_y >= 40.0:
-        return 1.27
-    return 1.8
-
-
-def _deployment_y_lower_margin_for_unit(unit_instance_id: str, zone_min_y: float) -> float:
-    if zone_min_y >= 40.0:
-        if "strategic-reserve-unit" in unit_instance_id:
-            return 2.6
-        return 0.8
-    return 2.0
-
-
-def _deployment_x_margin_for_unit(unit_instance_id: str) -> float:
-    if "deep-strike-unit" in unit_instance_id:
-        return 4.0
-    if "scout-redeploy-unit" in unit_instance_id:
-        return 8.0
-    if "strategic-reserve-unit" in unit_instance_id:
-        return 14.0
-    return 4.0
-
-
-def _smoke_redeploy_pose(
-    *,
-    index: int,
-    request_context: PreBattleProposalRequest,
-    unit_instance_id: str,
-) -> Pose:
-    row = index // 3
-    column = index % 3
-    origin_x, origin_y = _deployment_origin_for_unit(
-        request_context=request_context,
-        unit_instance_id=unit_instance_id,
-    )
-    x_direction = _deployment_x_direction(request_context)
-    return Pose.at(
-        origin_x + (row * 1.8 * x_direction),
-        origin_y + (column * _deployment_y_step(request_context)),
-        0.0,
-        facing_degrees=0.0 if x_direction > 0.0 else 180.0,
-    )
-
-
-def _scout_witness(
-    *,
-    state: GameState,
-    request_context: PreBattleProposalRequest,
-    dx: float,
-) -> PathWitness:
-    if state.battlefield_state is None:
-        raise LiveCoreSmokeError("Scout move witness requires battlefield state.")
-    unit_placement = state.battlefield_state.unit_placement_by_id(request_context.unit_instance_id)
-    paths: list[tuple[str, tuple[Pose, ...]]] = []
-    for placement in unit_placement.model_placements:
-        start = placement.pose
-        midpoint = Pose.at(
-            start.position.x + (dx / 2.0),
-            start.position.y,
-            start.position.z,
-            facing_degrees=start.facing.degrees,
-        )
-        end = Pose.at(
-            start.position.x + dx,
-            start.position.y,
-            start.position.z,
-            facing_degrees=start.facing.degrees,
-        )
-        paths.append((placement.model_instance_id, (start, midpoint, end)))
-    return PathWitness.for_paths(tuple(paths))
-
-
-def _model_source_for_id(
-    *,
-    state: GameState,
-    model_instance_id: str,
-) -> tuple[str, str, str]:
-    for army in state.army_definitions:
-        for unit in army.units:
-            for model in unit.own_models:
-                if model.model_instance_id == model_instance_id:
-                    return army.army_id, army.player_id, unit.unit_instance_id
-    raise LiveCoreSmokeError(f"Smoke model_instance_id is not mustered: {model_instance_id}.")
-
-
-def _state(client: LocalSessionClient) -> GameState:
-    state = client.session.lifecycle.state
-    if state is None:
-        raise LiveCoreSmokeError("Live smoke session has no game state.")
-    return state
-
-
-def _option_with_prefix(decision: UiDecision, prefix: str) -> str:
-    for option in decision.options:
-        if option.option_id.startswith(prefix):
-            return option.option_id
-    raise LiveCoreSmokeError(f"Expected sequencing option starting with {prefix}.")
-
-
-def _assert_expected_pending_decision(
-    status: UiClientStatus,
-    expected_decision_type: str,
-) -> None:
-    decision = status.decision
-    if decision is None:
-        raise LiveCoreSmokeError(f"Expected {expected_decision_type}, got no pending decision.")
-    if decision.decision_type != expected_decision_type:
-        raise LiveCoreSmokeError(
-            f"Expected {expected_decision_type}, got {decision.decision_type}."
-        )
-
-
-def _live_core_smoke_config() -> GameConfig:
-    config = canonical_setup_prebattle_smoke_config(game_id="ui-live-smoke-game")
-    if config.mission_setup is None:
-        raise LiveCoreSmokeError("Live core smoke config requires a mission setup.")
-    return replace(
-        config,
-        mission_setup=_with_live_core_smoke_battlefield_geometry(config.mission_setup),
-    )
-
-
-def _with_live_core_smoke_battlefield_geometry(base_setup: MissionSetup) -> MissionSetup:
-    geometry_setup = MissionSetup.from_mission_pack(
-        mission_pack=warhammer_event_companion_2026_06_mission_pack(),
-        mission_pool_entry_id=_LIVE_CORE_SMOKE_MISSION_POOL_ENTRY_ID,
-        terrain_layout_id=_LIVE_CORE_SMOKE_TERRAIN_LAYOUT_ID,
-        attacker_player_id="player-a",
-        defender_player_id="player-b",
-    )
-    return replace(
-        base_setup,
-        battlefield_layout_id=geometry_setup.battlefield_layout_id,
-        deployment_map_id=geometry_setup.deployment_map_id,
-        terrain_layout_id=geometry_setup.terrain_layout_id,
-        battlefield_width_inches=geometry_setup.battlefield_width_inches,
-        battlefield_depth_inches=geometry_setup.battlefield_depth_inches,
-        objective_markers=geometry_setup.objective_markers,
-        deployment_zones=geometry_setup.deployment_zones,
-        battlefield_regions=geometry_setup.battlefield_regions,
-        terrain_areas=geometry_setup.terrain_areas,
-        terrain_features=geometry_setup.terrain_features,
-        objective_terrain_areas=geometry_setup.objective_terrain_areas,
-    )
+def _string_list(payload: JsonObject, key: str) -> list[str]:
+    value = payload.get(key)
+    if value is None:
+        return []
+    if type(value) is not list or any(type(item) is not str or not item for item in value):
+        raise LiveCoreSmokeError(f"Smoke payload field {key!r} must be a string list.")
+    return cast(list[str], value)

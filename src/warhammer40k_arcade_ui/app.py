@@ -157,6 +157,8 @@ def create_window(
                 preferences_path=ui_prefs_path,
                 initial_status=startup.status,
                 initial_game_view=startup.game_view,
+                initial_rules_catalog=startup.rules_catalog,
+                initial_support_profile=startup.support_profile,
                 core_client=trace_core_client(startup.core_client, resolved_trace_writer),
                 viewer_player_id=startup.viewer_player_id,
                 event_cursor=startup.event_cursor,

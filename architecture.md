@@ -1,6 +1,6 @@
 # Arcade UI Architecture Build Order
 
-Last updated: 2026-06-07
+Last updated: 2026-08-22
 
 This document is the build-order roadmap for the Arcade UI client that drives the
 [`Warhammer_40k_AI`](https://github.com/SobolGaming/Warhammer_40k_AI) core engine.
@@ -29,11 +29,9 @@ The roadmap is intentionally client-boundary first:
 
 ## Roadmap status
 
-Phases 0-21 are complete. Later phases are planned and linked to independently reviewable documents
-under `docs/plans/`.
-
-| Phase | Status | Purpose | Plan |
-| --- | --- | --- | --- |
+Completed plans live under `docs/plans/finished/`; active and preliminary work lives under
+`docs/plans/`. Phase 34 establishes the current compatibility baseline: core revision
+`dbfcc3a99e9d560d1354506352a09d48ca555a94`, external contract `10.2.0`.
 
 
 ## Cross-cutting architectural rules
@@ -53,6 +51,32 @@ under `docs/plans/`.
 7. **No config-owned rules.** User preferences may bind known UI commands, known overlays, visual
    defaults, and local input behavior; they must not create legal actions, engine decisions,
    proposal kinds, visibility exceptions, or validation behavior.
+8. **No private core session path.** Production code may use only the public adapter/session facade;
+   it must not inspect lifecycle queues, pending-request containers, or mutable engine state.
+9. **Descriptor-owned interaction routing.** A visible request is routed from its exact
+   `interaction_kind` and an explicit published submission variant, never from a decision-name
+   heuristic.
+10. **Projection identity is binding.** Physical drafts retain request, submission-variant,
+    `spatial_context_hash`, and projection-state identity. The render-only
+    `authoritative_geometry_hash` is never submission authority.
+
+## Contract 10 Boundary
+
+`warhammer40k_arcade_ui.core_client.compatibility` declares the exact supported external contract
+and projection-family discriminators. `LocalSessionClient` validates that declaration before play
+and talks to the engine only through `AdapterGameSession`: `start`, `advance_until_decision_or_terminal`,
+viewer-scoped `view` and events, rules-catalog/support reads, `submit_option`, and
+`submit_parameterized_payload`.
+
+`UiGameView` retains projection identity, viewer role, public mission/resource state, nested visible
+interactions, rules-catalog identity, and the canonical battlefield projection. Strict parsers reject
+missing, extra, old, or unknown contract fields where the UI owns a typed boundary. Hidden requests
+remain `interaction: null`; the UI does not infer their contents.
+
+The editor registry in `state.interaction_dispatch` covers all 13 published interaction kinds.
+Existing finite, dice, movement, placement, assignment, and roster surfaces are selected by that
+descriptor. A valid specialized interaction that is not implemented produces a typed unsupported
+state naming the interaction and required inputs; it is never submitted through a guessed shape.
 
 ## Current module map
 
@@ -72,18 +96,21 @@ summaries, CI quality gates, golden regression fixtures, ADRs, and packaging smo
   for entry-point tests.
 - `warhammer40k_arcade_ui.main` — console-script entry point.
 - `warhammer40k_arcade_ui.core_client.protocol` — UI-facing dataclasses and client protocol.
+- `warhammer40k_arcade_ui.core_client.compatibility` — exact Contract 10.2.0 compatibility
+  declaration and fail-fast installed-core check.
 - `warhammer40k_arcade_ui.core_client.local_session_client` — local in-process wrapper over the
-  core engine adapter/session APIs.
+  public core `AdapterGameSession` facade, including viewer-redacted support data and source-hashed
+  rules-catalog caching.
 - `warhammer40k_arcade_ui.core_client.live_smoke` — opt-in real-core smoke startup harness that
   constructs a canonical two-player local session and advances to the first movement-unit decision.
 - `warhammer40k_arcade_ui.core_client.fake_client` — deterministic fake client for UI tests.
 - `warhammer40k_arcade_ui.render.view_models` — read-only battlefield render view models parsed from
   deterministic fixture/projection payloads, plus supported refresh from render-shaped payloads or
   core battlefield runtime model-placement projections.
-- `warhammer40k_arcade_ui.render.core_projection` — viewer-scoped core `GameViewPayload` to
-  render-view adapter for the live smoke launch path. It renders current validated layout terrain
-  from typed `mission_setup.terrain_areas[*].footprint_polygon` payloads, while keeping strict
-  `terrain_features[*].display_geometry` support for future feature-level terrain projections.
+- `warhammer40k_arcade_ui.render.core_projection` — strict canonical `battlefield_view` to
+  render-view adapter for table bounds, deployment regions, objectives, terrain areas/features,
+  model measurement/support geometry, interaction overlays, and render hints. The legacy
+  mission-setup bridge remains available only to the explicit `ui-fixture-v1` test fixture.
 - `warhammer40k_arcade_ui.render.camera` — world-space camera, pan/zoom, and screen/world
   coordinate conversion.
 - `warhammer40k_arcade_ui.render.primitives` — pure table, deployment-zone, objective, terrain,
@@ -121,6 +148,8 @@ summaries, CI quality gates, golden regression fixtures, ADRs, and packaging smo
 - `warhammer40k_arcade_ui.state.entity_selection` — request-scoped entity refs, layer registry,
   profile builders, alias rules, local add/subtract/toggle state transitions, request drift
   reconciliation, and visual-anchor diagnostics for movement and finite unit-selection profiles.
+- `warhammer40k_arcade_ui.state.interaction_dispatch` — interaction-kind editor registry and
+  explicit submission-variant selection/unsupported diagnostics.
 - `warhammer40k_arcade_ui.input.commands` — preference-backed local hotkey matching.
 - `warhammer40k_arcade_ui.hud.layouts` — configurable HUD zone/region geometry, Compass Ring and
   Command Bench presets, center-viewport preservation, and panel overflow line-capacity helpers.
@@ -307,9 +336,9 @@ The UI may preview proposed actions, but preview state is advisory only. Accepte
 after the core engine returns an accepted result and a refreshed projection.
 
 `LocalSessionClient` preserves explicit `request_id` values at the UI boundary. It rejects stale
-request IDs before constructing engine `DecisionResult` objects, and accepted submissions still flow
-through `FiniteOptionSubmission` or `ParameterizedSubmission` into
-`GameLifecycle.submit_decision(...)`.
+draft context before client submission. Finite and parameterized answers then flow through public
+`AdapterGameSession.submit_option(...)` and `submit_parameterized_payload(...)`; the UI does not
+construct core `DecisionResult` objects or inspect the lifecycle queue.
 
 ## Testing strategy
 
@@ -340,14 +369,18 @@ through `FiniteOptionSubmission` or `ParameterizedSubmission` into
   clearing and auto-follow, invalid diagnostic display, same-context retry retargeting, and render
   projection model-position refresh.
 - Static import-boundary checks to keep direct engine imports isolated to `core_client`.
+- Contract-conformance tests for current projection/status/event/catalog/support examples and all 90
+  published interaction cases, including exact discriminator and unknown-kind rejection.
+- Canonical battlefield parity tests for terrain, objectives, zones, model measurement footprints,
+  support footprints, and headless framebuffer evidence.
 - Coverage, packaging metadata, and golden regression fixture tests for CI hardening.
 
 ## Known deferred work
 
 - Network transport.
 - Replay inspector.
-- Placement proposal tools for reserves, disembark, Rapid Ingress, and other
-  `submit_placement_proposal` requests.
+- Specialized variant selection for interactions that publish multiple proposal schemas, currently
+  Cult Ambush marker placement versus the no-legal-marker confirmation.
 - Shooting declaration and ranged attack-resolution UI for `select_shooting_unit`,
   `select_shooting_type`, `submit_shooting_declaration`, `select_resolve_target_unit`,
   `select_attack_weapon_group`, defender allocation, save/damage, and reaction decisions.

@@ -17,6 +17,7 @@ from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
 from warhammer40k_arcade_ui.state.assignment_workspace import AssignmentWorkspace
 from warhammer40k_arcade_ui.state.entity_selection import EntityRef
+from warhammer40k_arcade_ui.state.interaction_dispatch import interaction_route_for_decision
 from warhammer40k_arcade_ui.state.movement_draft import (
     MovementDraft,
     movement_proposal_context_diagnostic_line,
@@ -79,6 +80,8 @@ class FiniteDecisionPanelView:
     proposal_kind: str | None
     options: tuple[FiniteDecisionOptionView, ...]
     diagnostic_lines: tuple[str, ...]
+    confirm_label: str | None
+    decline_label: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,6 +239,8 @@ def build_finite_decision_panel(
             proposal_kind=None,
             options=(),
             diagnostic_lines=_diagnostic_lines(diagnostics),
+            confirm_label=None,
+            decline_label=None,
         )
     if pending_decision.is_parameterized:
         proposal = pending_decision.parameterized_proposal
@@ -251,7 +256,20 @@ def build_finite_decision_panel(
             status_line=status_message,
             proposal_kind=proposal_kind,
             options=(),
-            diagnostic_lines=_diagnostic_lines(diagnostics),
+            diagnostic_lines=(
+                *_diagnostic_lines(diagnostics),
+                *_interaction_diagnostic_lines(pending_decision),
+            ),
+            confirm_label=(
+                None
+                if pending_decision.interaction is None
+                else pending_decision.interaction.display_hints.confirm_label
+            ),
+            decline_label=(
+                None
+                if pending_decision.interaction is None
+                else pending_decision.interaction.display_hints.decline_label
+            ),
         )
     return FiniteDecisionPanelView(
         request_id=pending_decision.request_id,
@@ -268,8 +286,28 @@ def build_finite_decision_panel(
             )
             for index, option in enumerate(pending_decision.options)
         ),
-        diagnostic_lines=_diagnostic_lines(diagnostics),
+        diagnostic_lines=(
+            *_diagnostic_lines(diagnostics),
+            *_interaction_diagnostic_lines(pending_decision),
+        ),
+        confirm_label=(
+            None
+            if pending_decision.interaction is None
+            else pending_decision.interaction.display_hints.confirm_label
+        ),
+        decline_label=(
+            None
+            if pending_decision.interaction is None
+            else pending_decision.interaction.display_hints.decline_label
+        ),
     )
+
+
+def _interaction_diagnostic_lines(pending_decision: UiDecision) -> tuple[str, ...]:
+    route = interaction_route_for_decision(pending_decision)
+    if route.supported or route.diagnostic is None:
+        return ()
+    return (route.diagnostic,)
 
 
 def build_movement_draft_panel(

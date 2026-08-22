@@ -11,7 +11,6 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiClientStatus,
     UiDecision,
     UiEventDelta,
-    UiFiniteOption,
     UiGameView,
 )
 
@@ -19,24 +18,36 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 def phase6_debug_pending_decision() -> UiDecision:
     """Return a finite request targeting the default fixture Intercessors."""
 
-    return UiDecision(
-        request_id="decision-request-phase6-debug-000001",
-        decision_type="select_movement_action",
-        actor_id="player_1",
-        payload={"unit_instance_id": "intercessor_squad"},
-        options=(
-            UiFiniteOption(
-                option_id="normal_move",
-                label="Normal Move",
-                payload={"movement_phase_action": "normal_move"},
+    return UiDecision.from_payload(
+        {
+            "schema_version": "decision-request-view-v5-phase17n-step4",
+            "request_id": "decision-request-phase6-debug-000001",
+            "decision_type": "select_movement_action",
+            "actor_id": "player_1",
+            "payload": {"unit_instance_id": "intercessor_squad"},
+            "options": [
+                {
+                    "option_id": "normal_move",
+                    "label": "Normal Move",
+                    "payload": {"movement_phase_action": "normal_move"},
+                },
+                {
+                    "option_id": "advance",
+                    "label": "Advance",
+                    "payload": {"movement_phase_action": "advance"},
+                },
+            ],
+            "is_parameterized": False,
+            "interaction": _interaction_payload(
+                interaction_kind="finite_option_list",
+                submission_kind="finite",
+                proposal_kind=None,
+                candidate_option_ids=("normal_move", "advance"),
+                variant_id="finite_option",
+                required_inputs=("option_id",),
+                confirm_label="Select Action",
             ),
-            UiFiniteOption(
-                option_id="advance",
-                label="Advance",
-                payload={"movement_phase_action": "advance"},
-            ),
-        ),
-        is_parameterized=False,
+        }
     )
 
 
@@ -98,6 +109,7 @@ def phase6_debug_parameterized_decision() -> UiDecision:
 
     return UiDecision.from_payload(
         {
+            "schema_version": "decision-request-view-v5-phase17n-step4",
             "request_id": "decision-request-phase6-debug-000002",
             "decision_type": "submit_movement_proposal",
             "actor_id": "player_1",
@@ -113,6 +125,7 @@ def phase6_debug_parameterized_decision() -> UiDecision:
                     "proposal_kind": "normal_move",
                     "source_decision_request_id": "decision-request-phase6-debug-000001",
                     "source_decision_result_id": "ui-result-000001",
+                    "spatial_context_hash": "phase6-debug-spatial-context",
                     "movement_phase_action": "normal_move",
                     "placement_kinds": [],
                     "context": {
@@ -130,15 +143,72 @@ def phase6_debug_parameterized_decision() -> UiDecision:
                     "payload": {"submission_kind": "parameterized"},
                 }
             ],
+            "interaction": _interaction_payload(
+                interaction_kind="path_editor",
+                submission_kind="parameterized",
+                proposal_kind="normal_move",
+                candidate_option_ids=("submit_parameterized_payload",),
+                variant_id="normal_move",
+                required_inputs=("model_paths", "final_poses"),
+                confirm_label="Submit Paths",
+            ),
         }
     )
+
+
+def _interaction_payload(
+    *,
+    interaction_kind: str,
+    submission_kind: str,
+    proposal_kind: str | None,
+    candidate_option_ids: tuple[str, ...],
+    variant_id: str,
+    required_inputs: tuple[str, ...],
+    confirm_label: str,
+) -> JsonObject:
+    return {
+        "schema_version": "interaction-descriptor-v2-variants",
+        "interaction_kind": interaction_kind,
+        "submission_kind": submission_kind,
+        "proposal_kind": proposal_kind,
+        "selected_entity_ids": [],
+        "required_inputs": list(required_inputs),
+        "submission_variants": [
+            {
+                "variant_id": variant_id,
+                "interaction_kind": interaction_kind,
+                "required_inputs": list(required_inputs),
+                "proposal_schema_ref": None,
+                "display_label": confirm_label,
+            }
+        ],
+        "constraints": {
+            "candidate_option_ids": list(candidate_option_ids),
+            "entity_kinds": [],
+            "minimum_selections": None,
+            "maximum_selections": None,
+            "maximum_distance_in": None,
+            "minimum_enemy_distance_in": None,
+            "exact_model_count": None,
+            "must_preserve_coherency": None,
+            "may_enter_engagement_range": None,
+            "placement_kinds": [],
+            "submission_schema_ref": "parameterized-submission.schema.json"
+            if submission_kind == "parameterized"
+            else "finite-submission.schema.json",
+            "proposal_schema_ref": None,
+        },
+        "display_hints": {
+            "confirm_label": confirm_label,
+            "decline_label": None,
+        },
+    }
 
 
 def _phase6_debug_view(
     pending_decision: UiDecision | None,
     *,
     battlefield_state: JsonValue = None,
-    event_count: int = 1,
 ) -> UiGameView:
     return UiGameView(
         viewer_player_id="player_1",
@@ -158,7 +228,6 @@ def _phase6_debug_view(
         public_stratagem_use_records=(),
         pending_decision=pending_decision,
         pending_proposal=None,
-        event_count=event_count,
     )
 
 
@@ -166,7 +235,6 @@ def _phase10_debug_view_from_movement_payload(payload: JsonValue) -> UiGameView:
     return _phase6_debug_view(
         pending_decision=None,
         battlefield_state=_battlefield_projection_from_movement_payload(payload),
-        event_count=4,
     )
 
 
