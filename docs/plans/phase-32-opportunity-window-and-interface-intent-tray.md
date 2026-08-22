@@ -4,12 +4,19 @@ Status: Proposed
 
 ## Purpose
 
-Support the core engine's Phase 18B `OpportunityWindow` contract for optional triggered actions,
+Support the core engine's opportunity-window interaction contract for optional triggered actions,
 Stratagems, rerolls, reactions, and side actions.
 
 The UI should render "available now" opportunities without creating a second rules path. The engine
 still emits a normal pending `DecisionRequest`; the UI displays the opportunity envelope, helps the
 player choose an engine-provided option, and submits the ordinary `DecisionResult`.
+
+## Dependency
+
+Phase 34 must be implemented first. It introduces strict
+`interaction-descriptor-v2-variants` parsing and interaction-kind dispatch for current core
+contract `10.2.0`. Phase 32 extends that common machinery with a specialized opportunity tray; it
+must not retain a parallel parser based on older request-payload conventions.
 
 ## Core Update Context
 
@@ -17,9 +24,8 @@ Warhammer_40k_AI revision `0531ebe` adds:
 
 - `OpportunityWindow`, `OpportunityLegalAction`, `TriggerBatchingMode`, `WindowPass`, and
   `InterfaceIntent` types in `warhammer40k_core.engine.opportunity_windows`;
-- `submission_family: "opportunity_window"` request payloads for trigger hosts that need stale-state
-  hashes, sequence numbers, legal-action fingerprints, priority order, and replay-safe pass
-  suppression;
+- engine-authored `interaction_kind: "opportunity_window"` descriptors for trigger hosts, with
+  explicit submission variants, constraints, required inputs, and display hints;
 - attack-sequence Command Re-roll hooks in Shooting and Fight after eligible Hit, Wound, real Save,
   and random Damage rolls;
 - finite `use_stratagem` options where each use/decline option carries a nested
@@ -30,17 +36,18 @@ This phase is the UI counterpart to `Warhammer_40k_AI/docs/TRIGGER_OPPORTUNITY_W
 Phase 18B additions in `ADAPTER_DECISION_CONTRACT.md`.
 
 Reviewed forward through `Warhammer_40k_AI`
-`f01293fb4d83249482ecee1c304e21f18e57055e` on 2026-06-16. The later core update
-adds typed terrain-area and objective-terrain projection fields but does not change the
-opportunity-window request model. Phase 32 should continue to target finite
-`submission_family: "opportunity_window"` requests; terrain projection drift is tracked separately
-in Phase 33.
+`dbfcc3a99e9d560d1354506352a09d48ca555a94` on 2026-08-22. Current core external contract
+`10.2.0` requires clients to choose renderers from `interaction_kind`, not `decision_type`, display
+text, or arbitrary payload keys. Visible nested choices are published in
+`nested_interaction_requests`; hidden decisions expose no interaction descriptor or nested request.
 
 ## Scope
 
 In scope:
 
-- detect finite `DecisionRequest` payloads whose `submission_family` is `opportunity_window`;
+- detect visible decisions whose descriptor has `interaction_kind: opportunity_window`;
+- select the engine-published opportunity submission variant and obey its `required_inputs`,
+  wrapper schema reference, and proposal schema reference;
 - parse and preserve `opportunity_window`, `opportunity_window_id`, boundary state hash, sequence
   number, anchor event IDs, priority order, legal-action fingerprint, and option-level
   `opportunity_submission` payloads;
@@ -85,14 +92,18 @@ matches the intended window, state hash, source/action, targets, and expiration.
 ## Implementation Slices
 
 1. **Opportunity request parser**
-   - Add strict UI-side parsing for `submission_family: "opportunity_window"` finite requests.
+   - Reuse Phase 34's strict interaction descriptor parser for
+     `interaction_kind: opportunity_window`.
+   - Reject missing/unknown descriptors rather than falling back to `submission_family` or
+     `decision_type`.
    - Preserve raw JSON payloads needed for option submission and diagnostics.
    - Fail fast on malformed envelopes in fixtures instead of silently falling back.
 
 2. **Runtime view model**
    - Create a JSON-safe `OpportunityWindowUiState` for HUD/runtime data.
-   - Include window ID, action count, timing label, actor/priority order, selected option ID,
-     default action ID, source/action summaries, batching mode, and diagnostic breadcrumbs.
+   - Include descriptor variant ID, window ID, action count, timing label, actor/priority order,
+     selected option ID, default action ID, source/action summaries, batching mode, and diagnostic
+     breadcrumbs.
    - Keep this separate from assignment-workspace rows.
 
 3. **HUD tray rendering**
@@ -101,8 +112,8 @@ matches the intended window, state hash, source/action, targets, and expiration.
    - Keep all opportunity controls synchronized with Current Action selection.
 
 4. **Submission path**
-   - Submit the selected engine option ID through the finite decision path with the current request
-     ID.
+   - Submit the selected engine option ID through the descriptor-selected finite variant with the
+     current request ID.
    - Preserve option-level `opportunity_submission` payloads as metadata for trace/review, but do not
      alter them.
    - Surface engine invalid diagnostics for stale state hash, stale sequence, wrong window,
@@ -128,8 +139,8 @@ matches the intended window, state hash, source/action, targets, and expiration.
 
 ## Acceptance Criteria
 
-- The UI detects and displays finite opportunity-window requests without treating them as
-  parameterized assignment proposals.
+- The UI detects and displays opportunity-window interactions from the engine descriptor without
+  treating them as parameterized assignment proposals or inferring them from decision names.
 - Command Re-roll opportunities after Shooting/Fight Hit, Wound, Save, and random Damage rolls can
   be selected or declined through engine-provided option IDs.
 - Wrong-window/stale/fingerprint-drift invalid diagnostics render in the HUD and event trace without
@@ -144,7 +155,7 @@ matches the intended window, state hash, source/action, targets, and expiration.
 
 Add or update tests for:
 
-- strict opportunity-window request parsing;
+- strict opportunity-window descriptor and submission-variant parsing;
 - Current Action/HUD runtime data from representative `use_stratagem` and `resolve_reaction_window`
   opportunity payloads;
 - clickable opportunity action buttons selecting engine option IDs;

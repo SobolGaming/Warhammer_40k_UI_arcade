@@ -132,6 +132,7 @@ Build bottom-up:
 31. scrollable player-units roster and reciprocal selection
 32. opportunity window and interface intent tray
 33. typed terrain area projection adaptation
+34. core Contract 10.2 adapter and projection adaptation
 
 When adding shooting, fight, charge, AI, training, or other later-gameplay surfaces, keep them on
 the same trusted decision/proposal path as movement. Do not add private rule logic or local
