@@ -13,6 +13,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  SUPPORTED_CORE_REVISION: f01293fb4d83249482ecee1c304e21f18e57055e
+
 jobs:
   quality:
     name: quality
@@ -26,10 +29,11 @@ jobs:
         with:
           path: Warhammer_40k_UI_arcade
 
-      - name: Checkout core engine repository for static typing
+      - name: Checkout supported core engine repository
         uses: actions/checkout@v4
         with:
           repository: SobolGaming/Warhammer_40k_AI
+          ref: ${{ env.SUPPORTED_CORE_REVISION }}
           path: Warhammer_40k_AI
           token: ${{ secrets.CORE_REPO_TOKEN || github.token }}
 
@@ -77,10 +81,11 @@ jobs:
         with:
           path: Warhammer_40k_UI_arcade
 
-      - name: Checkout core engine repository for static typing
+      - name: Checkout supported core engine repository
         uses: actions/checkout@v4
         with:
           repository: SobolGaming/Warhammer_40k_AI
+          ref: ${{ env.SUPPORTED_CORE_REVISION }}
           path: Warhammer_40k_AI
           token: ${{ secrets.CORE_REPO_TOKEN || github.token }}
 

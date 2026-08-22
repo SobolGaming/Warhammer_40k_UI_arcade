@@ -208,6 +208,9 @@ surfaces. Capability data is advisory support evidence, not rules authority.
 
 - Point `uv.lock` at the reviewed core SHA and resolve the current core dependency graph, including
   `jsonschema` and `referencing`.
+- Advance the CI `SUPPORTED_CORE_REVISION` with the lock and README so static analysis, tests, and
+  packaging always inspect one declared baseline rather than mixing locked dependencies with core
+  `main`.
 - Add one central UI compatibility declaration containing the supported external-contract major and
   exact projection-family discriminators.
 - Validate those discriminators before constructing runtime state.
@@ -373,6 +376,7 @@ surfaces. Capability data is advisory support evidence, not rules authority.
   available to runtime/HUD view models.
 - Live smoke reaches its supported checkpoints without UI-owned authoritative mutation.
 - The README and lock agree on the exact supported core revision.
+- CI checks out that same supported revision for both quality and test jobs.
 
 ## Automated Verification
 
