@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.protocol import (
     UiDecision,
     UiFiniteOption,
@@ -639,7 +640,7 @@ def _movement_proposal_decision(
     }
     if context_overrides is not None:
         context.update(context_overrides)
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-000005",
             "decision_type": "submit_movement_proposal",
@@ -674,7 +675,7 @@ def _movement_proposal_decision(
 
 
 def _placement_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-placement-001",
             "decision_type": "submit_placement_proposal",

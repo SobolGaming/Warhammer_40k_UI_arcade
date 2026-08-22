@@ -10,7 +10,8 @@
       "unit_instance_id": "intercessor_squad",
       "proposal_kind": "pile_in",
       "source_decision_request_id": "decision-request-fight-activation-001",
-      "source_decision_result_id": "ui-result-fight-activation-001",
+    "source_decision_result_id": "ui-result-fight-activation-001",
+    "spatial_context_hash": "fixture-spatial-pile-in",
       "movement_phase_action": "pile_in",
       "placement_kinds": [],
       "context": {
@@ -31,7 +32,8 @@
       "unit_instance_id": "intercessor_squad",
       "proposal_kind": "consolidate",
       "source_decision_request_id": "decision-request-fight-activation-001",
-      "source_decision_result_id": "ui-result-fight-activation-001",
+    "source_decision_result_id": "ui-result-fight-activation-001",
+    "spatial_context_hash": "fixture-spatial-consolidate",
       "movement_phase_action": "consolidate",
       "placement_kinds": [],
       "context": {
@@ -114,7 +116,8 @@
       "unit_instance_id": "intercessor_squad",
       "proposal_kind": "charge_move",
       "source_decision_request_id": "decision-request-heroic-target-001",
-      "source_decision_result_id": "ui-result-heroic-target-001",
+    "source_decision_result_id": "ui-result-heroic-target-001",
+    "spatial_context_hash": "fixture-spatial-heroic-charge",
       "movement_phase_action": "charge_move",
       "placement_kinds": [],
       "context": {
@@ -136,7 +139,8 @@
       "unit_instance_id": "intercessor_squad",
       "proposal_kind": "reinforcement_placement",
       "source_decision_request_id": "decision-request-reinforcement-unit-001",
-      "source_decision_result_id": "ui-result-reinforcement-unit-001",
+    "source_decision_result_id": "ui-result-reinforcement-unit-001",
+    "spatial_context_hash": "fixture-spatial-reinforcement",
       "movement_phase_action": null,
       "placement_kinds": ["reinforcement"],
       "context": {

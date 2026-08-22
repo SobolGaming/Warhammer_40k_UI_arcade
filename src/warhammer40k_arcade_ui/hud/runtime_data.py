@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from warhammer40k_arcade_ui.hud.dice_tray import dice_tray_runtime_data
-from warhammer40k_arcade_ui.hud.ergonomics import HudErgonomicsView
+from warhammer40k_arcade_ui.hud.ergonomics import HudErgonomicsView, PublicGameStateView
 from warhammer40k_arcade_ui.hud.toolkit import (
     AssignmentGroupRowView,
     CurrentActionView,
@@ -53,13 +53,17 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
     events = tuple(_line_data(line, title="Filtered event") for line in ergonomics.event_lines)
     hotkeys = tuple(_line_data(line, title="Hotkey") for line in ergonomics.hotkey_hints)
     dice_tray = dice_tray_runtime_data(ergonomics.dice_tray)
+    public_state = _public_game_state_data(ergonomics.public_game_state)
     data: JsonObject = {
         "phase_state": status_chips.get("phase", _fallback_status("Phase", "")),
         "active_player": status_chips.get("active_player", _fallback_status("Active", "")),
-        "command_points": _fallback_status("CP", "-"),
+        "command_points": _public_command_points(ergonomics.public_game_state),
         "mission_summary": {
             "title": "Missions",
-            "summary": _mission_summary(status_chips),
+            "summary": _public_mission_summary(
+                ergonomics.public_game_state,
+                fallback=_mission_summary(status_chips),
+            ),
         },
         "player_roster": player_roster,
         "opponent_roster": {
@@ -92,11 +96,62 @@ def runtime_data_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> JsonObject:
         "hud.workbench.assignments.groups": list(assignment_rows),
         "hud.workbench.assignments.notices": list(assignment_notice_rows),
         "hud.dice_tray.active": dice_tray,
+        "hud.public_game_state": public_state,
         "hud.workbench.review.diagnostics": list(diagnostics),
         "hud.workbench.review.events": list(events),
         "hud.workbench.review.hotkeys": list(hotkeys),
     }
     return data
+
+
+def _public_game_state_data(state: PublicGameStateView | None) -> JsonObject:
+    if state is None:
+        return {}
+    return {
+        "viewer_player_id": state.viewer_player_id,
+        "mission_setup": state.mission_setup,
+        "secondary_mission_choices": list(state.secondary_mission_choices),
+        "secondary_mission_card_states": list(state.secondary_mission_card_states),
+        "primary_turn_start_snapshots": list(state.primary_turn_start_snapshots),
+        "primary_progress_state": state.primary_progress_state,
+        "command_point_ledgers": list(state.command_point_ledgers),
+        "victory_point_ledgers": list(state.victory_point_ledgers),
+        "stratagem_use_records": list(state.stratagem_use_records),
+    }
+
+
+def _public_command_points(state: PublicGameStateView | None) -> JsonObject:
+    if state is None:
+        return _fallback_status("CP", "-")
+    for raw_ledger in state.command_point_ledgers:
+        if type(raw_ledger) is not dict:
+            continue
+        if raw_ledger.get("player_id") != state.viewer_player_id:
+            continue
+        command_points = raw_ledger.get("command_points")
+        if type(command_points) is int:
+            return _fallback_status("CP", str(command_points))
+    return _fallback_status("CP", "-")
+
+
+def _public_mission_summary(
+    state: PublicGameStateView | None,
+    *,
+    fallback: str,
+) -> str:
+    if state is None:
+        return fallback
+    mission_ids = tuple(
+        str(raw_card["secondary_mission_id"])
+        for raw_card in state.secondary_mission_card_states
+        if type(raw_card) is dict
+        and raw_card.get("player_id") == state.viewer_player_id
+        and raw_card.get("hidden") is False
+        and type(raw_card.get("secondary_mission_id")) is str
+    )
+    if mission_ids:
+        return ", ".join(mission_ids)
+    return fallback
 
 
 def theme_for_ergonomic_hud(ergonomics: HudErgonomicsView) -> HudTheme:

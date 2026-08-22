@@ -10,6 +10,8 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiClientStatus,
     UiEventDelta,
     UiGameView,
+    UiRulesCatalogView,
+    UiSupportProfile,
 )
 
 
@@ -68,6 +70,10 @@ def _new_event_delta_requests() -> list[tuple[int, str]]:
     return []
 
 
+def _new_support_profiles() -> dict[str, UiSupportProfile]:
+    return {}
+
+
 @dataclass(slots=True)
 class FakeCoreClient:
     """Scriptable fake for UI modules that should not launch a real game."""
@@ -78,6 +84,10 @@ class FakeCoreClient:
     event_delta: UiEventDelta | None = None
     event_delta_by_player_id: dict[str, UiEventDelta] = field(
         default_factory=_new_event_delta_by_player_id
+    )
+    rules_catalog: UiRulesCatalogView | None = None
+    support_profile_by_player_id: dict[str, UiSupportProfile] = field(
+        default_factory=_new_support_profiles
     )
     view_requests: list[str] = field(default_factory=_new_view_requests)
     event_delta_requests: list[tuple[int, str]] = field(default_factory=_new_event_delta_requests)
@@ -118,6 +128,19 @@ class FakeCoreClient:
         if self.event_delta is None:
             raise ValueError("FakeCoreClient event_delta is not configured.")
         return self.event_delta
+
+    def get_rules_catalog(self) -> UiRulesCatalogView:
+        if self.rules_catalog is None:
+            raise ValueError("FakeCoreClient rules_catalog is not configured.")
+        return self.rules_catalog
+
+    def get_support_profile(self, viewer_player_id: str) -> UiSupportProfile:
+        try:
+            return self.support_profile_by_player_id[viewer_player_id]
+        except KeyError as exc:
+            raise ValueError(
+                f"FakeCoreClient support profile is not configured for {viewer_player_id}."
+            ) from exc
 
     def submit_finite(
         self,

@@ -1,4 +1,27 @@
-# Diagram of support from Combined AI + UI
+# UI And Core Feature Summary
+
+Reviewed baseline: UI Phase 34 against `Warhammer_40k_AI`
+`dbfcc3a99e9d560d1354506352a09d48ca555a94`, external contract `10.2.0`.
+
+The UI now parses the current viewer projection, canonical battlefield geometry, lifecycle status,
+event delta, rules catalog, support profile, nested requests, and all published interaction
+descriptors strictly. Green below means the UI has a usable specialized or generic interaction
+surface; orange means the core publishes the workflow but the UI still needs specialized semantics
+or the canonical smoke fixture cannot exercise it end to end.
+
+## Contract 10 Interaction Coverage
+
+| Interaction kind | Current UI route | Status |
+| --- | --- | --- |
+| `finite_option_list`, `entity_selection`, `confirmation`, `ordered_sequencing`, `quantity_selection`, `opportunity_window` | Current Action generic controls | Usable generic route |
+| `dice_selection` | Dice Tray | Usable generic route |
+| `path_editor` | Movement-family path editor | Usable for current movement families |
+| `model_pose_placement`, `multi_model_placement` | Placement editor | Usable for current single/multi-model families |
+| `weapon_allocation_matrix` | Assignment workspace | Usable where a current declaration seeding adapter exists |
+| `battlefield_point_placement` | Placement family | Typed unsupported when explicit multi-variant selection is required |
+| `roster_construction` | Roster family | Typed unsupported pending a specialized editor |
+
+## Combined AI And UI Flow
 
 - Green: implemented in core and the current UI has explicit usable workflow.
 - Orange: implemented in core/adapter contracts, but current UI lacks semantic tooling.
@@ -19,14 +42,14 @@ flowchart TD
   MissionPrompt --> MissionConfig["MissionSetup, attacker/defender, turn_order supplied by config"]:::orange
   MissionConfig --> Battlefield["Create battlefield + UI projection/rendering"]:::green
 
-  Battlefield --> Secondary["select_secondary_missions"]:::orange
-  Secondary --> Reserves["select_reserve_declaration"]:::orange
-  Reserves --> DeploySelect["select_deployment_unit"]:::orange
-  DeploySelect --> DeployPlace["submit_deployment_placement"]:::orange
-  DeployPlace --> Redeploy["select_redeploy_unit -> submit_redeploy_placement"]:::orange
-  Redeploy --> Scout["select_prebattle_action -> submit_scout_move / submit_scout_reserve_setup"]:::orange
+  Battlefield --> Secondary["select_secondary_missions"]:::green
+  Secondary --> Reserves["select_reserve_declaration"]:::green
+  Reserves --> DeploySelect["select_deployment_unit"]:::green
+  DeploySelect --> DeployPlace["submit_deployment_placement"]:::green
+  DeployPlace --> Redeploy["select_redeploy_unit -> submit_redeploy_placement"]:::green
+  Redeploy --> Scout["select_prebattle_action -> submit_scout_move / submit_scout_reserve_setup"]:::green
   Scout --> FirstTurnPrompt["Determine first turn as player-facing prompt"]:::grey
-  FirstTurnPrompt --> SetupGate["Setup completion gate / enter battle"]:::orange
+  FirstTurnPrompt --> SetupGate["Setup completion gate / enter battle"]:::green
 
   SetupGate --> Command["Command phase: CP, tactical cards, battle-shock, mission hooks"]:::orange
   Command --> Tactical["draw/replace/discard/score tactical secondaries"]:::orange
@@ -60,7 +83,7 @@ flowchart TD
   FightInterrupt --> NextTurn["Advance phase / turn / battle round"]:::orange
   NextTurn --> Command
   ```
-# Diagram of just AI core-engine
+## Core Engine Flow
 
 - Green: implemented in Warhammer_40k_AI and exposed through lifecycle/DecisionRequest/projection/event wiring.
 - Dull orange: implemented in core domain/config/events, but not exposed as appropriate lifecycle DecisionRequests or UI-facing adapter contract yet.

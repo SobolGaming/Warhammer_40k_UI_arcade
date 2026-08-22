@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
 from warhammer40k_arcade_ui.hud.action_summary import build_action_visual_summary
 from warhammer40k_arcade_ui.hud.ergonomics import build_hud_ergonomics_view
@@ -196,7 +197,7 @@ def test_required_stratagem_assignment_without_binding_is_invalid() -> None:
 
 
 def test_finite_opportunity_window_is_not_assignment_workspace() -> None:
-    decision = UiDecision.from_payload(
+    decision = decision_from_fixture(
         {
             "request_id": "finite-stratagem-window-1",
             "decision_type": "use_stratagem",
@@ -417,7 +418,7 @@ def _shooting_declaration_decision(
                 "visibility_cache_key": "visibility-cache-1",
             }
         ]
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "shooting-request-1",
             "decision_type": "submit_shooting_declaration",
@@ -449,7 +450,7 @@ def _shooting_declaration_decision(
 
 
 def _melee_declaration_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "melee-request-1",
             "decision_type": "submit_melee_declaration",
@@ -522,7 +523,7 @@ def _stratagem_target_binding_decision(
         proposal_request["target_binding"] = target_binding
     if target_binding_candidates is not None:
         proposal_request["target_binding_candidates"] = target_binding_candidates
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "stratagem-request-1",
             "decision_type": "submit_stratagem_target_proposal",

@@ -118,13 +118,19 @@ class AssignmentWorkspace:
 def is_assignment_parameterized_decision(pending_decision: UiDecision | None) -> bool:
     """Return whether a pending decision is a supported generic assignment request."""
 
-    proposal = None if pending_decision is None else pending_decision.parameterized_proposal
+    if pending_decision is None or pending_decision.interaction is None:
+        return False
+    if not pending_decision.is_parameterized:
+        return False
+    if pending_decision.interaction.interaction_kind not in {
+        "entity_selection",
+        "weapon_allocation_matrix",
+    }:
+        return False
+    proposal = pending_decision.parameterized_proposal
     if proposal is None:
         return False
-    return (
-        proposal.decision_type in ASSIGNMENT_DECISION_TYPES
-        and proposal.proposal_kind in ASSIGNMENT_PROPOSAL_KINDS
-    )
+    return proposal.proposal_kind in ASSIGNMENT_PROPOSAL_KINDS
 
 
 def _shooting_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:

@@ -9,9 +9,13 @@ from warhammer40k_arcade_ui.core_client.protocol import JsonObject, JsonValue, U
 from warhammer40k_arcade_ui.render.view_models import (
     BattlefieldView,
     DeploymentZoneView,
+    HitRegionView,
     HudView,
+    MeasurementOverlayView,
     ModelBaseView,
     ObjectiveView,
+    PathOverlayView,
+    RenderHintView,
     TableView,
     TerrainFootprintView,
     UnitView,
@@ -34,6 +38,63 @@ class CoreProjectionRenderError(ValueError):
 
 def battlefield_view_from_game_view(view: UiGameView) -> BattlefieldView:
     """Build a renderable battlefield view from a core `GameViewPayload` projection."""
+
+    if view.projection_schema == "ui-fixture-v1":
+        return _legacy_fixture_battlefield_view(view)
+    projection = view.battlefield_view
+    if projection is None:
+        raise CoreProjectionRenderError(
+            "Current core game view is missing its canonical battlefield_view."
+        )
+    mission_setup = _json_object("mission_setup", view.mission_setup)
+    bounds = projection.bounds
+    min_x = _required_float(bounds, "min_x_inches")
+    min_y = _required_float(bounds, "min_y_inches")
+    if min_x != 0.0 or min_y != 0.0:
+        raise CoreProjectionRenderError(
+            "Current renderer requires battlefield bounds to begin at (0, 0)."
+        )
+    table_width = _required_float(bounds, "max_x_inches") - min_x
+    table_height = _required_float(bounds, "max_y_inches") - min_y
+    if table_width <= 0.0 or table_height <= 0.0:
+        raise CoreProjectionRenderError("battlefield_view bounds must have positive area.")
+    authoritative = projection.authoritative
+    return BattlefieldView(
+        table=_table_from_canonical_projection(
+            mission_setup=mission_setup,
+            width=table_width,
+            height=table_height,
+        ),
+        deployment_zones=_canonical_deployment_zones(authoritative),
+        objectives=_canonical_objectives(authoritative),
+        terrain=_canonical_terrain(authoritative),
+        units=_canonical_units(
+            authoritative=authoritative,
+            unit_display_by_id=view.unit_display_by_id,
+            model_display_by_id=view.model_display_by_id,
+        ),
+        hud=_hud_from_game_view(view),
+        interaction_request_id=_optional_string_value(
+            projection.interaction,
+            "request_id",
+        ),
+        selected_or_acting_entity_ids=tuple(
+            _required_string_item("selected_or_acting_entity_id", value)
+            for value in _required_list(
+                projection.interaction,
+                "selected_or_acting_entity_ids",
+            )
+        ),
+        legal_candidate_refs=_canonical_candidate_refs(projection.interaction),
+        measurement_overlays=_canonical_measurement_overlays(projection.interaction),
+        path_overlays=_canonical_path_overlays(projection.interaction),
+        render_hints=_canonical_render_hints(projection.render),
+        hit_regions=_canonical_hit_regions(projection.render),
+    )
+
+
+def _legacy_fixture_battlefield_view(view: UiGameView) -> BattlefieldView:
+    """Render pre-Contract-10 direct test fixtures, never engine payloads."""
 
     mission_setup = _json_object("mission_setup", view.mission_setup)
     battlefield_state = _json_object("battlefield_state", view.battlefield_state)
@@ -59,6 +120,535 @@ def battlefield_view_from_game_view(view: UiGameView) -> BattlefieldView:
             event_log_lines=(),
         ),
     )
+
+
+def _hud_from_game_view(view: UiGameView) -> HudView:
+    return HudView(
+        phase_label=view.current_battle_phase or view.stage,
+        active_player_id=view.active_player_id or "none",
+        pending_decision_summary=_pending_decision_summary(view),
+        event_log_lines=(),
+    )
+
+
+def _table_from_canonical_projection(
+    *,
+    mission_setup: JsonObject,
+    width: float,
+    height: float,
+) -> TableView:
+    mission_id = _optional_string_value(mission_setup, "mission_pool_entry_id") or "mission"
+    terrain_layout_id = _optional_string_value(mission_setup, "terrain_layout_id")
+    deployment_map_id = _optional_string_value(mission_setup, "deployment_map_id")
+    return TableView(
+        width=width,
+        height=height,
+        label=f"Live Core {mission_id}",
+        terrain_layout_label=(
+            None if terrain_layout_id is None else f"Terrain layout: {terrain_layout_id}"
+        ),
+        deployment_map_label=(
+            None if deployment_map_id is None else f"Deployment map: {deployment_map_id}"
+        ),
+    )
+
+
+def _canonical_deployment_zones(
+    authoritative: JsonObject,
+) -> tuple[DeploymentZoneView, ...]:
+    zones_by_id = _json_object(
+        "deployment_zones_by_id",
+        authoritative.get("deployment_zones_by_id"),
+    )
+    zones: list[DeploymentZoneView] = []
+    for zone_id, raw_zone in sorted(zones_by_id.items()):
+        zone = _json_object("deployment zone", raw_zone)
+        owner_player_id = _required_string(zone, "owner_player_id")
+        shape = _json_object("deployment zone shape", zone.get("shape"))
+        cutouts = tuple(
+            tuple(
+                _canonical_xy_point(_json_object("deployment zone cutout vertex", point))
+                for point in _json_list_value("deployment zone polygon cutout", raw_polygon)
+            )
+            for raw_polygon in _required_list(shape, "polygon_cutouts")
+        ) + tuple(
+            _canonical_footprint(_json_object("deployment zone circle cutout", raw_circle))
+            for raw_circle in _required_list(shape, "circle_cutouts")
+        )
+        polygons = _required_list(shape, "polygons")
+        if not polygons:
+            raise CoreProjectionRenderError("deployment zone must contain a polygon.")
+        for index, raw_polygon in enumerate(polygons):
+            polygon = tuple(
+                _canonical_xy_point(_json_object("deployment zone vertex", point))
+                for point in _json_list_value("deployment zone polygon", raw_polygon)
+            )
+            zones.append(
+                DeploymentZoneView(
+                    zone_id=zone_id if len(polygons) == 1 else f"{zone_id}:{index + 1}",
+                    player_id=owner_player_id,
+                    label=f"{owner_player_id} deployment",
+                    polygon=polygon,
+                    visible=True,
+                    cutouts=cutouts,
+                )
+            )
+    return tuple(zones)
+
+
+def _canonical_objectives(authoritative: JsonObject) -> tuple[ObjectiveView, ...]:
+    objectives_by_id = _json_object(
+        "objectives_by_id",
+        authoritative.get("objectives_by_id"),
+    )
+    return tuple(
+        ObjectiveView(
+            objective_id=objective_id,
+            label=(
+                _optional_string_value(objective, "objective_role") or _display_suffix(objective_id)
+            )
+            .replace("_", " ")
+            .title(),
+            position=_canonical_position(
+                _json_object("objective position", objective.get("position"))
+            ),
+            radius=_required_positive_float(objective, "marker_diameter_inches") / 2.0,
+        )
+        for objective_id, objective in (
+            (key, _json_object("objective", value))
+            for key, value in sorted(objectives_by_id.items())
+        )
+    )
+
+
+def _canonical_terrain(authoritative: JsonObject) -> tuple[TerrainFootprintView, ...]:
+    terrain_areas_by_id = _json_object(
+        "terrain_areas_by_id",
+        authoritative.get("terrain_areas_by_id"),
+    )
+    terrain_features_by_id = _json_object(
+        "terrain_features_by_id",
+        authoritative.get("terrain_features_by_id"),
+    )
+    areas = tuple(
+        TerrainFootprintView(
+            terrain_id=terrain_id,
+            label=_required_string(area, "classification"),
+            footprint=_canonical_footprint(
+                _json_object("terrain area footprint", area.get("footprint"))
+            ),
+            source_kind="terrain_area",
+            logical_terrain_area_id=_required_string(area, "logical_terrain_area_id"),
+        )
+        for terrain_id, area in (
+            (key, _json_object("terrain area", value))
+            for key, value in sorted(terrain_areas_by_id.items())
+        )
+    )
+    features = tuple(
+        TerrainFootprintView(
+            terrain_id=terrain_id,
+            label=_required_string(feature, "terrain_feature_kind"),
+            footprint=_canonical_footprint(
+                _json_object("terrain feature footprint", feature.get("footprint"))
+            ),
+            source_kind="terrain_feature",
+        )
+        for terrain_id, feature in (
+            (key, _json_object("terrain feature", value))
+            for key, value in sorted(terrain_features_by_id.items())
+        )
+    )
+    return areas + features
+
+
+def _canonical_candidate_refs(interaction: JsonObject) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (
+            _required_string(reference, "reference_kind"),
+            _required_string(reference, "reference_id"),
+        )
+        for reference in (
+            _json_object("legal candidate reference", value)
+            for value in _required_list(interaction, "legal_candidate_refs")
+        )
+    )
+
+
+def _canonical_measurement_overlays(
+    interaction: JsonObject,
+) -> tuple[MeasurementOverlayView, ...]:
+    return tuple(
+        MeasurementOverlayView(
+            overlay_id=_required_string(overlay, "overlay_id"),
+            start=_canonical_position(_json_object("measurement start", overlay.get("start"))),
+            end=_canonical_position(_json_object("measurement end", overlay.get("end"))),
+            distance_inches=_required_non_negative_float(overlay, "distance_inches"),
+        )
+        for overlay in (
+            _json_object("measurement overlay", value)
+            for value in _required_list(interaction, "measurement_overlays")
+        )
+    )
+
+
+def _canonical_path_overlays(interaction: JsonObject) -> tuple[PathOverlayView, ...]:
+    overlays: list[PathOverlayView] = []
+    for value in _required_list(interaction, "path_overlays"):
+        overlay = _json_object("path overlay", value)
+        segments = tuple(
+            _json_object("path segment", segment) for segment in _required_list(overlay, "segments")
+        )
+        if not segments:
+            raise CoreProjectionRenderError("path overlay must contain a segment.")
+        points = [
+            _canonical_pose_position(_json_object("path segment start", segments[0].get("start")))
+        ]
+        for index, segment in enumerate(segments):
+            if _required_string(segment, "segment_kind") != "line":
+                raise CoreProjectionRenderError("Only line path overlay segments are supported.")
+            start = _canonical_pose_position(
+                _json_object("path segment start", segment.get("start"))
+            )
+            if start != points[-1]:
+                raise CoreProjectionRenderError(
+                    f"path overlay segment {index} does not continue the prior segment."
+                )
+            points.append(
+                _canonical_pose_position(_json_object("path segment end", segment.get("end")))
+            )
+        overlays.append(
+            PathOverlayView(
+                overlay_id=_required_string(overlay, "overlay_id"),
+                model_id=_required_string(overlay, "model_instance_id"),
+                points=tuple(points),
+            )
+        )
+    return tuple(overlays)
+
+
+def _canonical_render_hints(render: JsonObject) -> tuple[RenderHintView, ...]:
+    hints = _json_object("hints_by_entity_id", render.get("hints_by_entity_id"))
+    return tuple(
+        RenderHintView(
+            entity_id=_required_matching_string(hint, "entity_id", entity_id),
+            asset_id=_optional_string_value(hint, "asset_id"),
+        )
+        for entity_id, hint in (
+            (key, _json_object("render hint", value)) for key, value in sorted(hints.items())
+        )
+    )
+
+
+def _canonical_hit_regions(render: JsonObject) -> tuple[HitRegionView, ...]:
+    regions = _json_object(
+        "hit_regions_by_entity_id",
+        render.get("hit_regions_by_entity_id"),
+    )
+    return tuple(
+        HitRegionView(
+            entity_id=_required_matching_string(region, "entity_id", entity_id),
+            footprint=_canonical_footprint(_json_object("hit region shape", region.get("shape"))),
+        )
+        for entity_id, region in (
+            (key, _json_object("hit region", value)) for key, value in sorted(regions.items())
+        )
+    )
+
+
+def _canonical_units(
+    *,
+    authoritative: JsonObject,
+    unit_display_by_id: JsonObject,
+    model_display_by_id: JsonObject,
+) -> tuple[UnitView, ...]:
+    models_by_id = _json_object("models_by_id", authoritative.get("models_by_id"))
+    grouped: dict[str, list[ModelBaseView]] = {}
+    owner_by_unit_id: dict[str, str] = {}
+    for model_id, raw_model in sorted(models_by_id.items()):
+        model = _json_object("battlefield model", raw_model)
+        if _required_string(model, "state") != "placed" or model.get("pose") is None:
+            continue
+        unit_id = _required_string(model, "unit_instance_id")
+        owner_by_unit_id[unit_id] = _required_string(model, "owner_player_id")
+        grouped.setdefault(unit_id, []).append(
+            _canonical_model(
+                model_id=model_id,
+                model=model,
+                model_display_by_id=model_display_by_id,
+            )
+        )
+    units: list[UnitView] = []
+    for unit_id, models in sorted(grouped.items()):
+        display = _json_object_if_present(unit_display_by_id, unit_id)
+        label = (
+            _optional_string_value(display, "unit_display_name") if display is not None else None
+        )
+        units.append(
+            UnitView(
+                unit_id=unit_id,
+                player_id=owner_by_unit_id[unit_id],
+                label=label or _display_suffix(unit_id),
+                models=tuple(models),
+            )
+        )
+    return tuple(units)
+
+
+def _canonical_model(
+    *,
+    model_id: str,
+    model: JsonObject,
+    model_display_by_id: JsonObject,
+) -> ModelBaseView:
+    pose = _json_object("model pose", model.get("pose"))
+    position = _json_object("model position", pose.get("position"))
+    geometry = _json_object("model geometry", model.get("geometry"))
+    support_shape = _json_object("model support shape", geometry.get("support_shape"))
+    measurement_shapes = tuple(
+        _json_object("model measurement shape", value)
+        for value in _required_list(geometry, "measurement_shapes")
+    )
+    world_position = _canonical_position(position)
+    facing_degrees = _required_float(pose, "facing_degrees")
+    display = _json_object_if_present(model_display_by_id, model_id)
+    return ModelBaseView(
+        model_id=model_id,
+        label=(
+            _optional_string_value(display, "model_display_name") if display is not None else None
+        )
+        or _display_suffix(model_id),
+        position=world_position,
+        base_radius=_shape_display_radius(support_shape),
+        base_movement_inches=_display_movement_inches(display),
+        support_footprint=_model_shape_footprint(
+            support_shape,
+            world_position=world_position,
+            facing_degrees=facing_degrees,
+        ),
+        measurement_footprints=tuple(
+            _model_shape_footprint(
+                shape,
+                world_position=world_position,
+                facing_degrees=facing_degrees,
+            )
+            for shape in measurement_shapes
+        ),
+    )
+
+
+def _display_movement_inches(display: JsonObject | None) -> float | None:
+    if display is None:
+        return None
+    characteristics = _json_object_if_present(display, "current_characteristics")
+    if characteristics is None:
+        return None
+    movement = _json_object_if_present(characteristics, "M")
+    if movement is None:
+        return None
+    value = movement.get("final")
+    if type(value) not in {int, float}:
+        return None
+    movement_inches = float(cast(int | float, value))
+    return movement_inches if movement_inches > 0.0 else None
+
+
+def _shape_display_radius(shape: JsonObject) -> float:
+    kind = _required_string(shape, "kind")
+    if kind == "circle":
+        return _required_positive_float(shape, "radius_inches")
+    if kind in {"rectangle", "ellipse", "capsule"}:
+        width = _required_positive_float(shape, "width_inches")
+        length = _required_positive_float(shape, "length_inches")
+        return math.hypot(width / 2.0, length / 2.0)
+    if kind == "polygon":
+        vertices = tuple(
+            _canonical_xy_point(_json_object("shape vertex", value))
+            for value in _required_list(shape, "vertices")
+        )
+        if not vertices:
+            raise CoreProjectionRenderError("polygon support shape must contain vertices.")
+        center = _shape_center(shape)
+        return max(math.dist(center, point) for point in vertices)
+    raise CoreProjectionRenderError(f"Unsupported canonical model support shape: {kind}.")
+
+
+def _model_shape_footprint(
+    shape: JsonObject,
+    *,
+    world_position: tuple[float, float],
+    facing_degrees: float,
+) -> tuple[tuple[float, float], ...]:
+    """Transform one model-local physical shape into battlefield coordinates."""
+
+    local_points = _model_local_shape_points(shape)
+    facing = math.radians(facing_degrees)
+    return tuple(
+        (
+            world_position[0] + (x * math.cos(facing)) - (y * math.sin(facing)),
+            world_position[1] + (x * math.sin(facing)) + (y * math.cos(facing)),
+        )
+        for x, y in local_points
+    )
+
+
+def _model_local_shape_points(shape: JsonObject) -> tuple[tuple[float, float], ...]:
+    kind = _required_string(shape, "kind")
+    center = _optional_shape_center(shape)
+    rotation = math.radians(_required_float(shape, "rotation_degrees"))
+    if kind == "polygon":
+        raw_points = tuple(
+            _canonical_xy_point(_json_object("shape vertex", value))
+            for value in _required_list(shape, "vertices")
+        )
+        if len(raw_points) < 3:
+            raise CoreProjectionRenderError("polygon model shape must contain three vertices.")
+        return tuple(
+            _rotated_offset(center, point[0] - center[0], point[1] - center[1], rotation)
+            for point in raw_points
+        )
+    if kind == "circle":
+        radius = _required_positive_float(shape, "radius_inches")
+        return tuple(
+            (
+                center[0] + radius * math.cos((2.0 * math.pi * index) / 32.0),
+                center[1] + radius * math.sin((2.0 * math.pi * index) / 32.0),
+            )
+            for index in range(32)
+        )
+    width = _required_positive_float(shape, "width_inches")
+    length = _required_positive_float(shape, "length_inches")
+    unrotated: tuple[tuple[float, float], ...]
+    if kind == "rectangle":
+        unrotated = (
+            (-width / 2.0, -length / 2.0),
+            (width / 2.0, -length / 2.0),
+            (width / 2.0, length / 2.0),
+            (-width / 2.0, length / 2.0),
+        )
+    elif kind == "ellipse":
+        unrotated = tuple(
+            (
+                (width / 2.0) * math.cos((2.0 * math.pi * index) / 32.0),
+                (length / 2.0) * math.sin((2.0 * math.pi * index) / 32.0),
+            )
+            for index in range(32)
+        )
+    elif kind == "capsule":
+        radius = width / 2.0
+        straight_half = max(0.0, (length / 2.0) - radius)
+        unrotated = tuple(
+            (
+                radius * math.cos(math.pi + (math.pi * index / 16.0)),
+                -straight_half + radius * math.sin(math.pi + (math.pi * index / 16.0)),
+            )
+            for index in range(17)
+        ) + tuple(
+            (
+                radius * math.cos(math.pi * index / 16.0),
+                straight_half + radius * math.sin(math.pi * index / 16.0),
+            )
+            for index in range(17)
+        )
+    else:
+        raise CoreProjectionRenderError(f"Unsupported canonical model shape: {kind}.")
+    return tuple(_rotated_offset(center, x, y, rotation) for x, y in unrotated)
+
+
+def _optional_shape_center(shape: JsonObject) -> tuple[float, float]:
+    value = shape.get("center")
+    if value is None:
+        return (0.0, 0.0)
+    return _canonical_xy_point(_json_object("shape center", value))
+
+
+def _canonical_footprint(shape: JsonObject) -> tuple[tuple[float, float], ...]:
+    kind = _required_string(shape, "kind")
+    if kind == "polygon":
+        footprint = tuple(
+            _canonical_xy_point(_json_object("footprint vertex", value))
+            for value in _required_list(shape, "vertices")
+        )
+        _validate_terrain_area_footprint(footprint)
+        return footprint
+    center = _shape_center(shape)
+    rotation = math.radians(_required_float(shape, "rotation_degrees"))
+    if kind == "circle":
+        radius = _required_positive_float(shape, "radius_inches")
+        return tuple(
+            (
+                center[0] + radius * math.cos((2.0 * math.pi * index) / 32.0),
+                center[1] + radius * math.sin((2.0 * math.pi * index) / 32.0),
+            )
+            for index in range(32)
+        )
+    if kind == "rectangle":
+        half_width = _required_positive_float(shape, "width_inches") / 2.0
+        half_length = _required_positive_float(shape, "length_inches") / 2.0
+        return tuple(
+            _rotated_offset(center, x, y, rotation)
+            for x, y in (
+                (-half_width, -half_length),
+                (half_width, -half_length),
+                (half_width, half_length),
+                (-half_width, half_length),
+            )
+        )
+    if kind == "ellipse":
+        half_width = _required_positive_float(shape, "width_inches") / 2.0
+        half_length = _required_positive_float(shape, "length_inches") / 2.0
+        return tuple(
+            _rotated_offset(
+                center,
+                half_width * math.cos((2.0 * math.pi * index) / 32.0),
+                half_length * math.sin((2.0 * math.pi * index) / 32.0),
+                rotation,
+            )
+            for index in range(32)
+        )
+    raise CoreProjectionRenderError(f"Unsupported canonical terrain footprint: {kind}.")
+
+
+def _shape_center(shape: JsonObject) -> tuple[float, float]:
+    center = _json_object("shape center", shape.get("center"))
+    return _canonical_xy_point(center)
+
+
+def _rotated_offset(
+    center: tuple[float, float],
+    x: float,
+    y: float,
+    rotation: float,
+) -> tuple[float, float]:
+    return (
+        center[0] + (x * math.cos(rotation)) - (y * math.sin(rotation)),
+        center[1] + (x * math.sin(rotation)) + (y * math.cos(rotation)),
+    )
+
+
+def _canonical_position(payload: JsonObject) -> tuple[float, float]:
+    return (_required_float(payload, "x_inches"), _required_float(payload, "y_inches"))
+
+
+def _canonical_pose_position(payload: JsonObject) -> tuple[float, float]:
+    return _canonical_position(_json_object("pose position", payload.get("position")))
+
+
+def _canonical_xy_point(payload: JsonObject) -> tuple[float, float]:
+    return (_required_float(payload, "x_inches"), _required_float(payload, "y_inches"))
+
+
+def _json_list_value(name: str, payload: object) -> list[JsonValue]:
+    if type(payload) is not list:
+        raise CoreProjectionRenderError(f"{name} must be a JSON list.")
+    return cast(list[JsonValue], payload)
+
+
+def _json_object_if_present(payload: JsonObject, key: str) -> JsonObject | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    return _json_object(key, value)
 
 
 def _table_from_mission_setup(
@@ -561,6 +1151,24 @@ def _required_positive_float(payload: JsonObject, key: str) -> float:
     if value <= 0.0:
         raise CoreProjectionRenderError(f"{key} must be positive.")
     return value
+
+
+def _required_non_negative_float(payload: JsonObject, key: str) -> float:
+    value = _required_float(payload, key)
+    if value < 0.0:
+        raise CoreProjectionRenderError(f"{key} must be non-negative.")
+    return value
+
+
+def _required_string_item(name: str, value: object) -> str:
+    return _non_empty_string(name, value)
+
+
+def _required_matching_string(payload: JsonObject, key: str, expected: str) -> str:
+    actual = _required_string(payload, key)
+    if actual != expected:
+        raise CoreProjectionRenderError(f"{key} must match its map key {expected!r}.")
+    return actual
 
 
 def _optional_string_value(payload: JsonObject, key: str) -> str | None:

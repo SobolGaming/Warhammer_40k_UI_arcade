@@ -648,13 +648,18 @@ def build_entity_selection_profile(
 
     if pending_decision is None:
         return inspection_entity_selection_profile(view)
-    if pending_decision.movement_proposal is not None:
+    interaction = pending_decision.interaction
+    if interaction is None:
+        return inspection_entity_selection_profile(view)
+    if interaction.interaction_kind == "path_editor":
         return movement_entity_selection_profile(view=view, decision=pending_decision)
     if pending_decision.is_parameterized:
         return unsupported_entity_selection_profile(
             decision=pending_decision,
             reason="Parameterized request does not expose an entity-selection profile yet.",
         )
+    if interaction.interaction_kind != "entity_selection":
+        return inspection_entity_selection_profile(view)
     return finite_unit_entity_selection_profile(view=view, decision=pending_decision)
 
 

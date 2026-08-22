@@ -9,6 +9,7 @@ from typing import cast
 import arcade
 import pytest
 
+from tests.support.contract_fixtures import decision_from_fixture
 from tests.support.gui_driver import GuiTestDriver
 from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
@@ -658,18 +659,18 @@ _LIVE_SMOKE_DEPLOYMENT_POINTS: dict[str, tuple[tuple[float, float], ...]] = {
         (9.6, 5.8),
     ),
     "army-alpha:deep-strike-unit": (
-        (4.0, 40.8),
-        (5.5, 40.8),
-        (4.0, 42.3),
+        (32.0, 51.0),
+        (32.0, 52.8),
+        (32.0, 54.6),
     ),
     "army-alpha:scout-redeploy-unit": (
-        (8.0, 40.8),
-        (9.5, 40.8),
-        (8.0, 42.3),
-        (9.5, 42.3),
-        (11.0, 40.8),
+        (4.0, 51.0),
+        (4.0, 52.8),
+        (4.0, 54.6),
+        (5.8, 51.0),
+        (5.8, 52.8),
     ),
-    "army-alpha:strategic-reserve-unit": ((14.0, 42.6),),
+    "army-alpha:strategic-reserve-unit": ((18.0, 51.0),),
 }
 
 
@@ -786,7 +787,7 @@ def _stratagem_target_binding_without_target_decision() -> UiDecision:
         },
         "target_binding": None,
     }
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "stratagem-request-without-target",
             "decision_type": "submit_stratagem_target_proposal",
@@ -827,5 +828,4 @@ def _game_view(
         public_stratagem_use_records=(),
         pending_decision=pending_decision,
         pending_proposal=None,
-        event_count=1,
     )

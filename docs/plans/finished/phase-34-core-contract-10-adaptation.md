@@ -1,6 +1,6 @@
 # Phase 34: Core Contract 10.2 Adapter And Projection Adaptation
 
-Status: Proposed
+Status: Complete (2026-08-22)
 
 ## Purpose
 
@@ -433,3 +433,69 @@ retaining private lifecycle access, accepting incomplete old payloads, routing f
 using viewer geometry hashes as proposal authority, or letting the live-smoke harness mutate core
 state. A visually working flow is not sufficient unless the contract examples and public facade are
 also the paths exercised by tests.
+
+## Implementation Progress
+
+- [x] Locked the UI, CI jobs, README, and compatibility declaration to core
+  `dbfcc3a99e9d560d1354506352a09d48ca555a94` and external contract `10.2.0`.
+- [x] Added strict DTOs for current game, battlefield, interaction, catalog, support, status, event,
+  projection, mission, and public game-state payloads.
+- [x] Replaced private lifecycle and queue access with the public `AdapterGameSession` facade.
+- [x] Added descriptor-only interaction dispatch for all 13 published interaction kinds and all 90
+  committed conformance cases.
+- [x] Bound movement and placement drafts to request ID, explicit submission variant,
+  `spatial_context_hash`, and projection identity.
+- [x] Made `battlefield_view` the canonical live rendering source while retaining the legacy path
+  only for the explicitly versioned `ui-fixture-v1` test fixture.
+- [x] Projected viewer-safe rules catalog, support profile, public mission, CP/VP, and Stratagem data
+  into runtime/HUD view models.
+- [x] Rebuilt live-core smoke setup on public decisions without lifecycle, queue, or battlefield
+  mutation.
+- [x] Added import-boundary auditing and contract-conformance fixtures to CI.
+- [x] Updated architecture, supported-version, feature-summary, and phase-index documentation.
+
+## Implementation Notes
+
+- `LocalSessionClient` now delegates finite and parameterized submissions directly to the public
+  adapter facade. Engine invalid statuses are translated into typed UI diagnostics and followed by
+  a fresh viewer projection.
+- Interaction behavior is selected from `interaction_kind` and an explicit published submission
+  variant. Unknown kinds, malformed descriptors, stale physical drafts, and unsupported editors
+  fail closed before submission.
+- The current Cult Ambush marker request is parsed strictly, including both published variants.
+  Because choosing between `place_marker` and `no_marker` requires a specialized multi-variant
+  editor, the generic dispatcher reports a typed unsupported state rather than guessing.
+- Rules-catalog data is cached by engine identity. Raw administrative support data is converted to
+  the viewer-safe public profile before it reaches HUD/runtime consumers.
+- Event traces now include viewer-safe projection hash, interaction kind and variant, request ID,
+  and spatial-context identity around core view exchanges.
+- Canonical smoke checkpoints through movement are reached through public decisions. The current
+  core fixture terminates before shooting, charge, and fight; those requested checkpoints produce a
+  deterministic typed harness error instead of private state mutation.
+
+## Verification Results
+
+Completed on 2026-08-22 against the pinned core revision:
+
+```text
+uv lock --check                                      passed
+uv sync --locked --all-groups                        passed
+uv run ruff check .                                  passed
+uv run ruff format --check .                         passed (98 files)
+uv run mypy src tests                                passed (96 files)
+uv run pyright                                       passed (0 errors)
+uv run python scripts/check_import_boundaries.py     passed
+uv run pytest tests/                                 passed (378 tests)
+uv run pre-commit run --all-files                    passed
+uv build                                             passed (sdist and wheel)
+```
+
+Graphical/runtime evidence:
+
+- Native `warhammer40k-arcade-ui --live-core-smoke --stop-at-phase setup` launched on the local
+  display without startup or contract errors.
+- A real-core headless framebuffer capture passed the nonblank threshold and was inspected at
+  `/tmp/phase34-render/phase34-live-core.png`.
+- The full test run exercised GUI event handling, live-core progression, canonical battlefield
+  rendering, and framebuffer readback. Arcade emitted the existing `draw_text` performance warning;
+  it did not affect correctness.

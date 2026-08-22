@@ -14,6 +14,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiGameView,
     UiInvalidDiagnostic,
 )
+from warhammer40k_arcade_ui.state.interaction_dispatch import interaction_route_for_decision
 
 MAX_EVENT_LOG_LINES = 6
 MAX_RECENT_EVENT_PAYLOADS = 48
@@ -204,6 +205,17 @@ class FiniteDecisionUiState:
                 None,
             )
         if decision.is_parameterized:
+            route = interaction_route_for_decision(decision)
+            if not route.supported:
+                return (
+                    self.with_local_invalid(
+                        violation_code="unsupported_interaction_editor",
+                        message=route.diagnostic
+                        or f"Interaction {route.interaction_kind} is not implemented.",
+                        field="interaction.interaction_kind",
+                    ),
+                    None,
+                )
             return (
                 self.with_local_invalid(
                     violation_code="finite_submission_for_parameterized_request",

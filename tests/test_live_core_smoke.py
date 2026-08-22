@@ -37,10 +37,15 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     assert startup.event_cursor > 0
     assert startup.battlefield_view.table.width == 44.0
     assert startup.battlefield_view.table.height == 60.0
-    assert len(startup.battlefield_view.terrain) == 16
+    assert len(startup.battlefield_view.terrain) == 46
     assert {terrain.source_kind for terrain in startup.battlefield_view.terrain} == {
         "terrain_area",
+        "terrain_feature",
     }
+    assert (
+        sum(terrain.source_kind == "terrain_area" for terrain in startup.battlefield_view.terrain)
+        == 16
+    )
     assert [unit.unit_id for unit in startup.battlefield_view.units] == [
         "army-alpha:deep-strike-unit",
         "army-alpha:scout-redeploy-unit",
@@ -55,7 +60,7 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
         for unit in startup.battlefield_view.units
         if unit.unit_id == "army-alpha:strategic-reserve-unit"
     )
-    assert monster.models[0].position == (20.0, 35.0)
+    assert monster.models[0].position == (18.0, 51.0)
 
 
 def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
@@ -83,22 +88,22 @@ def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
     assert startup.event_cursor > 0
     assert startup.battlefield_view.table.width == 44.0
     assert startup.battlefield_view.table.height == 60.0
-    assert len(startup.battlefield_view.terrain) == 16
+    assert len(startup.battlefield_view.terrain) == 46
 
 
-def test_live_core_smoke_supports_setup_prebattle_stop_points() -> None:
+def test_live_core_smoke_supports_reachable_setup_prebattle_stop_points() -> None:
     expected_decisions = {
         "setup": ("player-a", "select_secondary_missions"),
         "secondary-missions": ("player-a", "select_secondary_missions"),
         "reserve-declarations": ("player-a", "select_reserve_declaration"),
         "deployment": ("player-b", "select_deployment_unit"),
-        "redeploy": ("player-b", "select_redeploy_unit"),
-        "prebattle": ("player-b", "select_prebattle_action"),
-        "scout-move": ("player-b", "submit_scout_move"),
+        "redeploy": ("player-a", "select_redeploy_unit"),
+        "prebattle": ("player-a", "select_prebattle_action"),
+        "scout-move": ("player-a", "submit_scout_move"),
         "movement": ("player-a", "select_movement_unit"),
     }
 
-    assert set(LIVE_CORE_SMOKE_STOP_PHASES) == set(expected_decisions)
+    assert set(expected_decisions).issubset(LIVE_CORE_SMOKE_STOP_PHASES)
     for stop_phase, (expected_actor, expected_decision_type) in expected_decisions.items():
         startup = build_live_core_smoke_startup(stop_at_phase=stop_phase)
         decision = startup.status.decision
@@ -107,6 +112,16 @@ def test_live_core_smoke_supports_setup_prebattle_stop_points() -> None:
         assert decision.actor_id == expected_actor
         assert decision.decision_type == expected_decision_type
         assert startup.viewer_player_id == expected_actor
+
+
+def test_live_core_smoke_reports_unreachable_late_checkpoint() -> None:
+    assert {"shooting", "charge", "fight"}.issubset(LIVE_CORE_SMOKE_STOP_PHASES)
+
+    with pytest.raises(
+        LiveCoreSmokeError,
+        match="Game became terminal before smoke checkpoint 'shooting'",
+    ):
+        build_live_core_smoke_startup(stop_at_phase="shooting")
 
 
 def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> None:
@@ -138,7 +153,7 @@ def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> N
     assert "movement_activation_completed" in _event_types(event_delta.events)
 
 
-def test_live_core_smoke_monster_advance_is_inside_current_movement_bridge() -> None:
+def test_live_core_smoke_preserves_canonical_monster_and_surfaces_invalid_advance() -> None:
     startup = build_live_core_smoke_startup(stop_at_phase="movement")
     unit_decision = startup.status.decision
     assert unit_decision is not None
@@ -183,13 +198,13 @@ def test_live_core_smoke_monster_advance_is_inside_current_movement_bridge() -> 
         draft.select_current_group(view=startup.battlefield_view)
         .add_waypoint(
             view=startup.battlefield_view,
-            world_point=(model.position[0], model.position[1] - 1.0),
+            world_point=(model.position[0] + 2.0, model.position[1]),
         )
         .mark_ready(view=startup.battlefield_view)
     )
     assert ready_draft.payload_preview is not None
 
-    accepted_status = startup.core_client.submit_movement_payload(
+    invalid_status = startup.core_client.submit_movement_payload(
         request_id=proposal_decision.request_id,
         payload=ready_draft.payload_preview,
         result_id="ui-test-live-smoke-monster-advance-payload",
@@ -199,8 +214,12 @@ def test_live_core_smoke_monster_advance_is_inside_current_movement_bridge() -> 
         startup.viewer_player_id,
     )
 
-    assert accepted_status.status_kind == "waiting_for_decision"
-    assert "movement_activation_completed" in _event_types(event_delta.events)
+    assert invalid_status.status_kind == "invalid"
+    assert invalid_status.invalid_diagnostics[0].violation_code == (
+        "terrain_feature_transit_forbidden"
+    )
+    assert invalid_status.invalid_diagnostics[0].field == "witness"
+    assert "movement_activation_completed" not in _event_types(event_delta.events)
 
 
 def test_live_core_smoke_handles_endpoint_only_moved_paths() -> None:

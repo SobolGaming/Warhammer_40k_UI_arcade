@@ -48,7 +48,7 @@ def test_phase10_debug_fixture_movement_submission_returns_success_projection_an
 
     view = client.get_view("player_1")
     assert view.pending_decision is None
-    assert view.event_count == 4
+    assert client.get_events_since(1, "player_1").next_cursor == 4
     positions = _model_positions(view.battlefield_state)
     assert positions["intercessor_1"] == (10.0, 18.0)
     assert positions["intercessor_2"] == (7.0, 22.0)

@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from warhammer40k_arcade_ui.app import run_app
+from warhammer40k_arcade_ui.core_client.compatibility import CoreCompatibilityError
+from warhammer40k_arcade_ui.core_client.live_smoke import LIVE_CORE_SMOKE_STOP_PHASES
 from warhammer40k_arcade_ui.diagnostics.crash_report import (
     CrashReportContext,
     install_crash_report_excepthook,
@@ -63,21 +65,25 @@ def main(argv: Sequence[str] | None = None) -> None:
         context=crash_context,
         report_dir=args.crash_report_dir,
     )
-    run_app(
-        ui_prefs_path=args.ui_prefs_path,
-        live_core_smoke=args.live_core_smoke,
-        live_core_stop_phase=args.stop_at_phase,
-        event_trace_level=args.event_trace_level,
-        event_trace_file=args.event_trace_file,
-        event_trace_cfg_file=args.event_trace_cfg_file,
-        event_trace_include=args.event_trace_include,
-        event_trace_exclude=args.event_trace_exclude,
-        event_trace_include_categories=args.event_trace_include_categories,
-        event_trace_exclude_categories=args.event_trace_exclude_categories,
-        trace_writer=trace_writer,
-        crash_report_context=crash_context,
-        crash_report_dir=args.crash_report_dir,
-    )
+    try:
+        run_app(
+            ui_prefs_path=args.ui_prefs_path,
+            live_core_smoke=args.live_core_smoke,
+            live_core_stop_phase=args.stop_at_phase,
+            event_trace_level=args.event_trace_level,
+            event_trace_file=args.event_trace_file,
+            event_trace_cfg_file=args.event_trace_cfg_file,
+            event_trace_include=args.event_trace_include,
+            event_trace_exclude=args.event_trace_exclude,
+            event_trace_include_categories=args.event_trace_include_categories,
+            event_trace_exclude_categories=args.event_trace_exclude_categories,
+            trace_writer=trace_writer,
+            crash_report_context=crash_context,
+            crash_report_dir=args.crash_report_dir,
+        )
+    except CoreCompatibilityError as exc:
+        print(f"Fatal core compatibility error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
 
 def parse_args(argv: Sequence[str] | None) -> CliArgs:
@@ -90,24 +96,14 @@ def parse_args(argv: Sequence[str] | None) -> CliArgs:
     parser.add_argument(
         "--live-core-smoke",
         action="store_true",
-        help="Launch an opt-in real local core movement smoke session.",
+        help="Launch an opt-in canonical real local core smoke session.",
     )
     parser.add_argument(
         "--stop-at-phase",
-        choices=(
-            "setup",
-            "secondary-missions",
-            "reserve-declarations",
-            "deployment",
-            "redeploy",
-            "prebattle",
-            "scout-move",
-            "movement",
-        ),
+        choices=LIVE_CORE_SMOKE_STOP_PHASES,
         help=(
-            "Live-core smoke pause point. Defaults to movement; use setup, "
-            "reserve-declarations, deployment, redeploy, prebattle, scout-move, or movement "
-            "to open the Arcade window at a real core setup/prebattle/battle request."
+            "Live-core smoke pause point. Defaults to movement. A recognized checkpoint that the "
+            "canonical core fixture cannot reach fails with a typed startup diagnostic."
         ),
     )
     parser.add_argument(

@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import cast
 
-from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
+from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
+    JsonValue,
+    UiDecision,
+    UiGameView,
+)
 from warhammer40k_arcade_ui.hud.dice_tray import DiceTrayView, build_dice_tray_view
 from warhammer40k_arcade_ui.hud.toolkit import (
     AssignmentGroupRowView as ToolkitAssignmentGroupRowView,
@@ -60,6 +65,38 @@ class HudErgonomicsView:
     hotkey_hints: tuple[str, ...]
     text_scale: float
     high_contrast: bool
+    public_game_state: PublicGameStateView | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PublicGameStateView:
+    """Viewer-safe public mission and resource facts retained for HUD bindings."""
+
+    viewer_player_id: str
+    mission_setup: JsonValue
+    secondary_mission_choices: tuple[JsonValue, ...]
+    secondary_mission_card_states: tuple[JsonValue, ...]
+    primary_turn_start_snapshots: tuple[JsonValue, ...]
+    primary_progress_state: JsonValue
+    command_point_ledgers: tuple[JsonValue, ...]
+    victory_point_ledgers: tuple[JsonValue, ...]
+    stratagem_use_records: tuple[JsonValue, ...]
+
+    @classmethod
+    def from_game_view(cls, view: UiGameView) -> PublicGameStateView:
+        """Copy already viewer-scoped projection facts without deriving rules state."""
+
+        return cls(
+            viewer_player_id=view.viewer_player_id,
+            mission_setup=view.mission_setup,
+            secondary_mission_choices=view.public_secondary_mission_choices,
+            secondary_mission_card_states=view.public_secondary_mission_card_states,
+            primary_turn_start_snapshots=view.primary_rules_unit_turn_start_snapshots,
+            primary_progress_state=view.primary_mission_progress_state,
+            command_point_ledgers=view.public_command_point_ledgers,
+            victory_point_ledgers=view.public_victory_point_ledgers,
+            stratagem_use_records=view.public_stratagem_use_records,
+        )
 
 
 def build_hud_ergonomics_view(
@@ -80,6 +117,7 @@ def build_hud_ergonomics_view(
     unit_display_by_id: JsonObject | None = None,
     model_display_by_id: JsonObject | None = None,
     selected_assignment_group_id: str | None = None,
+    game_view: UiGameView | None = None,
 ) -> HudErgonomicsView:
     """Build a toolkit-backed HUD summary without adding rule semantics."""
 
@@ -157,6 +195,9 @@ def build_hud_ergonomics_view(
         hotkey_hints=_hotkey_hints(preferences),
         text_scale=preferences.hud.text_scale,
         high_contrast=preferences.hud.high_contrast,
+        public_game_state=(
+            None if game_view is None else PublicGameStateView.from_game_view(game_view)
+        ),
     )
 
 
@@ -536,11 +577,14 @@ def _current_action_view(
         _placement_action_buttons(
             placement_draft_panel=placement_draft_panel,
             hovered_hud_button_id=hovered_hud_button_id,
+            confirm_label=finite_decision_panel.confirm_label,
         )
         if placement_draft_panel is not None
         else _assignment_action_buttons(
             assignment_hud_panel=assignment_hud_panel,
             hovered_hud_button_id=hovered_hud_button_id,
+            confirm_label=finite_decision_panel.confirm_label,
+            decline_label=finite_decision_panel.decline_label,
         )
         if _is_generic_assignment_panel(assignment_hud_panel)
         else tuple(
@@ -669,6 +713,8 @@ def _assignment_action_buttons(
     *,
     assignment_hud_panel: AssignmentHudPanelView | None,
     hovered_hud_button_id: str | None,
+    confirm_label: str | None,
+    decline_label: str | None,
 ) -> tuple[HudButtonView, ...]:
     if assignment_hud_panel is None:
         return ()
@@ -677,7 +723,7 @@ def _assignment_action_buttons(
         _assignment_action_button(
             index=0,
             action_kind="assignment_submit",
-            label="Submit",
+            label=confirm_label or "Submit",
             request_id=assignment_hud_panel.request_id,
             selected=True,
             enabled=ready,
@@ -705,7 +751,7 @@ def _assignment_action_buttons(
             _assignment_action_button(
                 index=1,
                 action_kind="assignment_decline",
-                label="Decline",
+                label=decline_label or "Decline",
                 request_id=assignment_hud_panel.request_id,
                 selected=False,
                 enabled=True,
@@ -787,12 +833,13 @@ def _placement_action_buttons(
     *,
     placement_draft_panel: PlacementDraftPanelView,
     hovered_hud_button_id: str | None,
+    confirm_label: str | None,
 ) -> tuple[HudButtonView, ...]:
     return (
         _placement_action_button(
             index=0,
             action_kind="placement_submit",
-            label="Submit" if placement_draft_panel.ready else "Review",
+            label=(confirm_label or "Submit") if placement_draft_panel.ready else "Review",
             request_id=placement_draft_panel.request_id,
             selected=True,
             enabled=placement_draft_panel.unplaced_model_count == 0,

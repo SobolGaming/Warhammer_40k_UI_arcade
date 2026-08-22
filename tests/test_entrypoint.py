@@ -8,6 +8,7 @@ import pytest
 
 from warhammer40k_arcade_ui import app, main
 from warhammer40k_arcade_ui.config import AppConfig
+from warhammer40k_arcade_ui.core_client.compatibility import CoreCompatibilityError
 
 
 class FakeWindow:
@@ -202,3 +203,28 @@ def test_parse_args_accepts_optional_ui_preferences_path() -> None:
 def test_parse_args_rejects_stop_phase_without_live_core_smoke() -> None:
     with pytest.raises(SystemExit):
         main.parse_args(["--stop-at-phase", "deployment"])
+
+
+def test_parse_args_accepts_contract_recognized_late_smoke_checkpoint() -> None:
+    parsed = main.parse_args(["--live-core-smoke", "--stop-at-phase", "shooting"])
+
+    assert parsed.stop_at_phase == "shooting"
+
+
+def test_main_prints_copyable_core_compatibility_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def incompatible_run_app(**kwargs: object) -> None:
+        del kwargs
+        raise CoreCompatibilityError("expected 10.2.0, installed 11.0.0")
+
+    monkeypatch.setattr(main, "run_app", incompatible_run_app)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main.main([])
+
+    assert exc_info.value.code == 2
+    assert capsys.readouterr().err == (
+        "Fatal core compatibility error: expected 10.2.0, installed 11.0.0\n"
+    )

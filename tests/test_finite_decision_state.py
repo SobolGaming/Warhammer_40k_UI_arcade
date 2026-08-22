@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
 from warhammer40k_arcade_ui.core_client.protocol import (
     UiClientStatus,
@@ -343,7 +344,7 @@ def _movement_action_decision_for(unit_id: str) -> UiDecision:
 
 
 def _parameterized_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-000005",
             "decision_type": "submit_movement_proposal",
@@ -410,7 +411,6 @@ def _game_view(
         public_stratagem_use_records=(),
         pending_decision=pending_decision,
         pending_proposal=None,
-        event_count=4,
     )
 
 

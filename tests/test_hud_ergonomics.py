@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from pathlib import Path
 from typing import cast
 
-from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
+from tests.support.contract_fixtures import decision_from_fixture
+from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonValue,
+    UiDecision,
+    UiFiniteOption,
+    UiGameView,
+)
 from warhammer40k_arcade_ui.hud.composition import load_hud_composition_reference
 from warhammer40k_arcade_ui.hud.ergonomics import HudErgonomicsView, build_hud_ergonomics_view
 from warhammer40k_arcade_ui.hud.layouts import HudLayoutView, build_hud_layout
@@ -20,6 +28,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.preferences.schema import JsonObject
+from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_game_view
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.render.primitives import (
     PolygonPrimitive,
@@ -129,6 +138,48 @@ def test_ergonomic_hud_view_honors_phase_and_event_visibility_preferences() -> N
     assert [chip.label for chip in ergonomics.status_chips] == ["Active", "Pending"]
     assert ergonomics.event_lines == ()
     assert ergonomics.assignment_subtitle == "No active assignment draft"
+
+
+def test_ergonomic_hud_retains_current_public_mission_and_resource_projection() -> None:
+    contract_example = (
+        Path(__file__).resolve().parents[2]
+        / "Warhammer_40k_AI/contracts/examples/projections/post_deployment_view.json"
+    )
+    payload: JsonValue = json.loads(contract_example.read_text(encoding="utf-8"))
+    game_view = UiGameView.from_payload(payload)
+    view = battlefield_view_from_game_view(game_view)
+    preferences = default_preferences()
+    finite_panel = build_finite_decision_panel(
+        pending_decision=game_view.pending_decision,
+        highlighted_option_index=0,
+        status_message="Waiting",
+        diagnostics=(),
+    )
+
+    ergonomics = build_hud_ergonomics_view(
+        view=view,
+        preferences=preferences,
+        unit_panel=None,
+        finite_decision_panel=finite_panel,
+        movement_draft_panel=None,
+        assignment_hud_panel=None,
+        event_log_lines=(),
+        viewer_player_id=game_view.viewer_player_id,
+        game_view=game_view,
+    )
+    runtime = runtime_data_for_ergonomic_hud(ergonomics)
+    public_state = cast(JsonObject, runtime["hud.public_game_state"])
+    command_points = cast(JsonObject, runtime["command_points"])
+    mission_summary = cast(JsonObject, runtime["mission_summary"])
+
+    assert public_state["viewer_player_id"] == "player-a"
+    assert len(cast(list[JsonValue], public_state["primary_turn_start_snapshots"])) == 1
+    assert cast(JsonObject, public_state["primary_progress_state"])["markers"] == []
+    assert len(cast(list[JsonValue], public_state["command_point_ledgers"])) == 2
+    assert len(cast(list[JsonValue], public_state["victory_point_ledgers"])) == 2
+    assert public_state["stratagem_use_records"] == []
+    assert command_points["value"] == "1"
+    assert mission_summary["summary"] == "assassination, bring-it-down"
 
 
 def test_player_units_roster_runtime_data_filters_and_highlights_viewer_units() -> None:
@@ -832,7 +883,7 @@ def test_ergonomic_hud_renders_through_configured_default_composition() -> None:
 
 
 def _movement_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-000005",
             "decision_type": "submit_movement_proposal",
@@ -871,7 +922,7 @@ def _movement_proposal_decision() -> UiDecision:
 
 
 def _placement_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-placement-001",
             "decision_type": "submit_placement_proposal",
@@ -903,7 +954,7 @@ def _placement_proposal_decision() -> UiDecision:
 
 
 def _deployment_placement_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-deployment-001",
             "decision_type": "submit_deployment_placement",

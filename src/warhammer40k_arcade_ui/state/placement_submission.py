@@ -15,6 +15,10 @@ from warhammer40k_arcade_ui.state.finite_decision import (
     FiniteDecisionUiState,
     refresh_submission_projection,
 )
+from warhammer40k_arcade_ui.state.interaction_dispatch import (
+    PLACEMENT_EDITOR,
+    interaction_route_for_decision,
+)
 from warhammer40k_arcade_ui.state.placement_draft import (
     PLACEMENT_PROPOSAL_DECISION_TYPES,
     SUPPORTED_PLACEMENT_PROPOSAL_KINDS,
@@ -50,6 +54,7 @@ def prepare_placement_submission(
     placement_draft: PlacementDraft | None,
     pending_decision: UiDecision | None,
     next_result_index: int,
+    projection_state_hash: str | None = None,
 ) -> tuple[UiClientStatus | None, PlacementProposalSubmission | None, int]:
     """Prepare a placement proposal submission or return a UI-boundary invalid status."""
 
@@ -82,6 +87,18 @@ def prepare_placement_submission(
                 violation_code="placement_payload_for_finite_request",
                 message="Placement payload submission requires a parameterized request.",
                 field="request_id",
+            ),
+            None,
+            next_result_index,
+        )
+    route = interaction_route_for_decision(pending_decision)
+    if route.editor_id != PLACEMENT_EDITOR or not route.supported:
+        return (
+            _local_invalid(
+                pending_decision=pending_decision,
+                violation_code="unsupported_interaction_route",
+                message=route.diagnostic or "The current interaction is not a placement editor.",
+                field="interaction.interaction_kind",
             ),
             None,
             next_result_index,
@@ -120,7 +137,46 @@ def prepare_placement_submission(
             None,
             next_result_index,
         )
-    if not placement_draft.matches_proposal_context(pending_decision=pending_decision):
+    if proposal.spatial_context_hash != placement_draft.spatial_context_hash:
+        return (
+            _local_invalid(
+                pending_decision=pending_decision,
+                violation_code="stale_spatial_context_hash",
+                message="Placement draft spatial context no longer matches the pending request.",
+                field="spatial_context_hash",
+            ),
+            None,
+            next_result_index,
+        )
+    if route.submission_variant_id != placement_draft.submission_variant_id:
+        return (
+            _local_invalid(
+                pending_decision=pending_decision,
+                violation_code="stale_submission_variant",
+                message="Placement draft submission variant no longer matches the request.",
+                field="interaction.submission_variants",
+            ),
+            None,
+            next_result_index,
+        )
+    if (
+        placement_draft.projection_state_hash is not None
+        and projection_state_hash != placement_draft.projection_state_hash
+    ):
+        return (
+            _local_invalid(
+                pending_decision=pending_decision,
+                violation_code="stale_projection_state_hash",
+                message="Placement draft was created from an older game projection.",
+                field="projection_state_hash",
+            ),
+            None,
+            next_result_index,
+        )
+    if not placement_draft.matches_proposal_context(
+        pending_decision=pending_decision,
+        projection_state_hash=projection_state_hash,
+    ):
         return (
             _local_invalid(
                 pending_decision=pending_decision,
@@ -161,6 +217,7 @@ def submit_placement_draft(
     placement_draft: PlacementDraft | None,
     client: UiCoreClient | None,
     viewer_player_id: str,
+    projection_state_hash: str | None = None,
 ) -> PlacementSubmissionResult:
     """Submit a ready placement draft and refresh status, projection, and viewer events."""
 
@@ -180,6 +237,7 @@ def submit_placement_draft(
         placement_draft=placement_draft,
         pending_decision=state.pending_decision,
         next_result_index=state.next_result_index,
+        projection_state_hash=projection_state_hash,
     )
     if submission is None:
         if invalid_status is None:

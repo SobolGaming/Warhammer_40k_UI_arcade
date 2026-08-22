@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.protocol import (
     UiDecision,
     UiFiniteOption,
@@ -137,7 +138,7 @@ def test_finite_decision_panel_is_generic_and_highlights_option() -> None:
 
 
 def test_finite_decision_panel_hides_parameterized_fixed_submit_option() -> None:
-    decision = UiDecision.from_payload(
+    decision = decision_from_fixture(
         {
             "request_id": "decision-request-000005",
             "decision_type": "submit_movement_proposal",
@@ -541,7 +542,7 @@ def _movement_proposal_decision(
         if context is None
         else context
     )
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-000005",
             "decision_type": "submit_movement_proposal",
@@ -576,7 +577,7 @@ def _movement_proposal_decision(
 
 
 def _shooting_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-000009",
             "decision_type": "submit_shooting_declaration",
@@ -602,7 +603,7 @@ def _shooting_proposal_decision() -> UiDecision:
 
 
 def _charge_move_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-charge-001",
             "decision_type": "submit_movement_proposal",

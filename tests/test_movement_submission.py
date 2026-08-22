@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from tests.support.contract_fixtures import current_decision_payload, decision_from_fixture
 from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
 from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
     UiClientStatus,
     UiDecision,
     UiEventDelta,
@@ -254,20 +256,12 @@ def test_submit_movement_draft_surfaces_invalid_diagnostics_and_keeps_draft() ->
         client=fake,
         viewer_player_id="player_1",
     )
-    retry_draft = draft.with_retry_request(
-        view=default_battlefield_view(),
-        pending_decision=retry_decision,
-    )
-
-    assert result.clear_movement_draft is False
-    assert result.reset_movement_draft_ready is True
+    assert result.clear_movement_draft is True
+    assert result.reset_movement_draft_ready is False
     assert fake.advance_call_count == 0
     assert result.finite_state.pending_decision == retry_decision
     assert result.finite_state.diagnostics[0].violation_code == "movement_budget_exceeded"
     assert result.finite_state.diagnostics[0].field == "witness"
-    assert retry_draft.proposal_request_id == "decision-request-000006"
-    assert retry_draft.payload_preview is None
-    assert retry_draft.model_paths == draft.model_paths
 
 
 def test_submit_movement_draft_without_core_client_returns_local_diagnostic() -> None:
@@ -365,7 +359,7 @@ def _movement_proposal_decision(
     *,
     request_id: str = "decision-request-000005",
 ) -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": request_id,
             "decision_type": "submit_movement_proposal",
@@ -404,7 +398,7 @@ def _movement_proposal_decision(
 
 
 def _scout_move_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-scout-001",
             "decision_type": "submit_scout_move",
@@ -467,15 +461,17 @@ def _shooting_proposal_decision() -> UiDecision:
     )
 
 
-def retry_decision_payload(decision: UiDecision) -> dict[str, object]:
-    return {
-        "request_id": decision.request_id,
-        "decision_type": decision.decision_type,
-        "actor_id": decision.actor_id,
-        "payload": decision.payload,
-        "options": [option_payload(option) for option in decision.options],
-        "is_parameterized": decision.is_parameterized,
-    }
+def retry_decision_payload(decision: UiDecision) -> JsonObject:
+    return current_decision_payload(
+        {
+            "request_id": decision.request_id,
+            "decision_type": decision.decision_type,
+            "actor_id": decision.actor_id,
+            "payload": decision.payload,
+            "options": [option_payload(option) for option in decision.options],
+            "is_parameterized": decision.is_parameterized,
+        }
+    )
 
 
 def option_payload(option: UiFiniteOption) -> dict[str, object]:
@@ -530,5 +526,4 @@ def _game_view(
         public_stratagem_use_records=(),
         pending_decision=pending_decision,
         pending_proposal=None,
-        event_count=1,
     )

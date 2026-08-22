@@ -12,11 +12,15 @@ displays authoritative results or diagnostics returned by the core engine.
 Target Python version: **3.14.5**.
 
 Supported core engine revision: `Warhammer_40k_AI`
-`f01293fb4d83249482ecee1c304e21f18e57055e` (`Remove unvalidated terrain and
-add deployment-zone layout helpers`). The package lock currently resolves
-`warhammer40k-core-v2` to this commit. When updating the core dependency, update
-this line and review the active plans under `docs/plans/` for adapter or
-projection drift.
+`dbfcc3a99e9d560d1354506352a09d48ca555a94` (`feat(missions): complete Phase 17N
+layout replay certification (#398)`), external contract `10.2.0`. The package lock and CI both
+resolve `warhammer40k-core-v2` to this exact commit. When updating the core dependency, update this
+line and review the active plans under `docs/plans/` for adapter or projection drift.
+
+The local client uses the core's public `AdapterGameSession` facade. Current projections are parsed
+strictly, editor routing comes from the engine-authored interaction descriptor, and
+`battlefield_view` is the canonical render geometry source. An incompatible installed contract
+stops startup with a copyable terminal diagnostic instead of falling back to an older payload shape.
 
 From a clean clone of this repository:
 
@@ -69,7 +73,7 @@ Use this as an in-between path for trying a branch without a local source checko
 ```bash
 uv venv --python 3.14.5 .venv-warhammer-ui
 source .venv-warhammer-ui/bin/activate
-uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@dbfcc3a99e9d560d1354506352a09d48ca555a94
 uv pip install git+https://github.com/SobolGaming/Warhammer_40k_UI_arcade@main
 warhammer40k-arcade-ui
 ```
@@ -88,7 +92,7 @@ Use this to install a wheel or source distribution produced by `uv build`:
 uv build
 uv venv --python 3.14.5 .venv-warhammer-ui-package
 source .venv-warhammer-ui-package/bin/activate
-uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@dbfcc3a99e9d560d1354506352a09d48ca555a94
 uv pip install dist/warhammer40k_arcade_ui-0.1.0-py3-none-any.whl
 warhammer40k-arcade-ui
 ```
@@ -179,6 +183,12 @@ uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase scout-move --ui-
 uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase movement --ui-prefs docs/preferences/default.yaml
 ```
 
+The CLI also recognizes `shooting`, `charge`, and `fight` as contract checkpoints. The current
+canonical core fixture becomes terminal before reaching them, so requesting one exits the smoke
+startup path with a typed `Game became terminal before smoke checkpoint ...` diagnostic. They are
+not advertised as reachable smoke checkpoints until a core-owned fixture can reach them through
+public decisions.
+
 Stop points:
 
 - `setup` and `secondary-missions`: pause at the first `select_secondary_missions` request.
@@ -197,9 +207,10 @@ Stop points:
   all smoke units, resolve Scout Move, then pause at the first battle-round `select_movement_unit`
   request.
 
-All scripted choices are submitted through the real local core session. They are only defaults for
-getting to the selected smoke checkpoint; after the Arcade window opens, reviewer actions go through
-the normal UI/client/core decision path.
+All scripted choices are submitted through the public real-local-session facade. The harness does
+not inspect lifecycle queues or replace authoritative battlefield state. Scripted choices are only
+defaults for getting to the selected smoke checkpoint; after the Arcade window opens, reviewer
+actions go through the normal UI/client/core decision path.
 
 ## Forensic event traces
 

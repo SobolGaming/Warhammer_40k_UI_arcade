@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.protocol import UiDecision
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
@@ -588,7 +589,7 @@ def _movement_proposal_decision(
         if context is None
         else context
     )
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": request_id,
             "decision_type": "submit_movement_proposal",
@@ -623,22 +624,26 @@ def _movement_proposal_decision(
 
 
 def _shooting_proposal_decision() -> UiDecision:
-    decision = _movement_proposal_decision()
-    proposal = decision.parameterized_proposal
-    assert proposal is not None
-    return replace(
-        decision,
-        decision_type="submit_shooting_declaration",
-        movement_proposal=None,
-        parameterized_proposal=replace(
-            proposal,
-            decision_type="submit_shooting_declaration",
-            proposal_kind="shooting_declaration",
-            payload={
-                "request_id": "decision-request-000009",
-                "decision_type": "submit_shooting_declaration",
-                "actor_id": "player_1",
-                "proposal_kind": "shooting_declaration",
+    return decision_from_fixture(
+        {
+            "request_id": "decision-request-000009",
+            "decision_type": "submit_shooting_declaration",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": "decision-request-000009",
+                    "decision_type": "submit_shooting_declaration",
+                    "actor_id": "player_1",
+                    "proposal_kind": "shooting_declaration",
+                }
             },
-        ),
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+            "is_parameterized": True,
+        }
     )

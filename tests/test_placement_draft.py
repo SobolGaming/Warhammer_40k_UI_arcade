@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
@@ -129,7 +130,7 @@ def _empty_selection() -> SelectionState:
 
 
 def _placement_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-placement-001",
             "decision_type": "submit_placement_proposal",
@@ -158,7 +159,7 @@ def _placement_proposal_decision() -> UiDecision:
 
 
 def _deployment_placement_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-deployment-001",
             "decision_type": "submit_deployment_placement",
@@ -193,7 +194,7 @@ def _deployment_placement_decision() -> UiDecision:
 
 def _unprojected_vehicle_deployment_decision(*, model_id: str) -> UiDecision:
     unit_id = "army-alpha:strategic-reserve-unit:core-vehicle-monster:001"
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-deployment-vehicle-001",
             "decision_type": "submit_deployment_placement",

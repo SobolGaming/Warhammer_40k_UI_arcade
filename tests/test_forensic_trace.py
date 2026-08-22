@@ -79,6 +79,15 @@ def test_payload_trace_records_json_safe_ui_core_payloads(tmp_path: Path) -> Non
     assert type(get_view_payload) is dict
     assert get_view_payload["game_id"] == view.game_id
     assert get_view_payload["viewer_player_id"] == "player_1"
+    assert get_view_response["projection_state_hash"] == view.projection_state_hash
+    assert view.pending_decision is not None
+    assert view.pending_decision.interaction is not None
+    assert get_view_response["interaction_kind"] == (
+        view.pending_decision.interaction.interaction_kind
+    )
+    assert get_view_response["submission_variant_id"] == (
+        view.pending_decision.interaction.submission_variants[0].variant_id
+    )
     assert submit_request["payload"] == {
         "request_id": "decision-request-phase6-debug-000001",
         "result_id": "ui-result-000001",

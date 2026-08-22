@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiInvalidDiagnostic
 from warhammer40k_arcade_ui.hud.action_summary import build_action_visual_summary
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
@@ -110,7 +111,7 @@ def test_supported_charge_summary_without_draft_has_no_geometry() -> None:
 
 
 def _movement_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-000005",
             "decision_type": "submit_movement_proposal",
@@ -149,7 +150,7 @@ def _movement_proposal_decision() -> UiDecision:
 
 
 def _charge_move_proposal_decision() -> UiDecision:
-    return UiDecision.from_payload(
+    return decision_from_fixture(
         {
             "request_id": "decision-request-charge-001",
             "decision_type": "submit_movement_proposal",

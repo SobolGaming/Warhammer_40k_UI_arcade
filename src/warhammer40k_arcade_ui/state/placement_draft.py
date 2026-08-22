@@ -14,6 +14,10 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, ModelBaseView, UnitView
+from warhammer40k_arcade_ui.state.interaction_dispatch import (
+    PLACEMENT_EDITOR,
+    interaction_route_for_decision,
+)
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
 _MM_PER_INCH = 25.4
@@ -22,9 +26,13 @@ _DEFAULT_PRESENTATION_BASE_RADIUS_INCHES = 0.75
 PLACEMENT_PROPOSAL_DECISION_TYPES = frozenset(
     (
         "submit_placement_proposal",
+        "submit_cult_ambush_marker_placement",
         "submit_deployment_placement",
         "submit_redeploy_placement",
         "submit_scout_reserve_setup",
+        "submit_catalog_model_materialization_placement",
+        "submit_healing_revival_placement",
+        "submit_return_on_death_placement",
     )
 )
 SUPPORTED_PLACEMENT_PROPOSAL_KINDS = frozenset(
@@ -36,6 +44,9 @@ SUPPORTED_PLACEMENT_PROPOSAL_KINDS = frozenset(
         "deployment_placement",
         "redeploy_placement",
         "scout_reserve_setup",
+        "model_materialization_placement",
+        "healing_revival_placement",
+        "return_on_death_placement",
     )
 )
 
@@ -107,10 +118,10 @@ class PlacementDraft:
     decision_type: str
     proposal_kind: str
     placement_kind: str
-    game_id: str
+    game_id: str | None
     player_id: str
-    source_decision_request_id: str
-    source_decision_result_id: str
+    source_decision_request_id: str | None
+    source_decision_result_id: str | None
     model_poses: tuple[PlacementModelPose, ...]
     selected_model_id: str
     cursor_preview_point: WorldPoint | None
@@ -121,6 +132,9 @@ class PlacementDraft:
     action_kind: str | None = None
     source_rule_id: str | None = None
     context: JsonObject | None = None
+    submission_variant_id: str | None = None
+    spatial_context_hash: str | None = None
+    projection_state_hash: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -144,17 +158,17 @@ class PlacementDraft:
             "placement_kind",
             _non_empty_string("placement_kind", self.placement_kind),
         )
-        object.__setattr__(self, "game_id", _non_empty_string("game_id", self.game_id))
+        object.__setattr__(self, "game_id", _optional_string("game_id", self.game_id))
         object.__setattr__(self, "player_id", _non_empty_string("player_id", self.player_id))
         object.__setattr__(
             self,
             "source_decision_request_id",
-            _non_empty_string("source_decision_request_id", self.source_decision_request_id),
+            _optional_string("source_decision_request_id", self.source_decision_request_id),
         )
         object.__setattr__(
             self,
             "source_decision_result_id",
-            _non_empty_string("source_decision_result_id", self.source_decision_result_id),
+            _optional_string("source_decision_result_id", self.source_decision_result_id),
         )
         if type(self.model_poses) is not tuple or not self.model_poses:
             raise PlacementDraftError("PlacementDraft model_poses must be a non-empty tuple.")
@@ -199,6 +213,21 @@ class PlacementDraft:
             "context",
             {} if self.context is None else _json_object("context", self.context),
         )
+        object.__setattr__(
+            self,
+            "submission_variant_id",
+            _optional_string("submission_variant_id", self.submission_variant_id),
+        )
+        object.__setattr__(
+            self,
+            "spatial_context_hash",
+            _optional_string("spatial_context_hash", self.spatial_context_hash),
+        )
+        object.__setattr__(
+            self,
+            "projection_state_hash",
+            _optional_string("projection_state_hash", self.projection_state_hash),
+        )
 
     @classmethod
     def start_for_pending(
@@ -208,6 +237,7 @@ class PlacementDraft:
         selection: SelectionState,
         pending_decision: UiDecision | None,
         model_display_by_id: JsonObject | None = None,
+        projection_state_hash: str | None = None,
     ) -> PlacementDraft | None:
         """Create a placement draft for the current placement proposal."""
 
@@ -222,6 +252,12 @@ class PlacementDraft:
         if not model_ids:
             return None
         models_by_id = _models_by_id(unit)
+        if pending_decision is None:
+            return None
+        route = interaction_route_for_decision(pending_decision)
+        if route.editor_id != PLACEMENT_EDITOR or not route.supported:
+            return None
+        submission_variant_id = route.submission_variant_id
         model_poses = tuple(
             PlacementModelPose(
                 model_id=model_id,
@@ -253,6 +289,9 @@ class PlacementDraft:
             action_kind=proposal.action_kind,
             source_rule_id=proposal.source_rule_id,
             context=proposal.context,
+            submission_variant_id=submission_variant_id,
+            spatial_context_hash=proposal.spatial_context_hash,
+            projection_state_hash=projection_state_hash,
         )
 
     @property
@@ -304,15 +343,32 @@ class PlacementDraft:
             f"{self.total_model_count} model(s) placed"
         )
 
-    def is_for(self, *, pending_decision: UiDecision | None) -> bool:
+    def is_for(
+        self,
+        *,
+        pending_decision: UiDecision | None,
+        projection_state_hash: str | None = None,
+    ) -> bool:
         """Return whether this draft still matches the pending placement request."""
 
-        return self.matches_proposal_context(pending_decision=pending_decision)
+        return self.matches_proposal_context(
+            pending_decision=pending_decision,
+            projection_state_hash=projection_state_hash,
+        )
 
-    def matches_proposal_context(self, *, pending_decision: UiDecision | None) -> bool:
+    def matches_proposal_context(
+        self,
+        *,
+        pending_decision: UiDecision | None,
+        projection_state_hash: str | None = None,
+    ) -> bool:
         """Return whether this draft matches the current placement proposal context."""
 
         proposal = None if pending_decision is None else pending_decision.placement_proposal
+        route = (
+            None if pending_decision is None else interaction_route_for_decision(pending_decision)
+        )
+        variant_id = None if route is None else route.submission_variant_id
         return (
             proposal is not None
             and proposal.request_id == self.proposal_request_id
@@ -322,6 +378,12 @@ class PlacementDraft:
             and proposal.placement_kind == self.placement_kind
             and proposal.source_decision_request_id == self.source_decision_request_id
             and proposal.source_decision_result_id == self.source_decision_result_id
+            and proposal.spatial_context_hash == self.spatial_context_hash
+            and variant_id == self.submission_variant_id
+            and (
+                self.projection_state_hash is None
+                or projection_state_hash == self.projection_state_hash
+            )
         )
 
     def with_cursor_preview(self, world_point: WorldPoint) -> PlacementDraft:
@@ -422,7 +484,7 @@ class PlacementDraft:
             body = {
                 "proposal_request_id": self.proposal_request_id,
                 "proposal_kind": self.proposal_kind,
-                "game_id": self.game_id,
+                "game_id": _required_string_value("game_id", self.game_id),
                 "ruleset_descriptor_hash": _required_string_value(
                     "ruleset_descriptor_hash",
                     self.ruleset_descriptor_hash,
@@ -440,7 +502,7 @@ class PlacementDraft:
             body = {
                 "proposal_request_id": self.proposal_request_id,
                 "proposal_kind": self.proposal_kind,
-                "game_id": self.game_id,
+                "game_id": _required_string_value("game_id", self.game_id),
                 "ruleset_descriptor_hash": _required_string_value(
                     "ruleset_descriptor_hash",
                     self.ruleset_descriptor_hash,
@@ -462,6 +524,14 @@ class PlacementDraft:
             "unit_instance_id": self.selected_unit_id,
             "model_placements": model_placements,
         }
+        if self.decision_type == "submit_return_on_death_placement":
+            return _json_object(
+                "return-on-death placement payload",
+                {
+                    "submission_kind": "submit_return_on_death_placement",
+                    "attempted_placement": attempted_placement,
+                },
+            )
         body = {
             "proposal_request_id": self.proposal_request_id,
             "proposal_kind": self.proposal_kind,
@@ -491,6 +561,9 @@ def placement_proposal_for_selected_unit(
 
     if selection.selected_unit_id is None or pending_decision is None:
         return None
+    route = interaction_route_for_decision(pending_decision)
+    if route.editor_id != PLACEMENT_EDITOR or not route.supported:
+        return None
     proposal = pending_decision.placement_proposal
     if proposal is None:
         return None
@@ -502,7 +575,12 @@ def placement_proposal_for_selected_unit(
 def _draftable_placement_proposal(
     pending_decision: UiDecision | None,
 ) -> UiPlacementProposalRequest | None:
-    proposal = None if pending_decision is None else pending_decision.placement_proposal
+    if pending_decision is None:
+        return None
+    route = interaction_route_for_decision(pending_decision)
+    if route.editor_id != PLACEMENT_EDITOR or not route.supported:
+        return None
+    proposal = pending_decision.placement_proposal
     if proposal is None:
         return None
     if proposal.decision_type not in PLACEMENT_PROPOSAL_DECISION_TYPES:

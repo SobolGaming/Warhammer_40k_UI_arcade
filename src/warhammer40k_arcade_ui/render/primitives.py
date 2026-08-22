@@ -43,6 +43,8 @@ MOVEMENT_GHOST_FILL: Color = (102, 220, 180, 54)
 MOVEMENT_ACTIVE: Color = (132, 232, 255, 255)
 MOVEMENT_ASSIGNED: Color = (122, 214, 156, 210)
 MOVEMENT_UNASSIGNED: Color = (184, 190, 186, 135)
+CORE_MEASUREMENT_OVERLAY: Color = (255, 216, 102, 220)
+CORE_PATH_OVERLAY: Color = (104, 206, 255, 220)
 PLACEMENT_GHOST_FILL: Color = (88, 172, 246, 46)
 PLACEMENT_CURRENT: Color = (132, 232, 255, 255)
 PLACEMENT_PLACED: Color = (88, 172, 246, 220)
@@ -140,6 +142,7 @@ def build_world_primitives(
     primitives.extend(_deployment_zone_primitives(view))
     primitives.extend(_objective_primitives(view))
     primitives.extend(_terrain_primitives(view))
+    primitives.extend(_canonical_interaction_overlay_primitives(view))
     primitives.extend(_unit_primitives(view))
     primitives.extend(
         _assignment_target_highlight_primitives(
@@ -164,6 +167,46 @@ def build_world_primitives(
             )
     if placement_draft is not None:
         primitives.extend(_placement_draft_primitives(placement_draft))
+    return tuple(primitives)
+
+
+def _canonical_interaction_overlay_primitives(
+    view: BattlefieldView,
+) -> tuple[RenderPrimitive, ...]:
+    primitives: list[RenderPrimitive] = []
+    for overlay in view.measurement_overlays:
+        primitives.append(
+            PolylinePrimitive(
+                layer="core_measurement_overlay",
+                points=(overlay.start, overlay.end),
+                color=CORE_MEASUREMENT_OVERLAY,
+                line_width=1.5,
+            )
+        )
+        primitives.append(
+            TextPrimitive(
+                layer="core_measurement_overlay_label",
+                text=f"{overlay.distance_inches:.2f} in",
+                position=(
+                    (overlay.start[0] + overlay.end[0]) / 2.0,
+                    (overlay.start[1] + overlay.end[1]) / 2.0,
+                ),
+                color=CORE_MEASUREMENT_OVERLAY,
+                font_size=9.0,
+                coordinate_space="world",
+                anchor_x="center",
+                anchor_y="center",
+            )
+        )
+    primitives.extend(
+        PolylinePrimitive(
+            layer="core_path_overlay",
+            points=overlay.points,
+            color=CORE_PATH_OVERLAY,
+            line_width=1.75,
+        )
+        for overlay in view.path_overlays
+    )
     return tuple(primitives)
 
 
@@ -219,6 +262,16 @@ def _deployment_zone_primitives(view: BattlefieldView) -> tuple[RenderPrimitive,
                 outline_color=player_color,
                 line_width=1.0,
             )
+        )
+        primitives.extend(
+            PolygonPrimitive(
+                layer="deployment_zone_cutout",
+                points=cutout,
+                fill_color=TABLE_FILL,
+                outline_color=player_color,
+                line_width=0.75,
+            )
+            for cutout in zone.cutouts
         )
         primitives.append(
             TextPrimitive(
@@ -359,15 +412,36 @@ def _unit_primitives(view: BattlefieldView) -> tuple[RenderPrimitive, ...]:
             )
         )
         for model in unit.models:
-            primitives.append(
-                CirclePrimitive(
-                    layer="model_base",
-                    center=model.position,
-                    radius=model.base_radius,
-                    fill_color=(22, 25, 27, 230),
-                    outline_color=player_color,
-                    line_width=1.25,
+            if model.support_footprint is None:
+                primitives.append(
+                    CirclePrimitive(
+                        layer="model_base",
+                        center=model.position,
+                        radius=model.base_radius,
+                        fill_color=(22, 25, 27, 230),
+                        outline_color=player_color,
+                        line_width=1.25,
+                    )
                 )
+            else:
+                primitives.append(
+                    PolygonPrimitive(
+                        layer="model_base",
+                        points=model.support_footprint,
+                        fill_color=(22, 25, 27, 230),
+                        outline_color=player_color,
+                        line_width=1.25,
+                    )
+                )
+            primitives.extend(
+                PolygonPrimitive(
+                    layer="model_measurement_geometry",
+                    points=footprint,
+                    fill_color=(0, 0, 0, 0),
+                    outline_color=(222, 229, 224, 190),
+                    line_width=0.65,
+                )
+                for footprint in model.measurement_footprints
             )
     return tuple(primitives)
 
