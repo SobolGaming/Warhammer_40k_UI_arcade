@@ -1,6 +1,6 @@
 # Phase 30: Generic Assignment Proposal Editors
 
-Status: Proposed
+Status: Implemented
 
 ## Purpose
 
@@ -179,3 +179,53 @@ uv run pre-commit run --all-files
 Review should focus on whether assignment editing is data-driven from the pending request. The UI
 can make assignment entry ergonomic, but it must not become a shooting, melee, or Stratagem rule
 engine.
+
+## Implementation Notes
+
+Implemented in the Phase 30 PR.
+
+- Added `AssignmentWorkspace` state for request-keyed generic assignment payload previews.
+- Added assignment adapters for `shooting_declaration`, `melee_declaration`, and
+  `stratagem_target_binding`.
+- Added `submit_assignment_workspace(...)` so generic assignment proposals use the same
+  parameterized submission lifecycle as movement and placement.
+- Wired `ArcadeWarhammerWindow` to start and clear assignment workspaces on pending-request changes.
+- Added Current Action panel buttons for assignment `Submit`, optional `Decline`, and `Clear`.
+- Bound assignment rows into the existing Assignments HUD area and action visual summaries.
+- Rendered source-to-target assignment summary lines when referenced units/models are visible.
+- Preserved finite `use_stratagem` opportunity-window handling as finite Current Action choices
+  rather than assignment workspaces.
+- Converted malformed or incomplete assignment request data into assignment diagnostics where the
+  request can be reviewed but not safely submitted.
+
+Reviewer-visible HUD element:
+
+- The assignment UX is visible in the `Current Action` HUD panel and the `Current Assignment`
+  panel. `Current Action` exposes assignment submit/decline/clear buttons; `Current Assignment`
+  shows the assignment ledger, readiness, advisory lines, and diagnostics.
+
+Additional smoke-test note:
+
+- The live-core smoke Monster movement nudge was moved deeper into the current core movement bridge
+  area so the existing Monster advance smoke test remains valid while the core movement resolver
+  still applies its bridge edge assumptions.
+
+Automated verification completed locally:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src tests
+uv run pyright
+uv run pytest tests/
+```
+
+Manual validation checklist for this phase:
+
+- Trigger a shooting declaration request and confirm `Current Action` shows assignment Submit/Clear.
+- Trigger a melee declaration request and confirm the Assignments panel shows model-to-target rows.
+- Trigger a parameterized Stratagem target-binding request and confirm optional Decline appears only
+  when the engine marks the request declinable.
+- Toggle action summary review and confirm source-to-target lines appear for visible refs.
+- Trigger a finite `use_stratagem` opportunity window and confirm it remains a finite option list,
+  not an assignment workspace.

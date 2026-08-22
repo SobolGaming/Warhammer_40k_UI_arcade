@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiInvalidDiagnostic
+from warhammer40k_arcade_ui.hud.view_models import AssignmentHudPanelView
 from warhammer40k_arcade_ui.preferences.schema import ActionSummaryDefault
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.state.movement_draft import (
@@ -14,9 +15,9 @@ from warhammer40k_arcade_ui.state.movement_draft import (
 )
 
 type ActionSummaryIntensity = Literal["hidden", "dim", "review"]
-type ActionSummaryOperationKind = Literal["movement", "unsupported"]
+type ActionSummaryOperationKind = Literal["movement", "assignment", "unsupported"]
 type ActionSummaryGroupState = Literal["active", "assigned", "unassigned", "warning", "invalid"]
-type ActionSummaryColorRole = Literal["movement", "warning", "unsupported"]
+type ActionSummaryColorRole = Literal["movement", "assignment", "warning", "unsupported"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +59,12 @@ class ActionVisualSummary:
     def has_drawable_groups(self) -> bool:
         """Return whether this summary contains map geometry."""
 
-        return any(group.has_path or group.ghost_center is not None for group in self.groups)
+        return any(
+            group.has_path
+            or group.ghost_center is not None
+            or (group.source_ref_keys and group.target_ref_keys)
+            for group in self.groups
+        )
 
 
 def build_action_visual_summary(
@@ -68,6 +74,7 @@ def build_action_visual_summary(
     diagnostics: tuple[UiInvalidDiagnostic, ...],
     intensity: ActionSummaryDefault,
     max_labels: int,
+    assignment_hud_panel: AssignmentHudPanelView | None = None,
 ) -> ActionVisualSummary | None:
     """Build an advisory visual summary without adding a second rules path."""
 
@@ -76,6 +83,14 @@ def build_action_visual_summary(
     if movement_draft is not None:
         return _movement_visual_summary(
             movement_draft=movement_draft,
+            diagnostics=diagnostics,
+            intensity=intensity,
+            max_labels=max_labels,
+        )
+    if _is_generic_assignment_panel(assignment_hud_panel):
+        assert assignment_hud_panel is not None
+        return _assignment_visual_summary(
+            assignment_hud_panel=assignment_hud_panel,
             diagnostics=diagnostics,
             intensity=intensity,
             max_labels=max_labels,
@@ -96,6 +111,43 @@ def build_action_visual_summary(
             max_labels=max_labels,
         )
     return None
+
+
+def _assignment_visual_summary(
+    *,
+    assignment_hud_panel: AssignmentHudPanelView,
+    diagnostics: tuple[UiInvalidDiagnostic, ...],
+    intensity: ActionSummaryDefault,
+    max_labels: int,
+) -> ActionVisualSummary:
+    diagnostic_lines = _diagnostic_lines(diagnostics)
+    warning = bool(diagnostic_lines) or assignment_hud_panel.readiness_state == "invalid"
+    groups = tuple(
+        ActionVisualSummaryGroup(
+            group_id=group.group_id,
+            label=group.label,
+            state="warning" if warning else group.state,
+            source_ref_keys=group.source_ref_keys,
+            target_ref_keys=group.target_ref_keys,
+            path_points=(),
+            ghost_center=None,
+            ghost_radius=None,
+            icon_id="action.summary",
+            color_role="warning" if warning else "assignment",
+            summary_lines=group.summary_lines,
+        )
+        for group in assignment_hud_panel.groups
+        if group.source_ref_keys or group.target_ref_keys
+    )
+    return ActionVisualSummary(
+        request_id=assignment_hud_panel.request_id,
+        operation_kind="assignment",
+        intensity=intensity,
+        groups=groups,
+        diagnostic_lines=(*assignment_hud_panel.advisory_lines, *diagnostic_lines),
+        ready=assignment_hud_panel.readiness_state == "ready",
+        max_labels=max_labels,
+    )
 
 
 def _movement_visual_summary(
@@ -176,4 +228,12 @@ def _is_fight_order_decision(pending_decision: UiDecision | None) -> bool:
     return pending_decision.decision_type in {
         "select_fight_activation",
         "resolve_fight_interrupt",
+    }
+
+
+def _is_generic_assignment_panel(panel: AssignmentHudPanelView | None) -> bool:
+    return panel is not None and panel.operation_kind in {
+        "shooting_declaration",
+        "melee_declaration",
+        "stratagem_target_binding",
     }

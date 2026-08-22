@@ -63,6 +63,7 @@ hud:
   layout_preset: compass_ring
   composition_profile: default-hud
   movement_budget_ring_mode: total
+  assignment_target_highlight_color: [220, 54, 64, 72]
   zones:
     right_inspector:
       visible: true
@@ -78,6 +79,11 @@ hud:
 - `split` draws a base movement ring plus a larger enhanced/total ring when the proposal or visible
   datasheet data exposes a base movement hint and the total budget is larger than that base value.
   If the UI cannot resolve a base movement hint, it falls back to the single total ring.
+
+`assignment_target_highlight_color` controls the advisory battlefield fill used when a selectable
+assignment row targets a visible unit. It is an `[R, G, B, A]` list with integer channels from 0 to
+255. The highlight is local UI feedback only; engine validation still owns whether the assignment is
+legal.
 
 The `composition_profile` value can be:
 
@@ -735,13 +741,16 @@ Important properties:
 - `group_label`
 - `operation_kind`
 - `summary_lines`
+- `button_shape`
 - `source_entity_chips`
 - `target_entity_chips`
 - `detailed`
 - `expanded`
 
 Use it for movement assignments now and future shooting, Stratagem target, or multi-entity
-assignment summaries.
+assignment summaries. Runtime assignment rows can also behave as buttons: selecting a row focuses
+its target unit where that target is visible and paints the advisory target highlight configured by
+`assignment_target_highlight_color`.
 
 ### `DicePipeline`
 

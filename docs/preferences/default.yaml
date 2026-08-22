@@ -97,6 +97,7 @@ hud:
   show_assignment_hud: true
   assignment_hud_mode: compact
   show_assignment_warning_markers: true
+  assignment_target_highlight_color: [220, 54, 64, 72]
   action_summary_default: dim
   action_summary_max_labels: 6
   movement_budget_ring_mode: total

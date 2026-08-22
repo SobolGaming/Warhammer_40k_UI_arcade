@@ -16,6 +16,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
+from warhammer40k_arcade_ui.state.assignment_workspace import is_assignment_parameterized_decision
 from warhammer40k_arcade_ui.state.entity_selection import (
     EntityRef,
     EntitySelectionState,
@@ -1313,6 +1314,8 @@ def unsupported_parameterized_tool_label(pending_decision: UiDecision | None) ->
     if pending_decision is None or not pending_decision.is_parameterized:
         return None
     if pending_decision.placement_proposal is not None:
+        return None
+    if is_assignment_parameterized_decision(pending_decision):
         return None
     proposal = pending_decision.parameterized_proposal
     if proposal is None:

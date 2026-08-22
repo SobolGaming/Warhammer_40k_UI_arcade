@@ -506,7 +506,7 @@ def test_non_movement_parameterized_request_does_not_create_movement_draft() -> 
 
     assert proposal is None
     assert draft is None
-    assert unsupported_parameterized_tool_label(decision) == "shooting_declaration"
+    assert unsupported_parameterized_tool_label(decision) is None
 
 
 def test_selection_state_uses_configured_movement_draft_overlays() -> None:

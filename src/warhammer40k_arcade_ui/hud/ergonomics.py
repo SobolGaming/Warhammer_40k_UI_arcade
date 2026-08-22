@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import cast
 
 from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
@@ -34,6 +34,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
 from warhammer40k_arcade_ui.preferences.registries import command_registry
 from warhammer40k_arcade_ui.preferences.schema import HotkeyBinding, UiPreferences
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView
+from warhammer40k_arcade_ui.state.assignment_workspace import ASSIGNMENT_PROPOSAL_KINDS
 
 _DATASHEET_STAT_KEYS = ("M", "T", "SV", "W", "LD", "OC")
 
@@ -78,6 +79,7 @@ def build_hud_ergonomics_view(
     viewer_player_id: str | None = None,
     unit_display_by_id: JsonObject | None = None,
     model_display_by_id: JsonObject | None = None,
+    selected_assignment_group_id: str | None = None,
 ) -> HudErgonomicsView:
     """Build a toolkit-backed HUD summary without adding rule semantics."""
 
@@ -85,6 +87,7 @@ def build_hud_ergonomics_view(
         finite_decision_panel,
         movement_draft_panel,
         placement_draft_panel,
+        assignment_hud_panel,
     )
     selected_unit_display = _selected_unit_display(
         unit_panel=unit_panel,
@@ -122,6 +125,7 @@ def build_hud_ergonomics_view(
             finite_decision_panel=finite_decision_panel,
             movement_draft_panel=movement_draft_panel,
             placement_draft_panel=placement_draft_panel,
+            assignment_hud_panel=assignment_hud_panel,
             preferences=preferences,
             hovered_hud_button_id=hovered_hud_button_id,
         ),
@@ -131,7 +135,10 @@ def build_hud_ergonomics_view(
             placement_draft_panel=placement_draft_panel,
             preferences=preferences,
         ),
-        assignment_rows=_assignment_rows(assignment_hud_panel),
+        assignment_rows=_assignment_rows(
+            assignment_hud_panel,
+            selected_assignment_group_id=selected_assignment_group_id,
+        ),
         assignment_notice_rows=_assignment_notice_rows(assignment_hud_panel),
         assignment_subtitle=_assignment_subtitle(assignment_hud_panel),
         assignment_color_role=_assignment_color_role(assignment_hud_panel),
@@ -511,6 +518,7 @@ def _current_action_view(
     finite_decision_panel: FiniteDecisionPanelView,
     movement_draft_panel: MovementDraftPanelView | None,
     placement_draft_panel: PlacementDraftPanelView | None,
+    assignment_hud_panel: AssignmentHudPanelView | None,
     preferences: UiPreferences,
     hovered_hud_button_id: str | None,
 ) -> CurrentActionView:
@@ -522,6 +530,7 @@ def _current_action_view(
         finite_decision_panel=finite_decision_panel,
         movement_draft_panel=movement_draft_panel,
         placement_draft_panel=placement_draft_panel,
+        assignment_hud_panel=assignment_hud_panel,
     )
     buttons = (
         _placement_action_buttons(
@@ -529,6 +538,11 @@ def _current_action_view(
             hovered_hud_button_id=hovered_hud_button_id,
         )
         if placement_draft_panel is not None
+        else _assignment_action_buttons(
+            assignment_hud_panel=assignment_hud_panel,
+            hovered_hud_button_id=hovered_hud_button_id,
+        )
+        if _is_generic_assignment_panel(assignment_hud_panel)
         else tuple(
             _finite_option_button(
                 option=option,
@@ -556,12 +570,13 @@ def _current_action_view(
         confirm_hint=_confirm_hint(
             confirm_hint=confirm_hint,
             placement_draft_panel=placement_draft_panel,
+            assignment_hud_panel=assignment_hud_panel,
         ),
         cancel_hint=f"{cancel_hint}: cancel/back" if cancel_hint else "",
         source_kind="local_gui"
         if placement_draft_panel is not None
         else "engine_parameterized"
-        if finite_decision_panel.proposal_kind is not None
+        if finite_decision_panel.proposal_kind is not None or assignment_hud_panel is not None
         else "engine_finite"
         if finite_decision_panel.request_id is not None
         else "none",
@@ -591,6 +606,7 @@ def _current_action_status(
     finite_decision_panel: FiniteDecisionPanelView,
     movement_draft_panel: MovementDraftPanelView | None,
     placement_draft_panel: PlacementDraftPanelView | None,
+    assignment_hud_panel: AssignmentHudPanelView | None,
 ) -> str:
     if placement_draft_panel is not None:
         completeness = (
@@ -613,6 +629,15 @@ def _current_action_status(
         distance_summary = _movement_distance_summary(movement_draft_panel)
         movement_parts = (movement_draft_panel.status_line, assignment_summary, distance_summary)
         return " | ".join(part for part in movement_parts if part)
+    if _is_generic_assignment_panel(assignment_hud_panel):
+        assert assignment_hud_panel is not None
+        row_count = len(assignment_hud_panel.groups)
+        status_parts = (
+            _assignment_operation_label(assignment_hud_panel),
+            f"{row_count} assignment row(s)",
+            _assignment_subtitle(assignment_hud_panel),
+        )
+        return " | ".join(part for part in status_parts if part)
     return finite_decision_panel.status_line
 
 
@@ -620,14 +645,142 @@ def _confirm_hint(
     *,
     confirm_hint: str | None,
     placement_draft_panel: PlacementDraftPanelView | None,
+    assignment_hud_panel: AssignmentHudPanelView | None,
 ) -> str:
     if not confirm_hint:
         return ""
     if placement_draft_panel is None:
+        if _is_generic_assignment_panel(assignment_hud_panel):
+            assert assignment_hud_panel is not None
+            if assignment_hud_panel.readiness_state == "ready":
+                return f"{confirm_hint}: submit assignment proposal"
+            return f"{confirm_hint}: assignment proposal needs review"
         return f"{confirm_hint}: submit selected option"
     if placement_draft_panel.ready:
         return f"{confirm_hint}: submit placement draft"
     return f"{confirm_hint}: review placement draft"
+
+
+def _is_generic_assignment_panel(panel: AssignmentHudPanelView | None) -> bool:
+    return panel is not None and panel.operation_kind in ASSIGNMENT_PROPOSAL_KINDS
+
+
+def _assignment_action_buttons(
+    *,
+    assignment_hud_panel: AssignmentHudPanelView | None,
+    hovered_hud_button_id: str | None,
+) -> tuple[HudButtonView, ...]:
+    if assignment_hud_panel is None:
+        return ()
+    ready = assignment_hud_panel.readiness_state == "ready"
+    buttons = [
+        _assignment_action_button(
+            index=0,
+            action_kind="assignment_submit",
+            label="Submit",
+            request_id=assignment_hud_panel.request_id,
+            selected=True,
+            enabled=ready,
+            disabled_reason=""
+            if ready
+            else "Assignment proposal is incomplete; review diagnostics first.",
+            hovered_hud_button_id=hovered_hud_button_id,
+        ),
+        _assignment_action_button(
+            index=1,
+            action_kind="assignment_clear",
+            label="Clear",
+            request_id=assignment_hud_panel.request_id,
+            selected=False,
+            enabled=assignment_hud_panel.editable,
+            disabled_reason=""
+            if assignment_hud_panel.editable
+            else "Seeded assignment workspaces are not directly editable yet.",
+            hovered_hud_button_id=hovered_hud_button_id,
+        ),
+    ]
+    if assignment_hud_panel.decline_available:
+        buttons.insert(
+            1,
+            _assignment_action_button(
+                index=1,
+                action_kind="assignment_decline",
+                label="Decline",
+                request_id=assignment_hud_panel.request_id,
+                selected=False,
+                enabled=True,
+                disabled_reason="",
+                hovered_hud_button_id=hovered_hud_button_id,
+            ),
+        )
+    return tuple(
+        replace(button, component_id=f"assignment_action_button_{index}")
+        for index, button in enumerate(buttons)
+    )
+
+
+def _assignment_action_button(
+    *,
+    index: int,
+    action_kind: HudButtonActionKind,
+    label: str,
+    request_id: str | None,
+    selected: bool,
+    enabled: bool,
+    disabled_reason: str,
+    hovered_hud_button_id: str | None,
+) -> HudButtonView:
+    button_id = f"assignment_action_{index}_{action_kind}"
+    state: HudState = "selected" if selected else "normal"
+    if not enabled:
+        state = "disabled"
+    elif hovered_hud_button_id == button_id and not selected:
+        state = "hover"
+    return HudButtonView(
+        component_id=f"assignment_action_button_{index}",
+        button_id=button_id,
+        command_id=action_kind,
+        action_kind=action_kind,
+        request_id=request_id,
+        label=label,
+        icon_id="action.confirm" if action_kind == "assignment_submit" else "action.summary",
+        text_icon=_assignment_action_text_icon(action_kind),
+        tooltip=disabled_reason,
+        state=state,
+        color_role="selected"
+        if selected
+        else "disabled"
+        if not enabled
+        else "warning"
+        if action_kind == "assignment_decline"
+        else "neutral",
+        selected=selected,
+        focused=selected,
+        enabled=enabled,
+        disabled_reason=disabled_reason,
+        visual_role="selected"
+        if selected
+        else "disabled"
+        if not enabled
+        else "warning"
+        if action_kind == "assignment_decline"
+        else "neutral",
+        metadata={"assignment_action": action_kind},
+    )
+
+
+def _assignment_action_text_icon(action_kind: HudButtonActionKind) -> str:
+    if action_kind == "assignment_submit":
+        return "OK"
+    if action_kind == "assignment_decline":
+        return "NO"
+    if action_kind == "assignment_clear":
+        return "CL"
+    return "AS"
+
+
+def _assignment_operation_label(panel: AssignmentHudPanelView) -> str:
+    return panel.proposal_kind or panel.operation_kind.replace("_", " ")
 
 
 def _placement_action_buttons(
@@ -848,16 +1001,29 @@ def _action_rows(
 
 def _assignment_rows(
     assignment_hud_panel: AssignmentHudPanelView | None,
+    *,
+    selected_assignment_group_id: str | None,
 ) -> tuple[ToolkitAssignmentGroupRowView, ...]:
     if assignment_hud_panel is None:
         return ()
     return tuple(
         ToolkitAssignmentGroupRowView(
             component_id=f"assignment_row_{index}",
+            group_id=group.group_id,
             group_label=group.label,
             operation_kind=assignment_hud_panel.operation_kind,
-            state=_assignment_group_toolkit_state(group.state),
+            state="selected"
+            if group.group_id == selected_assignment_group_id
+            else "active"
+            if group.state == "assigned"
+            else _assignment_group_toolkit_state(group.state),
             summary_lines=group.summary_lines,
+            request_id=assignment_hud_panel.request_id,
+            source_ref_keys=group.source_ref_keys,
+            target_ref_keys=group.target_ref_keys,
+            target_unit_id=_first_unit_ref(group.target_ref_keys),
+            selected=group.group_id == selected_assignment_group_id,
+            enabled=bool(group.target_ref_keys),
         )
         for index, group in enumerate(assignment_hud_panel.groups[:3])
     )
@@ -980,10 +1146,18 @@ def _assignment_group_toolkit_state(state: AssignmentGroupState) -> HudState:
     return state
 
 
+def _first_unit_ref(ref_keys: tuple[str, ...]) -> str | None:
+    for ref_key in ref_keys:
+        if ref_key.startswith("unit:"):
+            return ref_key.removeprefix("unit:")
+    return None
+
+
 def _diagnostic_lines(
     finite_decision_panel: FiniteDecisionPanelView,
     movement_draft_panel: MovementDraftPanelView | None,
     placement_draft_panel: PlacementDraftPanelView | None,
+    assignment_hud_panel: AssignmentHudPanelView | None,
 ) -> tuple[str, ...]:
     lines = list(finite_decision_panel.diagnostic_lines)
     if movement_draft_panel is not None:
@@ -992,6 +1166,10 @@ def _diagnostic_lines(
                 lines.append(line)
     if placement_draft_panel is not None:
         for line in placement_draft_panel.diagnostic_lines:
+            if line not in lines:
+                lines.append(line)
+    if assignment_hud_panel is not None:
+        for line in assignment_hud_panel.diagnostic_lines:
             if line not in lines:
                 lines.append(line)
     return tuple(lines)

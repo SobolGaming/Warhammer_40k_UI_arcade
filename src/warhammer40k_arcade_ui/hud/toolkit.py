@@ -50,6 +50,10 @@ type HudButtonActionKind = Literal[
     "placement_submit",
     "placement_clear",
     "placement_next_model",
+    "assignment_submit",
+    "assignment_decline",
+    "assignment_clear",
+    "assignment_select",
 ]
 type HudButtonShape = Literal["rect", "rounded_rect", "pill", "square"]
 type HudButtonIconSide = Literal["left", "right", "both", "center", "none"]
@@ -562,10 +566,17 @@ class AssignmentGroupRowView:
     """Row summarizing one generic assignment group."""
 
     component_id: str
+    group_id: str
     group_label: str
     operation_kind: str = ""
     state: HudState = "normal"
     summary_lines: tuple[str, ...] = ()
+    request_id: str | None = None
+    source_ref_keys: tuple[str, ...] = ()
+    target_ref_keys: tuple[str, ...] = ()
+    target_unit_id: str | None = None
+    selected: bool = False
+    enabled: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -804,6 +815,9 @@ _WIDGET_ATTRIBUTES: dict[HudWidgetType, frozenset[str]] = {
     ),
     "AssignmentGroupRow": frozenset(
         (
+            "button_gap",
+            "button_height",
+            "button_shape",
             "detailed",
             "expanded",
             "group_label",

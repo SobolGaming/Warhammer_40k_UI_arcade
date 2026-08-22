@@ -15,6 +15,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 from warhammer40k_arcade_ui.preferences.schema import AssignmentHudMode, UiPreferences
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
+from warhammer40k_arcade_ui.state.assignment_workspace import AssignmentWorkspace
 from warhammer40k_arcade_ui.state.entity_selection import EntityRef
 from warhammer40k_arcade_ui.state.movement_draft import (
     MovementDraft,
@@ -159,6 +160,8 @@ class AssignmentHudPanelView:
     chain_breadcrumbs_visible: bool
     chain_lines: tuple[str, ...]
     preference_source_label: str | None
+    decline_available: bool = False
+    editable: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -518,6 +521,7 @@ def build_assignment_hud_panel(
     preference_source_label: str,
     event_log_lines: tuple[str, ...] = (),
     placement_draft: PlacementDraft | None = None,
+    assignment_workspace: AssignmentWorkspace | None = None,
 ) -> AssignmentHudPanelView | None:
     """Build the generic request-scoped assignment HUD without adding rules semantics."""
 
@@ -536,6 +540,15 @@ def build_assignment_hud_panel(
     if placement_draft is not None:
         return _placement_assignment_hud_panel(
             placement_draft=placement_draft,
+            pending_decision=pending_decision,
+            diagnostic_lines=diagnostic_lines,
+            preferences=preferences,
+            preference_source_label=preference_source_label,
+            chain_lines=_chain_lines(preferences, event_log_lines),
+        )
+    if assignment_workspace is not None:
+        return _generic_assignment_hud_panel(
+            assignment_workspace=assignment_workspace,
             pending_decision=pending_decision,
             diagnostic_lines=diagnostic_lines,
             preferences=preferences,
@@ -646,6 +659,66 @@ def _placement_assignment_hud_panel(
         chain_breadcrumbs_visible=preferences.hud.show_chain_breadcrumbs,
         chain_lines=chain_lines,
         preference_source_label=preference_source_label,
+    )
+
+
+def _generic_assignment_hud_panel(
+    *,
+    assignment_workspace: AssignmentWorkspace,
+    pending_decision: UiDecision | None,
+    diagnostic_lines: tuple[str, ...],
+    preferences: UiPreferences,
+    preference_source_label: str | None,
+    chain_lines: tuple[str, ...],
+) -> AssignmentHudPanelView:
+    combined_diagnostics = _append_unique_lines(
+        diagnostic_lines,
+        assignment_workspace.diagnostic_lines,
+    )
+    return AssignmentHudPanelView(
+        request_id=assignment_workspace.request_id,
+        decision_type=None if pending_decision is None else pending_decision.decision_type,
+        actor_id=assignment_workspace.actor_id,
+        operation_kind=assignment_workspace.proposal_kind,
+        proposal_kind=assignment_workspace.proposal_kind,
+        active_layer="assignment",
+        active_selection_ref_keys=assignment_workspace.assigned_ref_keys,
+        assigned_ref_keys=assignment_workspace.assigned_ref_keys,
+        unassigned_ref_keys=(),
+        readiness_state=_assignment_workspace_readiness_state(
+            assignment_workspace,
+            combined_diagnostics,
+        ),
+        groups=tuple(
+            AssignmentHudGroupView(
+                group_id=row.row_id,
+                label=row.label,
+                state="assigned" if assignment_workspace.is_ready else "warning",
+                source_ref_keys=row.source_ref_keys,
+                target_ref_keys=row.target_ref_keys,
+                summary_lines=row.summary_lines,
+            )
+            for row in assignment_workspace.rows
+        )
+        or (
+            AssignmentHudGroupView(
+                group_id=f"assignment:{assignment_workspace.request_id}",
+                label=_assignment_empty_label(assignment_workspace),
+                state="warning",
+                source_ref_keys=(),
+                target_ref_keys=(),
+                summary_lines=assignment_workspace.local_hint_lines[:2],
+            ),
+        ),
+        advisory_lines=assignment_workspace.local_hint_lines,
+        diagnostic_lines=combined_diagnostics,
+        display_mode=preferences.hud.assignment_hud_mode,
+        warning_markers_visible=preferences.hud.show_assignment_warning_markers,
+        chain_breadcrumbs_visible=preferences.hud.show_chain_breadcrumbs,
+        chain_lines=chain_lines,
+        preference_source_label=preference_source_label,
+        decline_available=assignment_workspace.declinable,
+        editable=assignment_workspace.editable,
     )
 
 
@@ -1112,6 +1185,33 @@ def _append_unique_line(lines: tuple[str, ...], line: str) -> tuple[str, ...]:
     if line in lines:
         return lines
     return (*lines, line)
+
+
+def _append_unique_lines(
+    lines: tuple[str, ...],
+    extra_lines: tuple[str, ...],
+) -> tuple[str, ...]:
+    result = lines
+    for line in extra_lines:
+        result = _append_unique_line(result, line)
+    return result
+
+
+def _assignment_workspace_readiness_state(
+    assignment_workspace: AssignmentWorkspace,
+    diagnostic_lines: tuple[str, ...],
+) -> AssignmentReadinessState:
+    if diagnostic_lines:
+        return "invalid"
+    if assignment_workspace.is_ready:
+        return "ready"
+    if assignment_workspace.rows:
+        return "incomplete"
+    return "empty"
+
+
+def _assignment_empty_label(assignment_workspace: AssignmentWorkspace) -> str:
+    return f"{assignment_workspace.proposal_kind.replace('_', ' ').title()} needs input"
 
 
 def _is_fight_order_decision(pending_decision: UiDecision | None) -> bool:
