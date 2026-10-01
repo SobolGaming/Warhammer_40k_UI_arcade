@@ -6,6 +6,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -32,6 +33,9 @@ def fixture_checkout(tmp_path: Path) -> tuple[Path, str]:
     example = core / "contracts/examples/projections/view.json"
     example.parent.mkdir(parents=True)
     example.write_text("{}\n", encoding="utf-8")
+    schema = core / "contracts/schemas/game-view.schema.json"
+    schema.parent.mkdir(parents=True)
+    schema.write_text("{}\n", encoding="utf-8")
     _write_manifest(core)
     return core, _commit(core)
 
@@ -112,6 +116,99 @@ def test_dirty_contract_files_cannot_masquerade_as_pinned_examples(
         verified_core_examples_root(core, expected_revision=revision)
 
 
+def test_assume_unchanged_cannot_hide_an_edited_example(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, revision = fixture_checkout
+    _git(core, "update-index", "--assume-unchanged", "contracts/examples/projections/view.json")
+    (core / "contracts/examples/projections/view.json").write_text('{"tampered": true}\n')
+    assert _git(core, "status", "--porcelain", "--untracked-files=all", "--", "contracts") == ""
+
+    with pytest.raises(CoreContractFixtureError, match="manifest hash mismatch"):
+        required_core_example_path(
+            "projections", "view.json", checkout=core, expected_revision=revision
+        )
+
+
+def test_assume_unchanged_cannot_hide_an_edited_manifest(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, revision = fixture_checkout
+    _git(core, "update-index", "--assume-unchanged", "contracts/manifest.json")
+    manifest = _manifest(core)
+    manifest["contract_version"] = "42.0.0"
+    _save_manifest(core, manifest)
+    assert _git(core, "status", "--porcelain", "--untracked-files=all", "--", "contracts") == ""
+
+    with pytest.raises(CoreContractFixtureError, match="manifest differs from pinned Git tree"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
+def test_committed_incorrect_example_hash_is_rejected(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, _ = fixture_checkout
+    manifest = _manifest(core)
+    cast(dict[str, str], manifest["file_sha256"])["examples/projections/view.json"] = "0" * 64
+    _save_manifest(core, manifest)
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match="manifest hash mismatch"):
+        required_core_example_path(
+            "projections", "view.json", checkout=core, expected_revision=revision
+        )
+
+
+def test_unresolved_schema_reference_is_rejected(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, _ = fixture_checkout
+    manifest = _manifest(core)
+    cast(dict[str, str], manifest["example_schema_by_path"])["examples/projections/view.json"] = (
+        "missing.json"
+    )
+    _save_manifest(core, manifest)
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match="unresolved example schema"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
+def test_committed_missing_schema_file_is_rejected(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, _ = fixture_checkout
+    (core / "contracts/schemas/game-view.schema.json").unlink()
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match="missing schema file"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
+def test_committed_incorrect_schema_hash_is_rejected(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, _ = fixture_checkout
+    manifest = _manifest(core)
+    cast(dict[str, str], manifest["file_sha256"])["schemas/game-view.schema.json"] = "0" * 64
+    _save_manifest(core, manifest)
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match="schema manifest hash mismatch"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
+def test_tracked_but_unlisted_glob_match_is_rejected(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, _ = fixture_checkout
+    (core / "contracts/examples/projections/unlisted.json").write_text("{}\n")
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match="not manifest-listed"):
+        required_core_example_paths("projections/*.json", checkout=core, expected_revision=revision)
+
+
 def test_missing_examples_directory_fails_clearly(fixture_checkout: tuple[Path, str]) -> None:
     core, _ = fixture_checkout
     (core / "contracts/examples/projections/view.json").unlink()
@@ -140,10 +237,14 @@ def _write_manifest(
     core: Path, *, contract_version: str = SUPPORTED_EXTERNAL_CONTRACT_VERSION
 ) -> None:
     content = (core / "contracts/examples/projections/view.json").read_bytes()
+    schema_content = (core / "contracts/schemas/game-view.schema.json").read_bytes()
     relative_path = "examples/projections/view.json"
     manifest = {
         "contract_version": contract_version,
-        "file_sha256": {relative_path: hashlib.sha256(content).hexdigest()},
+        "file_sha256": {
+            relative_path: hashlib.sha256(content).hexdigest(),
+            "schemas/game-view.schema.json": hashlib.sha256(schema_content).hexdigest(),
+        },
         "example_schema_by_path": {relative_path: "game-view.schema.json"},
         "schema_ids": {"game-view.schema.json": "https://example.invalid/game-view.schema.json"},
         "interaction_conformance_case_count": 1,
@@ -154,6 +255,17 @@ def _write_manifest(
         "proposal_kind_count": 1,
         "registered_decision_type_count": 1,
     }
+    (core / "contracts/manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def _manifest(core: Path) -> dict[str, object]:
+    return cast(
+        dict[str, object],
+        json.loads((core / "contracts/manifest.json").read_text(encoding="utf-8")),
+    )
+
+
+def _save_manifest(core: Path, manifest: dict[str, object]) -> None:
     (core / "contracts/manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 

@@ -13,6 +13,7 @@ from tests.support.core_contract_examples import (
     CoreContractFixtureError,
     required_core_example_path,
     required_core_example_paths,
+    verified_core_example_file,
     verified_core_examples_root,
 )
 from warhammer40k_arcade_ui.core_client.compatibility import (
@@ -255,8 +256,10 @@ def test_annotated_decision_rejects_an_old_schema_discriminator() -> None:
 
 
 def _json_object(path: Path) -> JsonObject:
-    if not path.is_file():
-        raise CoreContractFixtureError(f"Required core contract example is missing: {path}.")
+    if path == _CORE_EXAMPLES.parent / "manifest.json":
+        verified_core_examples_root()
+    else:
+        verified_core_example_file(path)
     value = json.loads(path.read_text(encoding="utf-8"))
     assert type(value) is dict
     return cast(JsonObject, value)

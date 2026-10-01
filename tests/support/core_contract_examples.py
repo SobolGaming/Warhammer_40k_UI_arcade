@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -64,7 +65,12 @@ def verified_core_examples_root(
     if not manifest_path.is_file():
         raise CoreContractFixtureError(f"Core fixture manifest is missing: {manifest_path}.")
     try:
-        manifest: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_bytes = manifest_path.read_bytes()
+        if manifest_bytes != _git_blob(core, "contracts/manifest.json"):
+            raise CoreContractFixtureError(
+                f"Core fixture manifest differs from pinned Git tree: {manifest_path}."
+            )
+        manifest: object = json.loads(manifest_bytes)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise CoreContractFixtureError(
             f"Core fixture manifest is unreadable or malformed: {manifest_path}: {exc}"
@@ -89,6 +95,43 @@ def verified_core_examples_root(
         raise CoreContractFixtureError(
             f"Core fixture manifest has malformed file or schema inventories: {manifest_path}."
         )
+    hash_map = cast(dict[str, str], hashes)
+    schema_map = cast(dict[str, str], schemas)
+    schema_id_map = cast(dict[str, str], schema_ids)
+    for example_path, schema_name in schema_map.items():
+        if example_path not in hash_map or not example_path.startswith("examples/"):
+            raise CoreContractFixtureError(
+                f"Core fixture manifest example lacks a declared hash: {example_path}."
+            )
+        if schema_name not in schema_id_map or f"schemas/{schema_name}" not in hash_map:
+            raise CoreContractFixtureError(
+                f"Core fixture manifest has unresolved example schema {schema_name!r} "
+                f"for {example_path}."
+            )
+    for schema_name, schema_uri in schema_id_map.items():
+        if (
+            "/" in schema_name
+            or schema_name in {".", ".."}
+            or not schema_uri.endswith(f"/{schema_name}")
+            or f"schemas/{schema_name}" not in hash_map
+        ):
+            raise CoreContractFixtureError(
+                f"Core fixture manifest has invalid schema reference {schema_name!r}."
+            )
+        schema_path = core / "contracts/schemas" / schema_name
+        if not schema_path.is_file():
+            raise CoreContractFixtureError(
+                f"Core fixture manifest references a missing schema file: {schema_path}."
+            )
+        schema_bytes = schema_path.read_bytes()
+        if hashlib.sha256(schema_bytes).hexdigest() != hash_map[f"schemas/{schema_name}"]:
+            raise CoreContractFixtureError(
+                f"Core fixture schema manifest hash mismatch: {schema_path}."
+            )
+        if schema_bytes != _git_blob(core, f"contracts/schemas/{schema_name}"):
+            raise CoreContractFixtureError(
+                f"Core fixture schema differs from pinned Git tree: {schema_path}."
+            )
     count_keys = (
         "interaction_conformance_case_count",
         "interaction_kind_count",
@@ -117,9 +160,7 @@ def required_core_example_path(
 
     root = verified_core_examples_root(checkout, expected_revision=expected_revision)
     path = root.joinpath(*parts)
-    if not path.is_file():
-        raise CoreContractFixtureError(f"Required core contract example is missing: {path}.")
-    return path
+    return _verified_example_file(path, root)
 
 
 def required_core_example_paths(
@@ -136,7 +177,43 @@ def required_core_example_paths(
         raise CoreContractFixtureError(
             f"Core contract example pattern {pattern!r} has no complete files under {root}."
         )
-    return paths
+    return tuple(_verified_example_file(path, root) for path in paths)
+
+
+def verified_core_example_file(path: Path) -> Path:
+    """Check a previously collected example immediately before reading its bytes."""
+
+    return _verified_example_file(path, verified_core_examples_root())
+
+
+def _verified_example_file(path: Path, root: Path) -> Path:
+    if not path.is_file():
+        raise CoreContractFixtureError(f"Required core contract example is missing: {path}.")
+    try:
+        relative = path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError as exc:
+        raise CoreContractFixtureError(
+            f"Core contract example lies outside {root}: {path}."
+        ) from exc
+    contract_path = f"examples/{relative}"
+    manifest = cast(
+        dict[str, object],
+        json.loads((root.parent / "manifest.json").read_bytes()),
+    )
+    hashes = cast(dict[str, str], manifest["file_sha256"])
+    schemas = cast(dict[str, str], manifest["example_schema_by_path"])
+    if contract_path not in hashes or contract_path not in schemas:
+        raise CoreContractFixtureError(
+            f"Core contract example is not manifest-listed with schema and hash: {path}."
+        )
+    actual = path.read_bytes()
+    if hashlib.sha256(actual).hexdigest() != hashes[contract_path]:
+        raise CoreContractFixtureError(f"Core contract example manifest hash mismatch: {path}.")
+    if actual != _git_blob(root.parent.parent, f"contracts/{contract_path}"):
+        raise CoreContractFixtureError(
+            f"Core contract example differs from pinned Git tree: {path}."
+        )
+    return path
 
 
 def _git_output(core: Path, *args: str) -> str:
@@ -155,6 +232,25 @@ def _git_output(core: Path, *args: str) -> str:
         detail = result.stderr.strip() or result.stdout.strip() or "unknown Git error"
         raise CoreContractFixtureError(f"Cannot inspect core fixture checkout {core}: {detail}")
     return result.stdout.strip()
+
+
+def _git_blob(core: Path, path: str) -> bytes:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(core), "show", f"HEAD:{path}"],
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise CoreContractFixtureError(
+            f"Cannot read pinned core fixture {path} at {core}: {exc}"
+        ) from exc
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise CoreContractFixtureError(
+            f"Core fixture file is not tracked by pinned Git tree: {path}: {detail}"
+        )
+    return result.stdout
 
 
 def _is_positive_int(value: object) -> bool:

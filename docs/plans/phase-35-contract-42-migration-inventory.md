@@ -57,7 +57,7 @@ engine-owned rule; it does not waive the listed conformance or integration check
 | `14-to-15.md` | Mandatory/optional sequencing is engine ordered; selected actor can differ from turn owner. | `state/finite_decision.py`, `core_client/local_session_client.py`: submit emitted option IDs and use request actor for viewer/status. | No UI rule-order table. |
 | `15-to-16.md` | Nested hit rolls carry `critical_threshold` and `threshold_source_ids`; raw six alone does not define critical. | `hud/dice_tray.py` and viewer event surfaces: preserve/display engine evidence in conformance tests. | No UI critical-hit calculation. |
 | `16-to-17.md` | Phase-end Overwatch window no longer names a moved enemy; it may be declined. | `state/assignment_workspace.py` Stratagem context and finite route: test source context/decline without moved-unit key. | No new editor family; no inferred trigger target. |
-| `17-to-18.md` | Finite `select_charge_targets` commits a subset; modified roll and separate movement budget can exceed 12. | `state/movement_draft.py`: use `context.target_selection.target_ids`, preserve budget/witness, reject reachable-but-uncommitted targets. | Movement editor and finite-routing change. |
+| `17-to-18.md` | Finite `select_charge_targets` commits a subset. The modified Charge roll is bounded to 1–12; subsequent distance effects produce a separate nonnegative `movement_budget.maximum_distance_inches` that may exceed 12 or be fractional. Target eligibility requires both that maximum and the distinct 12-inch Charge target limit. | `state/movement_draft.py`: use `context.target_selection.target_ids`, preserve the engine budget and witness, and test the bounded roll, different movement maximum, 12-inch target gate, and rejection of reachable-but-uncommitted targets. | Movement editor and finite-routing change; never use the roll as the full path budget or widen target eligibility with later distance effects. |
 | `18-to-19.md` | Charge uses canonical Attached Unit actor and living models from every component; endpoint witness is engine-authored. | `state/movement_draft.py`: exercise attached paths through real session; preserve component membership and witness. | No component alias or endpoint inference. |
 | `19-to-20.md` | Eligible whole-Charge reroll happens before target selection. | `state/finite_decision.py`: route current reroll option; test continuation to target selection. | No reroll calculation or new UI proposal. |
 | `20-to-21.md` | Heroic Intervention shares Charge options, targets, and witnessed movement; source roll cap may be six. | `state/movement_draft.py`: consume published movement budget and Charge target commitment in that context. | Shared editor path; no Heroic-only rules. |
@@ -84,6 +84,19 @@ engine-owned rule; it does not waive the listed conformance or integration check
 | `41-to-42.md` | Ranged `declarations` may be empty; selected physical weapons may have `target_unit_instance_id: null`; targetless candidates and optional `weapons_without_attacks` appear. | `state/assignment_workspace.py`: preserve empty versus omitted inventories, instance IDs, ability choices and null target; test real accepted/invalid submissions. | Editor change; zero attacks is a valid core result. |
 
 ## Cross-cutting checks for the atomic pin milestone
+
+Order 24 in `docs/ADAPTER_DECISION_CONTRACT.md` adds source-authorized splitting under
+Contract 11.3, between the numbered major migration files. The finite
+`select_unit_split_membership` choices install two successors. Their visible model rows in
+`battlefield_view.authoritative.models_by_id` carry the **current** `unit_instance_id` and an
+optional closed `split_origin` proof (`source_unit_instance_id`, `split_id`,
+`successor_index`). `core_client/protocol.py` must preserve that projection;
+`render/core_projection.py` and its view models must make current ownership/proof available to
+`state/placement_draft.py`, whose model-placement serializer must copy both exact values.
+Immutable model-ID prefixes cannot establish successor ownership. M2 must split a real unit,
+submit a successor placement through the public session facade, verify the accepted placement,
+verify typed invalid diagnostics for missing or drifted origin/owner proof, and alternate player
+views to ensure the private partition and successor rows remain viewer-scoped.
 
 The adapter contract's Formal Session Transport section binds persistence, replay, and cached
 requests to the exact engine build; no Contract 10 save or request is reinterpreted under 42.
