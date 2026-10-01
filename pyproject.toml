@@ -73,11 +73,13 @@ venvPath = "."
 addopts = "-ra --strict-markers --strict-config"
 testpaths = ["tests"]
 markers = [
+  "integration: slow real-core checkpoint traversals run after the fast CI suite",
   "smoke: bootstrap smoke tests",
 ]
 
 [tool.coverage.run]
 branch = true
+relative_files = true
 source = ["warhammer40k_arcade_ui"]
 
 [tool.coverage.report]
