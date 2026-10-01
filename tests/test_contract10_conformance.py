@@ -9,6 +9,12 @@ from typing import cast
 
 import pytest
 
+from tests.support.core_contract_examples import (
+    CoreContractFixtureError,
+    required_core_example_path,
+    required_core_example_paths,
+    verified_core_examples_root,
+)
 from warhammer40k_arcade_ui.core_client.compatibility import (
     ANNOTATED_DECISION_REQUEST_SCHEMA_VERSION,
     SUPPORTED_EXTERNAL_CONTRACT_VERSION,
@@ -30,7 +36,14 @@ from warhammer40k_arcade_ui.state.interaction_dispatch import (
     interaction_route_for_decision,
 )
 
-_CORE_EXAMPLES = Path(__file__).resolve().parents[2] / "Warhammer_40k_AI/contracts/examples"
+_CORE_EXAMPLES = verified_core_examples_root()
+_PROJECTION_EXAMPLES = tuple(
+    path
+    for path in required_core_example_paths("projections/*.json")
+    if path.name != "rules_catalog_view.json"
+)
+if not _PROJECTION_EXAMPLES:
+    raise CoreContractFixtureError("No game-view projection examples remain after filtering.")
 _INTERACTION_KINDS = {
     "battlefield_point_placement",
     "confirmation",
@@ -57,11 +70,7 @@ def test_supported_core_contract_declarations_match_installed_package() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    sorted(
-        path
-        for path in (_CORE_EXAMPLES / "projections").glob("*.json")
-        if path.name != "rules_catalog_view.json"
-    ),
+    _PROJECTION_EXAMPLES,
     ids=lambda path: cast(Path, path).name,
 )
 def test_current_game_view_examples_parse_strictly(path: Path) -> None:
@@ -74,7 +83,7 @@ def test_current_game_view_examples_parse_strictly(path: Path) -> None:
 
 def test_current_post_deployment_battlefield_projection_renders_canonically() -> None:
     game_view = UiGameView.from_payload(
-        _json_object(_CORE_EXAMPLES / "projections/post_deployment_view.json")
+        _json_object(required_core_example_path("projections", "post_deployment_view.json"))
     )
 
     battlefield = battlefield_view_from_game_view(game_view)
@@ -98,7 +107,7 @@ def test_current_post_deployment_battlefield_projection_renders_canonically() ->
 
 def test_current_rules_catalog_example_parses_strictly() -> None:
     catalog = UiRulesCatalogView.from_payload(
-        _json_object(_CORE_EXAMPLES / "projections/rules_catalog_view.json")
+        _json_object(required_core_example_path("projections", "rules_catalog_view.json"))
     )
 
     assert catalog.catalog_id
@@ -108,7 +117,7 @@ def test_current_rules_catalog_example_parses_strictly() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    sorted(_CORE_EXAMPLES.glob("support-profile*.json")),
+    required_core_example_paths("support-profile*.json"),
     ids=lambda path: cast(Path, path).name,
 )
 def test_current_support_profile_examples_parse_strictly(path: Path) -> None:
@@ -120,7 +129,7 @@ def test_current_support_profile_examples_parse_strictly(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    sorted((_CORE_EXAMPLES / "statuses").glob("*.json")),
+    required_core_example_paths("statuses/*.json"),
     ids=lambda path: cast(Path, path).name,
 )
 def test_current_lifecycle_status_examples_parse_strictly(path: Path) -> None:
@@ -132,7 +141,7 @@ def test_current_lifecycle_status_examples_parse_strictly(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    sorted((_CORE_EXAMPLES / "events").glob("*.json")),
+    required_core_example_paths("events/*.json"),
     ids=lambda path: cast(Path, path).name,
 )
 def test_current_network_event_examples_parse_strictly(path: Path) -> None:
@@ -145,8 +154,8 @@ def test_current_network_event_examples_parse_strictly(path: Path) -> None:
 @pytest.mark.parametrize(
     "path",
     [
-        *sorted((_CORE_EXAMPLES / "decisions/families").glob("*.json")),
-        _CORE_EXAMPLES / "decisions/pending_movement_request.json",
+        *required_core_example_paths("decisions/families/*.json"),
+        required_core_example_path("decisions", "pending_movement_request.json"),
     ],
     ids=lambda path: cast(Path, path).name,
 )
@@ -246,6 +255,8 @@ def test_annotated_decision_rejects_an_old_schema_discriminator() -> None:
 
 
 def _json_object(path: Path) -> JsonObject:
+    if not path.is_file():
+        raise CoreContractFixtureError(f"Required core contract example is missing: {path}.")
     value = json.loads(path.read_text(encoding="utf-8"))
     assert type(value) is dict
     return cast(JsonObject, value)

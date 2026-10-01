@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from pathlib import Path
 from typing import cast
 
 from tests.support.contract_fixtures import decision_from_fixture
+from tests.support.core_contract_examples import required_core_example_path
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonValue,
     UiDecision,
@@ -141,10 +141,7 @@ def test_ergonomic_hud_view_honors_phase_and_event_visibility_preferences() -> N
 
 
 def test_ergonomic_hud_retains_current_public_mission_and_resource_projection() -> None:
-    contract_example = (
-        Path(__file__).resolve().parents[2]
-        / "Warhammer_40k_AI/contracts/examples/projections/post_deployment_view.json"
-    )
+    contract_example = required_core_example_path("projections", "post_deployment_view.json")
     payload: JsonValue = json.loads(contract_example.read_text(encoding="utf-8"))
     game_view = UiGameView.from_payload(payload)
     view = battlefield_view_from_game_view(game_view)

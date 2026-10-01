@@ -1,0 +1,173 @@
+"""Regressions for sibling contract-example provenance checks."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from tests.support.core_contract_examples import (
+    CoreContractFixtureError,
+    required_core_example_path,
+    required_core_example_paths,
+    verified_core_examples_root,
+)
+from warhammer40k_arcade_ui.core_client.compatibility import (
+    SUPPORTED_EXTERNAL_CONTRACT_VERSION,
+)
+
+
+@pytest.fixture
+def fixture_checkout(tmp_path: Path) -> tuple[Path, str]:
+    """Build a tiny separate Git checkout whose contract files have known provenance."""
+
+    core = tmp_path / "Warhammer_40k_AI"
+    core.mkdir()
+    _git(core, "init", "--quiet")
+    _git(core, "config", "user.name", "Contract Fixture Test")
+    _git(core, "config", "user.email", "fixture@example.invalid")
+    example = core / "contracts/examples/projections/view.json"
+    example.parent.mkdir(parents=True)
+    example.write_text("{}\n", encoding="utf-8")
+    _write_manifest(core)
+    return core, _commit(core)
+
+
+def test_matching_checkout_is_accepted(fixture_checkout: tuple[Path, str]) -> None:
+    core, revision = fixture_checkout
+
+    assert verified_core_examples_root(core, expected_revision=revision) == (
+        core / "contracts/examples"
+    )
+    assert required_core_example_path(
+        "projections", "view.json", checkout=core, expected_revision=revision
+    ) == (core / "contracts/examples/projections/view.json")
+
+
+def test_wrong_revision_fails_before_examples_are_read(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, revision = fixture_checkout
+
+    with pytest.raises(CoreContractFixtureError, match="revision mismatch") as error:
+        verified_core_examples_root(core, expected_revision="0" * 40)
+
+    assert revision in str(error.value)
+    assert "0" * 40 in str(error.value)
+
+
+def test_missing_checkout_fails_clearly(tmp_path: Path) -> None:
+    with pytest.raises(CoreContractFixtureError, match="checkout is missing"):
+        verified_core_examples_root(tmp_path / "missing")
+
+
+def test_non_git_directory_fails_clearly(tmp_path: Path) -> None:
+    core = tmp_path / "Warhammer_40k_AI"
+    core.mkdir()
+
+    with pytest.raises(CoreContractFixtureError, match="Cannot inspect core fixture checkout"):
+        verified_core_examples_root(core)
+
+
+def test_wrong_manifest_version_fails_clearly(fixture_checkout: tuple[Path, str]) -> None:
+    core, _ = fixture_checkout
+    _write_manifest(core, contract_version="42.0.0")
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match="contract_version mismatch"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
+@pytest.mark.parametrize("manifest_text", ["{", '{"contract_version": "10.2.0"}'])
+def test_malformed_manifest_fails_clearly(
+    fixture_checkout: tuple[Path, str], manifest_text: str
+) -> None:
+    core, _ = fixture_checkout
+    (core / "contracts/manifest.json").write_text(manifest_text, encoding="utf-8")
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match=r"manifest .*malformed"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
+def test_missing_manifest_fails_clearly(fixture_checkout: tuple[Path, str]) -> None:
+    core, _ = fixture_checkout
+    (core / "contracts/manifest.json").unlink()
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match="manifest is missing"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
+def test_dirty_contract_files_cannot_masquerade_as_pinned_examples(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, revision = fixture_checkout
+    (core / "contracts/examples/projections/view.json").write_text('{"changed": true}\n')
+
+    with pytest.raises(CoreContractFixtureError, match="modified or untracked contracts"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
+def test_missing_examples_directory_fails_clearly(fixture_checkout: tuple[Path, str]) -> None:
+    core, _ = fixture_checkout
+    (core / "contracts/examples/projections/view.json").unlink()
+    (core / "contracts/examples/projections").rmdir()
+    (core / "contracts/examples").rmdir()
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match="examples directory is missing"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
+def test_missing_example_and_empty_family_fail_instead_of_collecting_zero_tests(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, revision = fixture_checkout
+
+    with pytest.raises(CoreContractFixtureError, match="example is missing"):
+        required_core_example_path(
+            "projections", "missing.json", checkout=core, expected_revision=revision
+        )
+    with pytest.raises(CoreContractFixtureError, match="has no complete files"):
+        required_core_example_paths("statuses/*.json", checkout=core, expected_revision=revision)
+
+
+def _write_manifest(
+    core: Path, *, contract_version: str = SUPPORTED_EXTERNAL_CONTRACT_VERSION
+) -> None:
+    content = (core / "contracts/examples/projections/view.json").read_bytes()
+    relative_path = "examples/projections/view.json"
+    manifest = {
+        "contract_version": contract_version,
+        "file_sha256": {relative_path: hashlib.sha256(content).hexdigest()},
+        "example_schema_by_path": {relative_path: "game-view.schema.json"},
+        "schema_ids": {"game-view.schema.json": "https://example.invalid/game-view.schema.json"},
+        "interaction_conformance_case_count": 1,
+        "interaction_kind_count": 1,
+        "known_external_decision_token_count": 1,
+        "live_decision_scenario_count": 1,
+        "parameterized_payload_kind_count": 1,
+        "proposal_kind_count": 1,
+        "registered_decision_type_count": 1,
+    }
+    (core / "contracts/manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def _commit(core: Path) -> str:
+    _git(core, "add", "contracts")
+    _git(core, "commit", "--quiet", "-m", "fixture")
+    return _git(core, "rev-parse", "HEAD")
+
+
+def _git(core: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(core), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()

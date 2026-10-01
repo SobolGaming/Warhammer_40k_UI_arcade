@@ -57,6 +57,20 @@ Use this when changing code in this repository. The package dependency resolves 
 repository, not a local editable path. The sibling core checkout is still used by mypy and pyright
 until the core package publishes a `py.typed` marker.
 
+Tests that read the sibling core's contract examples also require that checkout to be at the exact
+supported revision shown above, with an unmodified `contracts/` tree. The locked package install
+does not move a separate sibling checkout. Check its revision before running those tests; if it
+differs, align the checkout to the supported commit while it is clean:
+
+```bash
+git -C ../Warhammer_40k_AI rev-parse HEAD
+git -C ../Warhammer_40k_AI checkout --detach dbfcc3a99e9d560d1354506352a09d48ca555a94
+```
+
+The conformance and HUD example tests fail at collection or before reading an example when the
+checkout, manifest version, or required examples do not match the declared core contract. CI
+checks out the same supported revision explicitly.
+
 ```bash
 git clone https://github.com/SobolGaming/Warhammer_40k_AI.git
 git clone https://github.com/SobolGaming/Warhammer_40k_UI_arcade.git
