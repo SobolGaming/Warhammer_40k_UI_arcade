@@ -35,7 +35,9 @@ that mixed-version test run as a new-core regression.
 The migration review must cover `Warhammer_40k_AI/contracts/migrations/10-to-11.md` through
 `41-to-42.md`, the current `contracts/manifest.json`, interaction conformance cases, and
 `docs/ADAPTER_DECISION_CONTRACT.md`. The table highlights verified UI risks; it is not a substitute
-for that complete contract inventory.
+for that complete contract inventory. The [migration inventory](phase-35-contract-42-migration-inventory.md)
+records every reviewed migration at the exact target revision and maps it to UI consumers and
+Contract 42 checks. It is preparatory evidence; the supported runtime pin remains Contract 10.2.
 
 ## Live smoke and catalog decision
 
