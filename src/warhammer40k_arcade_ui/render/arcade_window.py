@@ -88,9 +88,11 @@ from warhammer40k_arcade_ui.state.assignment_submission import (
     submit_assignment_workspace,
 )
 from warhammer40k_arcade_ui.state.assignment_workspace import (
+    SHOOTING_DECLARATION_PROPOSAL_KIND,
     AssignmentWorkspace,
     AssignmentWorkspaceError,
     AssignmentWorkspaceRow,
+    ShootingAssignmentSelection,
 )
 from warhammer40k_arcade_ui.state.entity_selection import entity_ref_for_model
 from warhammer40k_arcade_ui.state.finite_decision import (
@@ -268,6 +270,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._placement_draft: PlacementDraft | None = None
         self._assignment_workspace: AssignmentWorkspace | None = None
         self._selected_assignment_group_id: str | None = None
+        self._assignment_choice_index = 0
         self._placement_history: tuple[PlacementDraft, ...] = ()
         self._action_summary_intensity: ActionSummaryIntensity = (
             self._preferences.hud.action_summary_default
@@ -511,6 +514,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             event_log_lines=self._finite_state.event_log_lines,
             placement_draft=self._placement_draft,
             assignment_workspace=self._assignment_workspace,
+            assignment_choice_index=self._assignment_choice_index,
         )
         action_summary = build_action_visual_summary(
             movement_draft=self._movement_draft,
@@ -1100,7 +1104,10 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._submit_assignment_workspace(decline=True)
             return
         if hit_region.action_kind == "assignment_clear":
-            self._cancel_assignment_workspace()
+            self._clear_assignment_workspace()
+            return
+        if hit_region.action_kind == "assignment_next_choice":
+            self._cycle_assignment_choice()
             return
         if hit_region.action_kind == "assignment_select" and hit_region.option_id is not None:
             self._select_assignment_group_from_hud(
@@ -1216,6 +1223,12 @@ class ArcadeWarhammerWindow(arcade.Window):
         target_unit_id: str | None,
     ) -> None:
         workspace = self._assignment_workspace
+        if workspace is not None and workspace.proposal_kind == SHOOTING_DECLARATION_PROPOSAL_KIND:
+            self._toggle_shooting_choice(group_id)
+            return
+        if workspace is not None and workspace.stratagem_mode_choices:
+            self._choose_stratagem_mode(group_id)
+            return
         group = self._assignment_workspace_row(group_id)
         if workspace is None or group is None:
             self._set_finite_state(
@@ -1245,6 +1258,109 @@ class ArcadeWarhammerWindow(arcade.Window):
                 "group_id": group_id,
                 "target_unit_id": resolved_target_unit_id,
             },
+        )
+
+    def _choose_stratagem_mode(self, group_id: str) -> None:
+        workspace = self._assignment_workspace
+        decision = self._pending_decision
+        if workspace is None or decision is None:
+            return
+        mode = next(
+            (
+                candidate
+                for candidate in workspace.stratagem_mode_choices
+                if group_id == f"stratagem-mode:{workspace.request_id}:{candidate}"
+            ),
+            None,
+        )
+        if mode is None:
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="unknown_stratagem_mode",
+                    message="Stratagem mode is not offered by the current source.",
+                    field="effect_selection.mode",
+                )
+            )
+            return
+        target = selected_unit(self._battlefield_view, self._selection_state)
+        if target is None or target.player_id != workspace.actor_id:
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="stratagem_target_required",
+                    message="Select a projected friendly unit before choosing a Stratagem mode.",
+                    field="target_binding.target_unit_instance_id",
+                )
+            )
+            return
+        try:
+            self._assignment_workspace = workspace.with_stratagem_intent(
+                decision,
+                target_unit_id=target.unit_id,
+                source_mode=mode,
+            )
+        except AssignmentWorkspaceError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        self._selected_assignment_group_id = group_id
+        self._trace_assignment_workspace_event(
+            "ui.assignment_stratagem_mode_selected",
+            extra_summary={"mode": mode, "target_unit_id": target.unit_id},
+        )
+
+    def _toggle_shooting_choice(self, choice_id: str) -> None:
+        workspace = self._assignment_workspace
+        decision = self._pending_decision
+        if workspace is None or decision is None:
+            return
+        choice = next(
+            (choice for choice in workspace.shooting_choices if choice.choice_id == choice_id),
+            None,
+        )
+        if choice is None:
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="unknown_shooting_choice",
+                    message="Shooting choice is no longer in the current request.",
+                    field="shooting_choice",
+                )
+            )
+            return
+        selected = choice.selection
+        if selected in workspace.shooting_selections:
+            selections = tuple(
+                current for current in workspace.shooting_selections if current != selected
+            )
+        else:
+            selections = (
+                *(
+                    current
+                    for current in workspace.shooting_selections
+                    if not _same_shooting_physical_source(current, selected)
+                ),
+                selected,
+            )
+        try:
+            self._assignment_workspace = workspace.with_shooting_selections(
+                decision,
+                selections,
+            )
+        except AssignmentWorkspaceError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        self._selected_assignment_group_id = choice_id
+        self._assignment_choice_index = workspace.shooting_choices.index(choice)
+        if selected.target_unit_instance_id is not None and _view_has_unit(
+            self._battlefield_view,
+            selected.target_unit_instance_id,
+        ):
+            self._selection_state = self._selection_state.select_model_id(
+                unit_id=selected.target_unit_instance_id,
+                model_id=None,
+                preferences=self._preferences,
+            )
+        self._trace_assignment_workspace_event(
+            "ui.assignment_shooting_choice_toggled",
+            extra_summary={"choice_id": choice_id, "selected": selected in selections},
         )
 
     def _assignment_workspace_row(self, group_id: str) -> AssignmentWorkspaceRow | None:
@@ -1575,6 +1691,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         if result.clear_assignment_workspace:
             self._assignment_workspace = None
             self._selected_assignment_group_id = None
+            self._assignment_choice_index = 0
         self._set_finite_state(result.finite_state)
         self._trace_event(
             category="ui",
@@ -1761,6 +1878,11 @@ class ArcadeWarhammerWindow(arcade.Window):
             selection=self._selection_state,
             pending_decision=self._pending_decision,
             model_display_by_id=self._known_model_display_by_id,
+            authoritative_models_by_id=(
+                None
+                if self._last_game_view is None or self._last_game_view.battlefield_view is None
+                else self._last_game_view.battlefield_view.models_by_id
+            ),
             projection_state_hash=self._current_projection_state_hash(),
         )
         if next_draft is not None:
@@ -1808,12 +1930,14 @@ class ArcadeWarhammerWindow(arcade.Window):
                 self._preferences
             )
             self._assignment_workspace = next_workspace
+            self._assignment_choice_index = 0
             self._sync_selected_assignment_group()
             self._trace_assignment_workspace_event("ui.assignment_workspace_started")
             return
         if current is not None:
             self._assignment_workspace = None
             self._selected_assignment_group_id = None
+            self._assignment_choice_index = 0
             self._trace_event(
                 category="ui",
                 event_name="ui.assignment_workspace_cleared",
@@ -1825,7 +1949,11 @@ class ArcadeWarhammerWindow(arcade.Window):
         if workspace is None:
             self._selected_assignment_group_id = None
             return
-        row_ids = tuple(row.row_id for row in workspace.rows)
+        row_ids = (
+            tuple(choice.choice_id for choice in workspace.shooting_choices)
+            if workspace.proposal_kind == SHOOTING_DECLARATION_PROPOSAL_KIND
+            else tuple(row.row_id for row in workspace.rows)
+        )
         if not row_ids:
             self._selected_assignment_group_id = None
             return
@@ -1866,11 +1994,48 @@ class ArcadeWarhammerWindow(arcade.Window):
             return
         self._assignment_workspace = None
         self._selected_assignment_group_id = None
+        self._assignment_choice_index = 0
         self._trace_event(
             category="ui",
             event_name="ui.assignment_workspace_cancelled",
             summary={"reason": "cancel_command"},
         )
+
+    def _clear_assignment_workspace(self) -> None:
+        workspace = self._assignment_workspace
+        decision = self._pending_decision
+        if workspace is not None and decision is not None and workspace.stratagem_mode_choices:
+            self._assignment_workspace = AssignmentWorkspace.start_for_pending(decision)
+            self._selected_assignment_group_id = None
+            self._trace_assignment_workspace_event("ui.assignment_stratagem_intent_cleared")
+            return
+        if (
+            workspace is None
+            or decision is None
+            or workspace.proposal_kind != SHOOTING_DECLARATION_PROPOSAL_KIND
+        ):
+            self._cancel_assignment_workspace()
+            return
+        try:
+            self._assignment_workspace = workspace.with_shooting_selections(decision, ())
+        except AssignmentWorkspaceError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        self._selected_assignment_group_id = None
+        self._trace_assignment_workspace_event("ui.assignment_shooting_cleared")
+
+    def _cycle_assignment_choice(self) -> None:
+        workspace = self._assignment_workspace
+        if workspace is None or workspace.proposal_kind != SHOOTING_DECLARATION_PROPOSAL_KIND:
+            return
+        choice_count = len(workspace.shooting_choices)
+        if choice_count < 2:
+            return
+        self._assignment_choice_index = (self._assignment_choice_index + 1) % choice_count
+        self._selected_assignment_group_id = workspace.shooting_choices[
+            self._assignment_choice_index
+        ].choice_id
+        self._trace_assignment_workspace_event("ui.assignment_choice_cycled")
 
     def _apply_movement_selection_at(
         self,
@@ -1959,18 +2124,28 @@ class ArcadeWarhammerWindow(arcade.Window):
         view: UiGameView,
         state: FiniteDecisionUiState,
     ) -> None:
+        viewer_changed = (
+            self._last_game_view is not None
+            and self._last_game_view.viewer_player_id != view.viewer_player_id
+        )
+        if viewer_changed:
+            self._finite_state = state
+            self._pending_decision = state.pending_decision
+            self._event_cursor = state.event_cursor
+            self._movement_draft = None
+            self._placement_draft = None
+            self._placement_history = ()
+            self._assignment_workspace = None
+            self._selected_assignment_group_id = None
+            self._assignment_choice_index = 0
+            self._selection_state = SelectionState.initial(self._preferences)
         self._last_game_view = view
+        self._viewer_player_id = view.viewer_player_id
         self._refresh_public_contract_data(view)
-        self._known_unit_display_by_id = {
-            **self._known_unit_display_by_id,
-            **view.unit_display_by_id,
-        }
-        self._known_model_display_by_id = {
-            **self._known_model_display_by_id,
-            **view.model_display_by_id,
-        }
+        self._known_unit_display_by_id = dict(view.unit_display_by_id)
+        self._known_model_display_by_id = dict(view.model_display_by_id)
         event_log_lines = _hud_event_lines(
-            current_lines=self._battlefield_view.hud.event_log_lines,
+            current_lines=() if viewer_changed else self._battlefield_view.hud.event_log_lines,
             state_lines=state.event_log_lines,
         )
         if _can_rebuild_core_projection(view):
@@ -2287,6 +2462,19 @@ def _first_unit_ref(ref_keys: tuple[str, ...]) -> str | None:
         if ref_key.startswith("unit:"):
             return ref_key.removeprefix("unit:")
     return None
+
+
+def _same_shooting_physical_source(
+    left: ShootingAssignmentSelection,
+    right: ShootingAssignmentSelection,
+) -> bool:
+    return (
+        left.model_instance_id == right.model_instance_id
+        and left.weapon_instance_id == right.weapon_instance_id
+        and left.weapon_profile_id == right.weapon_profile_id
+        and left.firing_deck_source_unit_instance_id == right.firing_deck_source_unit_instance_id
+        and left.firing_deck_source_model_instance_id == right.firing_deck_source_model_instance_id
+    )
 
 
 def _finite_option_targets_unit(

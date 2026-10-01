@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from tests.support.contract_fixtures import decision_from_fixture
 from warhammer40k_arcade_ui.core_client.protocol import UiDecision
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
@@ -12,6 +14,7 @@ from warhammer40k_arcade_ui.render.view_models import BattlefieldView
 from warhammer40k_arcade_ui.state.entity_selection import EntityRef, entity_ref_for_model
 from warhammer40k_arcade_ui.state.movement_draft import (
     MovementDraft,
+    MovementDraftError,
     movement_proposal_for_selected_unit,
     unsupported_parameterized_tool_label,
 )
@@ -271,7 +274,7 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     assert second_movement["final_pose"] == second_poses[-1]
 
 
-def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
+def test_charge_move_payload_preserves_entered_witness_and_committed_targets() -> None:
     view = default_battlefield_view()
     selection = _selected_intercessors()
     decision = _movement_proposal_decision(
@@ -280,7 +283,8 @@ def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
         context={
             "movement_mode": "charge",
             "maximum_distance_inches": 7.0,
-            "reachable_target_unit_instance_ids": ["guardian_squad"],
+            "reachable_target_unit_instance_ids": ["guardian_squad", "other_reachable"],
+            "target_selection": {"target_ids": ["guardian_squad"]},
         },
     )
     draft = MovementDraft.start_for_pending(
@@ -289,7 +293,23 @@ def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
         pending_decision=decision,
     )
     assert draft is not None
-    ready = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
+    one_waypoint = draft.add_waypoint(view=view, world_point=(10.0, 18.0))
+    assert one_waypoint.synthetic_witness_model_ids == ()
+    one_waypoint_witness = one_waypoint.to_payload()["witness"]
+    assert type(one_waypoint_witness) is dict
+    one_waypoint_paths = one_waypoint_witness["model_paths"]
+    assert type(one_waypoint_paths) is list
+    one_waypoint_path = one_waypoint_paths[0]
+    assert type(one_waypoint_path) is dict
+    assert one_waypoint_path["poses"] == [
+        {"position": {"x": 7.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
+        {"position": {"x": 10.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
+    ]
+    ready = (
+        draft.add_waypoint(view=view, world_point=(8.5, 18.0))
+        .add_waypoint(view=view, world_point=(10.0, 18.0))
+        .mark_ready(view=view)
+    )
 
     payload = ready.payload_preview
 
@@ -297,7 +317,7 @@ def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
     assert payload["proposal_kind"] == "charge_move"
     assert payload["movement_mode"] == "charge"
     assert payload["charge_target_unit_instance_ids"] == ["guardian_squad"]
-    assert ready.synthetic_witness_model_ids == ("intercessor_1",)
+    assert ready.synthetic_witness_model_ids == ()
     witness = payload["witness"]
     assert type(witness) is dict
     model_paths = witness["model_paths"]
@@ -311,6 +331,28 @@ def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
     ]
 
 
+def test_charge_move_refuses_missing_target_commitment() -> None:
+    view = default_battlefield_view()
+    decision = _movement_proposal_decision(
+        proposal_kind="charge_move",
+        movement_phase_action="charge_move",
+        context={
+            "movement_mode": "charge",
+            "maximum_distance_inches": 7.0,
+            "reachable_target_unit_instance_ids": ["guardian_squad"],
+        },
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+    assert draft is not None
+
+    with pytest.raises(MovementDraftError, match=r"context.target_selection.*JSON object"):
+        draft.add_waypoint(view=view, world_point=(10.0, 18.0)).to_payload()
+
+
 def test_charge_move_no_move_payload_omits_witness() -> None:
     view = default_battlefield_view()
     decision = _movement_proposal_decision(
@@ -320,6 +362,7 @@ def test_charge_move_no_move_payload_omits_witness() -> None:
             "movement_mode": "charge",
             "maximum_distance_inches": 7.0,
             "reachable_target_unit_instance_ids": ["guardian_squad"],
+            "target_selection": {"target_ids": ["guardian_squad"]},
         },
     )
     draft = MovementDraft.start_for_pending(

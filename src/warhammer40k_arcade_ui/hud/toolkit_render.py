@@ -1093,6 +1093,8 @@ def _button_action_kind(value: str) -> HudButtonActionKind:
         return "assignment_clear"
     if value == "assignment_select":
         return "assignment_select"
+    if value == "assignment_next_choice":
+        return "assignment_next_choice"
     return "none"
 
 

@@ -32,7 +32,7 @@ packages = ["src/warhammer40k_arcade_ui"]
 package = true
 
 [tool.uv.sources]
-warhammer40k-core-v2 = { git = "https://github.com/SobolGaming/Warhammer_40k_AI", rev = "dbfcc3a99e9d560d1354506352a09d48ca555a94" }
+warhammer40k-core-v2 = { git = "https://github.com/SobolGaming/Warhammer_40k_AI", rev = "6e86f44b87c4559a9297596d5d18dc4247b8cbc3" }
 
 [tool.ruff]
 target-version = "py314"

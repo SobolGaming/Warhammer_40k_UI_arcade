@@ -165,6 +165,8 @@ class AssignmentHudPanelView:
     preference_source_label: str | None
     decline_available: bool = False
     editable: bool = True
+    choice_count: int = 0
+    choice_index: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -560,6 +562,7 @@ def build_assignment_hud_panel(
     event_log_lines: tuple[str, ...] = (),
     placement_draft: PlacementDraft | None = None,
     assignment_workspace: AssignmentWorkspace | None = None,
+    assignment_choice_index: int = 0,
 ) -> AssignmentHudPanelView | None:
     """Build the generic request-scoped assignment HUD without adding rules semantics."""
 
@@ -592,6 +595,7 @@ def build_assignment_hud_panel(
             preferences=preferences,
             preference_source_label=preference_source_label,
             chain_lines=_chain_lines(preferences, event_log_lines),
+            choice_index=assignment_choice_index,
         )
     unsupported_label = unsupported_parameterized_tool_label(pending_decision)
     if unsupported_label is not None:
@@ -708,11 +712,28 @@ def _generic_assignment_hud_panel(
     preferences: UiPreferences,
     preference_source_label: str | None,
     chain_lines: tuple[str, ...],
+    choice_index: int,
 ) -> AssignmentHudPanelView:
     combined_diagnostics = _append_unique_lines(
         diagnostic_lines,
         assignment_workspace.diagnostic_lines,
     )
+    shooting_choices = assignment_workspace.shooting_choices
+    resolved_choice_index = choice_index % len(shooting_choices) if shooting_choices else 0
+    shooting_group: tuple[AssignmentHudGroupView, ...] = ()
+    if shooting_choices:
+        choice = shooting_choices[resolved_choice_index]
+        selected = choice.selection in assignment_workspace.shooting_selections
+        shooting_group = (
+            AssignmentHudGroupView(
+                group_id=choice.choice_id,
+                label=f"{'[x]' if selected else '[ ]'} {choice.label}",
+                state="assigned" if selected else "unassigned",
+                source_ref_keys=choice.source_ref_keys,
+                target_ref_keys=choice.target_ref_keys,
+                summary_lines=choice.summary_lines,
+            ),
+        )
     return AssignmentHudPanelView(
         request_id=assignment_workspace.request_id,
         decision_type=None if pending_decision is None else pending_decision.decision_type,
@@ -727,7 +748,8 @@ def _generic_assignment_hud_panel(
             assignment_workspace,
             combined_diagnostics,
         ),
-        groups=tuple(
+        groups=shooting_group
+        or tuple(
             AssignmentHudGroupView(
                 group_id=row.row_id,
                 label=row.label,
@@ -757,6 +779,8 @@ def _generic_assignment_hud_panel(
         preference_source_label=preference_source_label,
         decline_available=assignment_workspace.declinable,
         editable=assignment_workspace.editable,
+        choice_count=len(shooting_choices),
+        choice_index=resolved_choice_index,
     )
 
 

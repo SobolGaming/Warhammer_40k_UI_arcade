@@ -352,11 +352,13 @@ def refresh_submission_projection(
 ) -> SubmissionRefreshResult:
     """Refresh status, projection, and events for the actor who owns the next request."""
 
-    refreshed_state = state.apply_status(status)
     refresh_viewer_player_id = refresh_viewer_player_id_for_status(
         status=status,
         fallback_viewer_player_id=fallback_viewer_player_id,
     )
+    if refresh_viewer_player_id != fallback_viewer_player_id:
+        state = replace(state, event_cursor=0, event_log_lines=(), event_payloads=())
+    refreshed_state = state.apply_status(status)
     refreshed_view = client.get_view(refresh_viewer_player_id)
     refreshed_state = refreshed_state.apply_view(refreshed_view)
     event_delta = client.get_events_since(refreshed_state.event_cursor, refresh_viewer_player_id)

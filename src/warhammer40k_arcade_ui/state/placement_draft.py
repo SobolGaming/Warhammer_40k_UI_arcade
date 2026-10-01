@@ -65,6 +65,9 @@ class PlacementModelPose:
     base_radius: float
     position: WorldPoint | None
     facing_degrees: float = 0.0
+    unit_instance_id: str | None = None
+    owner_player_id: str | None = None
+    split_origin: JsonObject | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "model_id", _non_empty_string("model_id", self.model_id))
@@ -75,6 +78,26 @@ class PlacementModelPose:
             None if self.position is None else _validate_world_point("position", self.position),
         )
         _validate_finite("facing_degrees", self.facing_degrees)
+        object.__setattr__(
+            self, "unit_instance_id", _optional_string("unit_instance_id", self.unit_instance_id)
+        )
+        object.__setattr__(
+            self, "owner_player_id", _optional_string("owner_player_id", self.owner_player_id)
+        )
+        if self.split_origin is not None:
+            origin = _json_object("split_origin", self.split_origin)
+            if set(origin) != {"source_unit_instance_id", "split_id", "successor_index"}:
+                raise PlacementDraftError("split_origin must contain its exact projected identity.")
+            _non_empty_string(
+                "split_origin.source_unit_instance_id", origin["source_unit_instance_id"]
+            )
+            _non_empty_string("split_origin.split_id", origin["split_id"])
+            if type(origin["successor_index"]) is not int or origin["successor_index"] not in (
+                0,
+                1,
+            ):
+                raise PlacementDraftError("split_origin.successor_index must be 0 or 1.")
+            object.__setattr__(self, "split_origin", origin)
 
     @property
     def placed(self) -> bool:
@@ -237,6 +260,7 @@ class PlacementDraft:
         selection: SelectionState,
         pending_decision: UiDecision | None,
         model_display_by_id: JsonObject | None = None,
+        authoritative_models_by_id: JsonObject | None = None,
         projection_state_hash: str | None = None,
     ) -> PlacementDraft | None:
         """Create a placement draft for the current placement proposal."""
@@ -259,14 +283,13 @@ class PlacementDraft:
             return None
         submission_variant_id = route.submission_variant_id
         model_poses = tuple(
-            PlacementModelPose(
+            _placement_pose_from_projection(
                 model_id=model_id,
-                base_radius=_model_base_radius(
-                    models_by_id.get(model_id),
-                    model_id=model_id,
-                    model_display_by_id=model_display_by_id,
-                ),
-                position=None,
+                model=models_by_id.get(model_id),
+                model_display_by_id=model_display_by_id,
+                authoritative_models_by_id=authoritative_models_by_id,
+                expected_unit_id=proposal.unit_instance_id,
+                expected_player_id=proposal.player_id,
             )
             for model_id in model_ids
         )
@@ -593,13 +616,18 @@ def _draftable_placement_proposal(
 def _model_placement_payload(draft: PlacementDraft, pose: PlacementModelPose) -> JsonObject:
     if pose.position is None:
         raise PlacementDraftError("Cannot serialize unplaced placement model.")
-    return {
+    unit_id = pose.unit_instance_id or draft.selected_unit_id
+    player_id = pose.owner_player_id or draft.player_id
+    payload: JsonObject = {
         "army_id": _army_id_from_unit_instance_id(draft.selected_unit_id, draft.player_id),
-        "player_id": draft.player_id,
-        "unit_instance_id": draft.selected_unit_id,
+        "player_id": player_id,
+        "unit_instance_id": unit_id,
         "model_instance_id": pose.model_id,
         "pose": _pose_payload(pose.position, pose.facing_degrees),
     }
+    if pose.split_origin is not None:
+        payload["split_origin"] = pose.split_origin
+    return payload
 
 
 def _pose_payload(point: WorldPoint, facing_degrees: float) -> JsonObject:
@@ -633,6 +661,41 @@ def _models_by_id(unit: UnitView | None) -> dict[str, ModelBaseView]:
     if unit is None:
         return {}
     return {model.model_id: model for model in unit.models}
+
+
+def _placement_pose_from_projection(
+    *,
+    model_id: str,
+    model: ModelBaseView | None,
+    model_display_by_id: JsonObject | None,
+    authoritative_models_by_id: JsonObject | None,
+    expected_unit_id: str,
+    expected_player_id: str,
+) -> PlacementModelPose:
+    unit_id = expected_unit_id
+    player_id = expected_player_id
+    split_origin: JsonObject | None = None
+    if authoritative_models_by_id is not None:
+        projected = _json_object(
+            "projected placement model",
+            authoritative_models_by_id.get(model_id),
+        )
+        unit_id = _non_empty_string("projected unit_instance_id", projected.get("unit_instance_id"))
+        player_id = _non_empty_string("projected owner_player_id", projected.get("owner_player_id"))
+        if unit_id != expected_unit_id or player_id != expected_player_id:
+            raise PlacementDraftError("Projected placement model ownership differs from request.")
+        if "split_origin" in projected:
+            split_origin = _json_object("projected split_origin", projected["split_origin"])
+    return PlacementModelPose(
+        model_id=model_id,
+        base_radius=_model_base_radius(
+            model, model_id=model_id, model_display_by_id=model_display_by_id
+        ),
+        position=None,
+        unit_instance_id=unit_id,
+        owner_player_id=player_id,
+        split_origin=split_origin,
+    )
 
 
 def _model_base_radius(

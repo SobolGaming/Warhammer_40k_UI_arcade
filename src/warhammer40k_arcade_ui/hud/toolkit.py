@@ -54,6 +54,7 @@ type HudButtonActionKind = Literal[
     "assignment_decline",
     "assignment_clear",
     "assignment_select",
+    "assignment_next_choice",
 ]
 type HudButtonShape = Literal["rect", "rounded_rect", "pill", "square"]
 type HudButtonIconSide = Literal["left", "right", "both", "center", "none"]

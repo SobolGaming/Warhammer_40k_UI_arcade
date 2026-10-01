@@ -59,7 +59,6 @@ SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS = frozenset(
 )
 SAMPLED_WITNESS_PROPOSAL_KINDS = frozenset(
     (
-        "charge_move",
         "pile_in",
         "consolidate",
         "scout_move",
@@ -1034,17 +1033,8 @@ class MovementDraft:
 
     def _add_family_payload_fields(self, body: JsonObject, *, no_move: bool = False) -> None:
         if self.proposal_kind == "charge_move":
-            body["charge_target_unit_instance_ids"] = (
-                []
-                if no_move
-                else _first_non_empty_context_string_list(
-                    self.proposal_context,
-                    (
-                        "charge_target_unit_instance_ids",
-                        "reachable_target_unit_instance_ids",
-                    ),
-                )
-            )
+            committed_target_ids = _committed_charge_target_ids(self.proposal_context)
+            body["charge_target_unit_instance_ids"] = [] if no_move else committed_target_ids
             if "stratagem_handler_id" in self.proposal_context:
                 body["stratagem_handler_id"] = self.proposal_context["stratagem_handler_id"]
         elif self.proposal_kind == "pile_in":
@@ -1516,15 +1506,16 @@ def _context_string_list(context: JsonObject, key: str) -> list[JsonValue]:
     return values
 
 
-def _first_non_empty_context_string_list(
-    context: JsonObject,
-    keys: tuple[str, ...],
-) -> list[JsonValue]:
-    for key in keys:
-        values = _context_string_list(context, key)
-        if values:
-            return values
-    return []
+def _committed_charge_target_ids(context: JsonObject) -> list[JsonValue]:
+    selection = _json_object("context.target_selection", context.get("target_selection"))
+    if "target_ids" not in selection:
+        raise MovementDraftError("context.target_selection.target_ids is required.")
+    target_ids = _context_string_list(selection, "target_ids")
+    if not target_ids:
+        raise MovementDraftError(
+            "context.target_selection.target_ids must not be empty for a move."
+        )
+    return target_ids
 
 
 def _first_context_string(context: JsonObject, key: str) -> str | None:

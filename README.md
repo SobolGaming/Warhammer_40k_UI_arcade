@@ -12,8 +12,7 @@ displays authoritative results or diagnostics returned by the core engine.
 Target Python version: **3.14.5**.
 
 Supported core engine revision: `Warhammer_40k_AI`
-`dbfcc3a99e9d560d1354506352a09d48ca555a94` (`feat(missions): complete Phase 17N
-layout replay certification (#398)`), external contract `10.2.0`. The package lock and CI both
+`6e86f44b87c4559a9297596d5d18dc4247b8cbc3` (reviewed Contract 42 revision), external contract `42.0.0`. The package lock and CI both
 resolve `warhammer40k-core-v2` to this exact commit. When updating the core dependency, update this
 line and review the active plans under `docs/plans/` for adapter or projection drift.
 
@@ -64,7 +63,7 @@ differs, align the checkout to the supported commit while it is clean:
 
 ```bash
 git -C ../Warhammer_40k_AI rev-parse HEAD
-git -C ../Warhammer_40k_AI checkout --detach dbfcc3a99e9d560d1354506352a09d48ca555a94
+git -C ../Warhammer_40k_AI checkout --detach 6e86f44b87c4559a9297596d5d18dc4247b8cbc3
 ```
 
 The conformance and HUD example tests fail at collection or before reading an example when the
@@ -87,7 +86,7 @@ Use this as an in-between path for trying a branch without a local source checko
 ```bash
 uv venv --python 3.14.5 .venv-warhammer-ui
 source .venv-warhammer-ui/bin/activate
-uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@dbfcc3a99e9d560d1354506352a09d48ca555a94
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@6e86f44b87c4559a9297596d5d18dc4247b8cbc3
 uv pip install git+https://github.com/SobolGaming/Warhammer_40k_UI_arcade@main
 warhammer40k-arcade-ui
 ```
@@ -106,7 +105,7 @@ Use this to install a wheel or source distribution produced by `uv build`:
 uv build
 uv venv --python 3.14.5 .venv-warhammer-ui-package
 source .venv-warhammer-ui-package/bin/activate
-uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@dbfcc3a99e9d560d1354506352a09d48ca555a94
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@6e86f44b87c4559a9297596d5d18dc4247b8cbc3
 uv pip install dist/warhammer40k_arcade_ui-0.1.0-py3-none-any.whl
 warhammer40k-arcade-ui
 ```

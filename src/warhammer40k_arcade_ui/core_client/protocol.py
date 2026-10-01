@@ -351,6 +351,12 @@ class UiBattlefieldProjection:
     interaction: JsonObject
     render: JsonObject
 
+    @property
+    def models_by_id(self) -> JsonObject:
+        """Return the viewer-scoped physical model identities."""
+
+        return _json_object("battlefield models_by_id", self.authoritative["models_by_id"])
+
     @classmethod
     def from_payload(cls, payload: object) -> Self:
         value = _json_object("battlefield view", payload)
@@ -1308,6 +1314,16 @@ class UiPlacementProposalRequest:
         )
 
 
+_FLAT_PARAMETERIZED_DECISION_TYPES = frozenset(
+    {
+        "submit_cult_ambush_marker_placement",
+        "submit_healing_revival_placement",
+        "submit_catalog_model_materialization_placement",
+        "submit_return_on_death_placement",
+    }
+)
+
+
 @dataclass(frozen=True, slots=True)
 class UiParameterizedProposalRequest:
     """Generic UI view of a parameterized proposal request."""
@@ -1354,34 +1370,37 @@ class UiParameterizedProposalRequest:
         actor_id: str | None,
     ) -> Self:
         decision_payload = _json_object("parameterized decision payload", payload)
-        proposal_payload = _json_object(
-            "parameterized proposal request",
-            decision_payload["proposal_request"],
-        )
         if actor_id is None:
             raise UiClientProtocolError(
                 "decision_request.actor_id is required for parameterized proposals."
             )
-        proposal_actor_id = _required_string(proposal_payload, "actor_id")
-        if proposal_actor_id != actor_id:
-            raise UiClientProtocolError("actor_id must match decision_request.actor_id.")
-        return cls(
-            request_id=_required_matching_string(
-                proposal_payload,
-                "request_id",
-                decision_request_id,
-                "decision_request.request_id",
-            ),
-            decision_type=_required_matching_string(
-                proposal_payload,
-                "decision_type",
-                decision_type,
-                "decision_request.decision_type",
-            ),
-            actor_id=proposal_actor_id,
-            proposal_kind=_optional_string_value(proposal_payload, "proposal_kind"),
-            payload=proposal_payload,
-        )
+        is_flat = decision_type in _FLAT_PARAMETERIZED_DECISION_TYPES
+        if is_flat:
+            if "proposal_request" in decision_payload:
+                raise UiClientProtocolError(
+                    f"{decision_type} requires a flat parameterized request."
+                )
+            context = decision_payload
+        else:
+            if "proposal_request" not in decision_payload:
+                raise UiClientProtocolError(f"{decision_type} requires a nested proposal_request.")
+            context = _json_object(
+                "parameterized proposal request",
+                decision_payload["proposal_request"],
+            )
+        identity = {
+            "request_id": decision_request_id,
+            "decision_type": decision_type,
+            "actor_id": actor_id,
+        }
+        for key, expected in identity.items():
+            if not is_flat and key not in context:
+                raise UiClientProtocolError(f"nested parameterized request requires {key}.")
+            if key in context and context[key] != expected:
+                raise UiClientProtocolError(
+                    f"parameterized {key} must match decision_request.{key}."
+                )
+        return cls.from_payload({**context, **identity})
 
 
 @dataclass(frozen=True, slots=True)
@@ -1524,6 +1543,15 @@ class UiDecision:
             if is_parameterized and parse_parameterized_proposal
             else None
         )
+        if (
+            parameterized_proposal is not None
+            and interaction is not None
+            and parameterized_proposal.proposal_kind is not None
+            and parameterized_proposal.proposal_kind != interaction.proposal_kind
+        ):
+            raise UiClientProtocolError(
+                "parameterized proposal_kind must match the interaction descriptor."
+            )
         return cls(
             request_id=request_id,
             decision_type=decision_type,
@@ -1787,8 +1815,8 @@ class UiGameView:
             ),
             pending_decision=pending_decision,
             pending_proposal=pending_proposal,
-            unit_display_by_id=_optional_json_object_value(view, "unit_display_by_id"),
-            model_display_by_id=_optional_json_object_value(view, "model_display_by_id"),
+            unit_display_by_id=_validated_unit_displays(view),
+            model_display_by_id=_validated_model_displays(view),
             projection_schema=GAME_VIEW_SCHEMA_VERSION,
             projection_state_hash=_required_string(view, "projection_state_hash"),
             viewer_role=_required_viewer_role(view),
@@ -2392,10 +2420,88 @@ def _optional_string_value(payload: JsonObject, key: str) -> str | None:
     return _optional_string(key, payload.get(key))
 
 
-def _optional_json_object_value(payload: JsonObject, key: str) -> JsonObject:
-    if key not in payload or payload[key] is None:
-        return {}
-    return _json_object(key, payload[key])
+def _validated_unit_displays(view: JsonObject) -> JsonObject:
+    displays = _json_object("unit_display_by_id", view["unit_display_by_id"])
+    for unit_id, value in displays.items():
+        display = _json_object(f"unit_display_by_id.{unit_id}", value)
+        _required_matching_string(display, "unit_instance_id", unit_id, "unit display key")
+        _string_list(display, "keywords")
+        _string_list(display, "faction_keywords")
+        _string_list(display, "model_instance_ids")
+    return displays
+
+
+def _validated_model_displays(view: JsonObject) -> JsonObject:
+    displays = _json_object("model_display_by_id", view["model_display_by_id"])
+    for model_id, value in displays.items():
+        display = _json_object(f"model_display_by_id.{model_id}", value)
+        _required_matching_string(display, "model_instance_id", model_id, "model display key")
+        _required_string(display, "unit_instance_id")
+        for key in ("keywords", "faction_keywords", "keyword_source_ids"):
+            _string_list(display, key)
+        for category in ("base_characteristics", "current_characteristics"):
+            characteristics = _json_object(category, _required_value(display, category))
+            for label, raw_characteristic in characteristics.items():
+                characteristic = _json_object(f"{category}.{label}", raw_characteristic)
+                _validate_characteristic_display(characteristic, label=label)
+    return displays
+
+
+def _validate_characteristic_display(characteristic: JsonObject, *, label: str) -> None:
+    required = {
+        "characteristic",
+        "label",
+        "value_kind",
+        "raw",
+        "base",
+        "final",
+        "display_value",
+        "applied_modifier_ids",
+        "redaction",
+    }
+    _require_keys(
+        characteristic,
+        required=required,
+        allowed=required | {"random_expression"},
+        field_name=f"characteristic {label}",
+    )
+    _required_matching_string(characteristic, "label", label, "characteristic key")
+    _required_string(characteristic, "characteristic")
+    value_kind = _required_string(characteristic, "value_kind")
+    if value_kind not in {
+        "random",
+        "numeric",
+        "source_dash",
+        "replacement_dash",
+        "replacement_zero",
+        "replacement_star",
+        "unknown",
+    }:
+        raise UiClientProtocolError(f"Unsupported characteristic value_kind: {value_kind}.")
+    for key in ("raw", "base", "final"):
+        value = characteristic[key]
+        if value is not None and type(value) is not int:
+            raise UiClientProtocolError(f"characteristic {label}.{key} must be integer or null.")
+    display_value = characteristic["display_value"]
+    if display_value is not None and type(display_value) is not str:
+        raise UiClientProtocolError(f"characteristic {label}.display_value must be text or null.")
+    _string_list(characteristic, "applied_modifier_ids")
+    redaction = _json_object("characteristic redaction", characteristic["redaction"])
+    _require_exact_keys(redaction, {"hidden", "reason"}, "characteristic redaction")
+    _required_bool(redaction, "hidden")
+    _optional_string_value(redaction, "reason")
+    if value_kind == "random":
+        if display_value is None or not display_value:
+            raise UiClientProtocolError("random characteristic requires display_value.")
+        expression = _json_object(
+            "random_expression", _required_value(characteristic, "random_expression")
+        )
+        _require_exact_keys(expression, {"quantity", "sides", "modifier"}, "random_expression")
+        if _required_int(expression, "quantity") < 1 or _required_int(expression, "sides") < 2:
+            raise UiClientProtocolError("random_expression requires positive dice dimensions.")
+        _required_int(expression, "modifier")
+    elif "random_expression" in characteristic:
+        raise UiClientProtocolError("Only random characteristics may contain random_expression.")
 
 
 def _required_matching_string(

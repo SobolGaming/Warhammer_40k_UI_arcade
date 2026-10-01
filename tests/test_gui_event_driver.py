@@ -618,7 +618,7 @@ def test_manual_deployments_refresh_authoritative_projection_before_prebattle() 
     try:
         _deploy_all_live_smoke_units(driver)
 
-        assert driver.pending_decision_type == "resolve_sequencing_order"
+        assert driver.pending_decision_type == "select_redeploy_unit"
         assert driver.battlefield_unit_ids == (
             "army-alpha:deep-strike-unit",
             "army-alpha:scout-redeploy-unit",
@@ -680,7 +680,7 @@ def _deploy_all_live_smoke_units(driver: GuiTestDriver) -> None:
         unit_id = driver.selected_unit_id
         assert unit_id is not None
         _deploy_current_live_smoke_unit(driver, unit_id)
-    assert driver.pending_decision_type == "resolve_sequencing_order"
+    assert driver.pending_decision_type == "select_redeploy_unit"
 
 
 def _deploy_current_live_smoke_unit(driver: GuiTestDriver, unit_id: str) -> None:

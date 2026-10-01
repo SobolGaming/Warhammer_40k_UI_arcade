@@ -367,8 +367,11 @@ def _canonical_units(
     owner_by_unit_id: dict[str, str] = {}
     for model_id, raw_model in sorted(models_by_id.items()):
         model = _json_object("battlefield model", raw_model)
-        if _required_string(model, "state") != "placed" or model.get("pose") is None:
+        state = _required_string(model, "state")
+        if model.get("pose") is None:
             continue
+        if state not in {"placed", "destroyed"}:
+            raise CoreProjectionRenderError(f"Unsupported canonical model state: {state}.")
         unit_id = _required_string(model, "unit_instance_id")
         owner_by_unit_id[unit_id] = _required_string(model, "owner_player_id")
         grouped.setdefault(unit_id, []).append(

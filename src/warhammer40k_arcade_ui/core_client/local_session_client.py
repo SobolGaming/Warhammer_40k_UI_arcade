@@ -8,7 +8,10 @@ from warhammer40k_core.adapters.access_control import ViewerContext
 from warhammer40k_core.adapters.contracts import AdapterGameSession
 from warhammer40k_core.adapters.event_stream import EventStreamCursor
 from warhammer40k_core.adapters.local_session import LocalGameSession
-from warhammer40k_core.adapters.redaction import public_support_profile_payload
+from warhammer40k_core.adapters.redaction import (
+    public_support_profile_payload,
+    redacted_lifecycle_status,
+)
 from warhammer40k_core.engine.decision_request import DecisionError
 from warhammer40k_core.engine.game_state import GameConfig
 from warhammer40k_core.engine.phase import GameLifecycleError, LifecycleStatus
@@ -158,10 +161,18 @@ class LocalSessionClient:
 
     def _status_from_lifecycle(self, status: LifecycleStatus) -> UiClientStatus:
         decision, viewer_player_id = self._projected_decision_for_status(status)
+        if viewer_player_id is None:
+            message = None
+            payload: JsonValue = None
+        else:
+            public_status = redacted_lifecycle_status(
+                status,
+                viewer=ViewerContext.for_player(viewer_player_id),
+            )
+            message = public_status["message"]
+            payload = validate_json_value(public_status["payload"])
         if viewer_player_id is not None:
             self._last_viewer_player_id = viewer_player_id
-        message = status.message
-        payload = validate_json_value(status.payload)
         status_kind = status.status_kind.value
         return UiClientStatus(
             stage=status.stage.value,

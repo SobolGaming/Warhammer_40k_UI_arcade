@@ -1,4 +1,4 @@
-"""Regression tests for current core Phase 15D-15F adapter surfaces."""
+"""Historical Phase 15D-15F request-shape regressions, separate from Contract 42 coverage."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "phase21a_core_requests.json
 PARAMETERIZED_OPTION: JsonObject = {"submission_kind": "parameterized"}
 
 
-def test_phase21a_current_core_pending_proposals_are_strict_and_json_safe() -> None:
+def test_phase21a_historical_pending_proposals_are_strict_and_json_safe() -> None:
     fixture = _fixture()
     pending_proposals = _object_section(fixture, "pending_proposals")
 
@@ -382,7 +382,7 @@ def _selected_intercessors() -> SelectionState:
 
 def _game_view_payload(*, pending_proposal: JsonValue) -> JsonObject:
     return {
-        "projection_schema": "game-view-v11-phase17n-step4",
+        "projection_schema": "game-view-v13-random-profiles",
         "projection_state_hash": "fixture-projection-state-hash",
         "rules_catalog": {
             "catalog_id": "phase21a-fixture-catalog",

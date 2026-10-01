@@ -745,6 +745,23 @@ def _assignment_action_buttons(
             hovered_hud_button_id=hovered_hud_button_id,
         ),
     ]
+    if assignment_hud_panel.choice_count > 1:
+        buttons.insert(
+            1,
+            _assignment_action_button(
+                index=1,
+                action_kind="assignment_next_choice",
+                label=(
+                    f"Next {assignment_hud_panel.choice_index + 1}"
+                    f"/{assignment_hud_panel.choice_count}"
+                ),
+                request_id=assignment_hud_panel.request_id,
+                selected=False,
+                enabled=True,
+                disabled_reason="",
+                hovered_hud_button_id=hovered_hud_button_id,
+            ),
+        )
     if assignment_hud_panel.decline_available:
         buttons.insert(
             1,
@@ -822,6 +839,8 @@ def _assignment_action_text_icon(action_kind: HudButtonActionKind) -> str:
         return "NO"
     if action_kind == "assignment_clear":
         return "CL"
+    if action_kind == "assignment_next_choice":
+        return "NX"
     return "AS"
 
 
@@ -1070,7 +1089,14 @@ def _assignment_rows(
             target_ref_keys=group.target_ref_keys,
             target_unit_id=_first_unit_ref(group.target_ref_keys),
             selected=group.group_id == selected_assignment_group_id,
-            enabled=bool(group.target_ref_keys),
+            enabled=(
+                bool(group.target_ref_keys)
+                or assignment_hud_panel.proposal_kind == "shooting_declaration"
+                or (
+                    assignment_hud_panel.proposal_kind == "stratagem_target_binding"
+                    and assignment_hud_panel.editable
+                )
+            ),
         )
         for index, group in enumerate(assignment_hud_panel.groups[:3])
     )

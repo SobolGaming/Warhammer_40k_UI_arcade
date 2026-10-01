@@ -175,7 +175,7 @@ def test_submit_movement_draft_refreshes_next_actor_viewer() -> None:
         event_delta_by_player_id={
             "player_2": UiEventDelta(
                 viewer_player_id="player_2",
-                cursor=2,
+                cursor=0,
                 next_cursor=3,
                 events=(
                     {
@@ -200,11 +200,12 @@ def test_submit_movement_draft_refreshes_next_actor_viewer() -> None:
 
     assert result.viewer_player_id == "player_2"
     assert fake.view_requests == ["player_2"]
-    assert fake.event_delta_requests == [(2, "player_2")]
+    assert fake.event_delta_requests == [(0, "player_2")]
     assert result.finite_state.pending_decision == next_decision
     assert result.finite_state.highlighted_option is not None
     assert result.finite_state.highlighted_option.option_id == "player-2-unit-1"
     assert result.finite_state.event_log_lines[-1] == "decision_requested: player_2"
+    assert "movement proposal pending" not in result.finite_state.event_log_lines
 
 
 def test_submit_movement_draft_surfaces_invalid_diagnostics_and_keeps_draft() -> None:

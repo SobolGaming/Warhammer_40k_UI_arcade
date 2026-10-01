@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  SUPPORTED_CORE_REVISION: dbfcc3a99e9d560d1354506352a09d48ca555a94
+  SUPPORTED_CORE_REVISION: 6e86f44b87c4559a9297596d5d18dc4247b8cbc3
 
 jobs:
   quality:
