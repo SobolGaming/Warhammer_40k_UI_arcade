@@ -12,8 +12,16 @@ actually checks. The approved acceptance criteria remain unchanged.
 | Version and parser gate | `test_contract42_compatibility.py`, `test_contract42_conformance.py`, and `test_contract42_protocol.py` cover the exact installed build, all current projection and interaction examples, strict flat/nested identity, and mismatch rejection. | Historical Phase 21 fixtures remain deliberately historical; their retired decision tokens are not current runtime claims. |
 | Viewer and physical display | `test_contract42_projection.py`, `test_contract42_retained.py`, `test_contract42_split_placement.py`, and window tests cover alternating viewers, hidden rows/events, split ownership, and retained zero-wound models until pose removal. | Viewer checks assert public projections, not Core's private decision queue. |
 | Finite decisions and source evidence | `test_contract42_finite_source.py` routes all nine new finite families using current engine-authored request/option IDs. Real sessions exercise duplicate Core ability privacy, mandatory Deadly Demise, Mission Action OC reenumeration, random values, source modifiers and dice evidence. | Canonical request examples prove UI routing; they do not claim nine independent gameplay scenarios. |
-| Shooting, Charge, placement | `test_contract42_shooting.py`, `test_contract42_shooting_hud.py`, `test_contract42_charge.py`, and `test_contract42_split_placement.py` cover real accepted/invalid submissions, physical copy/profile identity, explicit empty and nullable declarations, committed Charge subset, and current split successor origin/owner proof. | The attached Charge and general Firing Deck public-data gaps below remain open. |
-| Source-specific continuations | `test_contract42_heroic_intervention.py`, `test_contract42_heroic_hud.py`, `test_contract42_firing_deck.py`, and `test_contract42_public_contexts.py` exercise current actor/mode, a first-shooter Firing Deck inventory, scoring attribution, nullable terrain capability, flight, Surge, and public contact redaction. | The Firing Deck fixture knows the initial shot history from its own setup. Contact redaction is seeded with typed Core event data and does not assert the engine generates that event in this fixture. |
+| Shooting, melee, Charge, placement | `test_contract42_shooting.py`, `test_contract42_shooting_hud.py`, `test_contract42_melee_sources.py`, `test_contract42_charge.py`, and `test_contract42_split_placement.py` cover real accepted/invalid submissions, physical weapon/profile and duplicated ability-instance choices, explicit empty and nullable shooting declarations, committed Charge subset, and current split successor origin/owner proof. Melee HUD choice selection is also exercised headlessly in `test_assignment_workspace.py`. | The attached Charge and general Firing Deck public-data gaps below remain open. |
+| Setup and arrival | `test_contract42_setup_arrival.py` covers public nullable mission edges, oversized exception rejection and retry, loaded Transport ingress with Rapid Disembark restrictions and redaction, Shock's explicit empty engagement list, tactical setup history and subsequent Embark option suppression, Aircraft ingress/return options without Hover, and real revival with its source-linked phase-start witness. | This mission fixture offers reserve ingress in round one, so it does not prove a deadline that suppresses ingress. Its oversized arrival hands control to the opponent in round two, so that path does not establish a same-turn activity lock; the test checks current emitted options without local enforcement. |
+| Source-specific continuations | `test_contract42_heroic_intervention.py`, `test_contract42_heroic_hud.py`, `test_contract42_overwatch.py`, `test_contract42_firing_deck.py`, and `test_contract42_public_contexts.py` exercise current actor/mode and phase-end shooter selection through the HUD, a first-shooter Firing Deck inventory, scoring attribution, nullable terrain capability, flight, Surge, and public contact redaction. | The Firing Deck fixture knows the initial shot history from its own setup. Contact redaction is seeded with typed Core event data and does not assert the engine generates that event in this fixture. |
+
+The pinned Core interaction examples exercise the generic parameterized envelope for healing
+revival but omit `revival_phase_start`. Actual emitted revival requests include that mandatory
+source-linked witness. The specialized healing placement parser requires and preserves the real
+witness; it does not fill one in to make the static example submit-ready. Generic conformance
+passing therefore does not prove that the static healing example is a valid current placement
+request. `test_contract42_setup_arrival.py` exercises the real emitted shape and submission.
 
 All real-session tests use `LocalSessionClient` and public `LocalGameSession` decisions for the
 submission or view under test. Test-only domain seeding prepares rare engine states; it does not
@@ -40,7 +48,9 @@ Core contract change or reviewed resolution.
 that list. `test_contract42_firing_deck.py` proves accepted and invalid submissions when the
 Transport shoots first and the test fixture knows the history is empty. The UI displays a missing
 public-evidence diagnostic for a general declaration; it does not silently supply an empty list or
-read private session state. This remains an in-scope public-data limitation.
+read private session state. The issued declaration and both viewer projections are captured in the
+review packet at `m2/artifacts/firing-deck-public.json`, with fixture provenance in the result
+index. This remains an in-scope public-data limitation.
 
 ## Smoke and performance method
 
@@ -53,16 +63,20 @@ argument validation because the canonical fixture reaches terminal without those
 79 accepted decisions; separate real-session tests cover those editors.
 
 The same-runner corrected Contract 42 baseline at UI SHA
-`7b1b0339f1c39e35d1846543b997c915b28004d4` ran nine original smoke tests in 198.01 seconds
-(198.96 seconds wall); the unchanged repeated-checkpoint test took 75.27 seconds. An unchanged
-external probe measured 40 projections across 20 boundaries, including 20 duplicate calls, in
-1.775 seconds, and full headless window startup in 29.052 seconds. Half of the measured projection
-time, about 0.89 seconds, is a rough duplicate-call estimate for the probed Movement traversal;
-it was not separately instrumented within window startup. A general view cache would add viewer
-and mutation invalidation complexity for that estimated saving, so this change keeps Core views
-uncached and removes the repeated traversal instead. The external probe and raw baseline logs are
-in the Phase 35 campaign performance packet. The final candidate comparison must use that same
-probe on an idle runner, with exact UI SHA, command, test count, and Core build recorded there.
+`7b1b0339f1c39e35d1846543b997c915b28004d4` ran nine smoke tests in 198.01 seconds
+(198.96 seconds wall); the unchanged repeated-checkpoint test took 75.27 seconds. The first
+pre-cleanup run had eight passes and one failure because its generic Stratagem policy chose an
+unsupported parameterized target. The corrected baseline added an explicit public decline and a
+verified Shooting checkpoint before timing the successful suite; both raw runs are retained.
+The unchanged external probe measured 40 projections across 20 boundaries, including 20
+duplicate calls, in 1.775 seconds, and full
+headless window startup in 29.052 seconds. Half of the measured projection time, about 0.89
+seconds, is a rough duplicate-call estimate for the probed Movement traversal; it was not
+separately instrumented within window startup. A general view cache would add viewer and mutation
+invalidation complexity for that estimated saving, so this change keeps Core views uncached and
+removes the repeated traversal instead. The external probe and raw baseline logs are in the Phase 35
+campaign performance packet. The final candidate comparison must use that same probe on an idle
+runner, with exact UI SHA, command, test count, and Core build recorded there.
 
 Exact-build public session `fork()` was also probed as a possible way to share setup among mutable
 tests. Core restore failed with `Primary mission boundary contradicts preceding movement history`.
@@ -72,7 +86,7 @@ runtime; switching the UI dependency does not reinterpret them.
 
 ## Gate status
 
-Final clean install, quality, coverage, and optimized performance gates are pending the frozen M2
-candidate. Their commands, counts, result index, and raw logs belong in the final review packet;
-this section must be updated after those gates run. No measured comparison above is a CI budget or
-an unverified claim about JSON loading.
+Final clean install, quality, coverage, and optimized performance gates are scheduled on the
+frozen M2 candidate. The pull request checks and Phase 35 review packet are the authoritative
+record of their commands, counts, result index, and raw logs. No measured comparison above is a
+CI budget or an unverified claim about JSON loading.

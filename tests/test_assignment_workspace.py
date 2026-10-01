@@ -149,7 +149,19 @@ def test_shooting_assignment_workspace_keeps_identical_physical_copies_distinct(
         "copy-a",
         "copy-b",
     ]
-    assert len({choice.choice_id for choice in workspace.shooting_choices}) == 2
+    assert len({choice.choice_id for choice in workspace.shooting_choices}) == len(
+        workspace.shooting_choices
+    )
+    assert (
+        len(
+            [
+                choice
+                for choice in workspace.shooting_choices
+                if choice.selection.target_unit_instance_id == "guardian_squad"
+            ]
+        )
+        == 2
+    )
     assert {choice.selection.weapon_instance_id for choice in workspace.shooting_choices} == {
         "copy-a",
         "copy-b",
@@ -596,8 +608,10 @@ def test_melee_assignment_workspace_builds_payload_from_engaged_targets() -> Non
     assert workspace.payload_preview["declarations"] == [
         {
             "attacker_model_instance_id": "intercessor_1",
+            "weapon_instance_id": "melee-copy-1",
             "wargear_id": "close_combat_weapon",
             "weapon_profile_id": "close_combat_weapon_profile",
+            "selected_weapon_ability_ids": [],
             "target_allocations": [
                 {
                     "target_unit_instance_id": "guardian_squad",
@@ -605,6 +619,69 @@ def test_melee_assignment_workspace_builds_payload_from_engaged_targets() -> Non
             ],
         }
     ]
+
+
+def test_melee_duplicate_ability_requires_emitted_source_and_hud_choice() -> None:
+    decision = _melee_declaration_decision(duplicate_abilities=True)
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    assert not workspace.is_ready
+    assert len(workspace.melee_choices) == 2
+    assert workspace.melee_selections == ()
+    assert all(
+        choice.selection.weapon_instance_id == "melee-copy-1" for choice in workspace.melee_choices
+    )
+    assert {choice.selection.selected_weapon_ability_ids for choice in workspace.melee_choices} == {
+        ("ability-instance:cleave-1",),
+        ("ability-instance:cleave-2",),
+    }
+    chosen = workspace.with_melee_selection(decision, workspace.melee_choices[1].selection)
+    assert chosen.is_ready
+    assert chosen.payload_preview is not None
+    declarations = chosen.payload_preview["declarations"]
+    assert type(declarations) is list
+    assert len(declarations) == 1
+    assert type(declarations[0]) is dict
+    assert declarations[0]["weapon_instance_id"] == "melee-copy-1"
+    assert declarations[0]["selected_weapon_ability_ids"] == ["ability-instance:cleave-2"]
+
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+        pending_decision=decision,
+    )
+    driver = GuiTestDriver(window=window)
+    try:
+        driver.window.on_draw()
+        assert driver.window.assignment_workspace is not None
+        assert not driver.window.assignment_workspace.is_ready
+        next_choice = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == "assignment_next_choice" and region.enabled
+        )
+        driver.click_screen(
+            round((next_choice.bounds[0] + next_choice.bounds[2]) / 2),
+            round((next_choice.bounds[1] + next_choice.bounds[3]) / 2),
+        )
+        driver.window.on_draw()
+        select = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == "assignment_select" and region.enabled
+        )
+        assert select.option_id == workspace.melee_choices[1].choice_id
+        driver.click_screen(
+            round((select.bounds[0] + select.bounds[2]) / 2),
+            round((select.bounds[1] + select.bounds[3]) / 2),
+        )
+        edited = driver.window.assignment_workspace
+        assert edited is not None
+        assert edited.is_ready
+        assert edited.payload_preview == chosen.payload_preview
+    finally:
+        driver.close()
 
 
 def test_stratagem_assignment_workspace_uses_exposed_binding_and_decline_flag() -> None:
@@ -667,6 +744,64 @@ def test_stratagem_assignment_workspace_without_binding_shows_catalog_context() 
         workspace.rows[0].summary_lines
     )
     assert workspace.diagnostic_lines == ()
+
+
+def test_non_enumerable_friendly_stratagem_target_uses_selected_unit_in_hud() -> None:
+    decision = _stratagem_target_binding_decision(
+        target_binding=None,
+        declinable=True,
+        friendly_target_selectable=True,
+    )
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    assert workspace.stratagem_target_selectable
+    assert workspace.editable
+    assert not workspace.is_ready
+    selected = workspace.with_stratagem_intent(
+        decision,
+        target_unit_id="intercessor_squad",
+    )
+    assert selected.is_ready
+    assert selected.payload_preview is not None
+    proposal = selected.payload_preview["proposal"]
+    assert type(proposal) is dict
+    assert proposal["target_binding"] == {
+        "target_kind": "friendly_unit",
+        "target_player_id": "player_1",
+        "target_unit_instance_id": "intercessor_squad",
+    }
+    assert proposal["effect_selection"] is None
+    context = proposal["context"]
+    assert type(context) is dict
+    assert context["active_player_id"] == "player_2"
+    assert context["player_id"] == "player_1"
+
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+        pending_decision=decision,
+    )
+    driver = GuiTestDriver(window=window)
+    try:
+        driver.click_world((7.0, 18.0))
+        assert driver.window.selection_state.selected_unit_id == "intercessor_squad"
+        driver.window.on_draw()
+        select = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == "assignment_select" and region.enabled
+        )
+        driver.click_screen(
+            round((select.bounds[0] + select.bounds[2]) / 2),
+            round((select.bounds[1] + select.bounds[3]) / 2),
+        )
+        edited = driver.window.assignment_workspace
+        assert edited is not None
+        assert edited.is_ready
+        assert edited.payload_preview == selected.payload_preview
+    finally:
+        driver.close()
 
 
 def test_required_stratagem_assignment_without_binding_is_invalid() -> None:
@@ -944,7 +1079,30 @@ def _shooting_declaration_decision(
     )
 
 
-def _melee_declaration_decision() -> UiDecision:
+def _melee_declaration_decision(*, duplicate_abilities: bool = False) -> UiDecision:
+    weapon: dict[str, object] = {
+        "weapon_instance_id": "melee-copy-1",
+        "model_instance_id": "intercessor_1",
+        "wargear_id": "close_combat_weapon",
+        "weapon_profile_id": "close_combat_weapon_profile",
+        "is_extra_attacks": False,
+        "maximum_declared_targets": 1,
+        "fixed_attacks": 2,
+        "engaged_target_unit_instance_ids": ["guardian_squad"],
+        "weapon_profile": {"name": "Close Combat Weapon"},
+    }
+    if duplicate_abilities:
+        weapon["required_weapon_ability_selections"] = [
+            {
+                "request_id": "melee-ability-request",
+                "decision_type": "select_weapon_ability_instance",
+                "actor_id": "player_1",
+                "options": [
+                    {"option_id": "ability-instance:cleave-1", "label": "Cleave 1"},
+                    {"option_id": "ability-instance:cleave-2", "label": "Cleave 2"},
+                ],
+            }
+        ]
     return decision_from_fixture(
         {
             "request_id": "melee-request-1",
@@ -964,18 +1122,7 @@ def _melee_declaration_decision() -> UiDecision:
                     "source_decision_result_id": "ui-result-000001",
                     "ruleset_descriptor_hash": "rules",
                     "target_unit_instance_ids": ["guardian_squad"],
-                    "available_weapons": [
-                        {
-                            "model_instance_id": "intercessor_1",
-                            "wargear_id": "close_combat_weapon",
-                            "weapon_profile_id": "close_combat_weapon_profile",
-                            "is_extra_attacks": False,
-                            "maximum_declared_targets": 1,
-                            "fixed_attacks": 2,
-                            "engaged_target_unit_instance_ids": ["guardian_squad"],
-                            "weapon_profile": {"name": "Close Combat Weapon"},
-                        }
-                    ],
+                    "available_weapons": [weapon],
                 }
             },
             "is_parameterized": True,
@@ -989,6 +1136,7 @@ def _stratagem_target_binding_decision(
     declinable: bool = False,
     target_binding: dict[str, object] | None = _DEFAULT_TARGET_BINDING,
     target_binding_candidates: list[dict[str, object]] | None = None,
+    friendly_target_selectable: bool = False,
 ) -> UiDecision:
     proposal_request: dict[str, object] = {
         "request_id": "stratagem-request-1",
@@ -1010,10 +1158,24 @@ def _stratagem_target_binding_decision(
             "definition": {
                 "stratagem_id": "core:test",
                 "name": "Test Stratagem",
+                **(
+                    {
+                        "target_spec": {
+                            "target_kind": "friendly_unit",
+                            "enumerable": False,
+                        }
+                    }
+                    if friendly_target_selectable
+                    else {}
+                ),
             },
         },
         "effect_selection": None,
     }
+    if friendly_target_selectable:
+        context = proposal_request["context"]
+        assert type(context) is dict
+        context["active_player_id"] = "player_2"
     if target_binding is not None:
         proposal_request["target_binding"] = target_binding
     if target_binding_candidates is not None:

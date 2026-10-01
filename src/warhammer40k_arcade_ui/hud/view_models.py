@@ -718,13 +718,17 @@ def _generic_assignment_hud_panel(
         diagnostic_lines,
         assignment_workspace.diagnostic_lines,
     )
-    shooting_choices = assignment_workspace.shooting_choices
-    resolved_choice_index = choice_index % len(shooting_choices) if shooting_choices else 0
-    shooting_group: tuple[AssignmentHudGroupView, ...] = ()
-    if shooting_choices:
-        choice = shooting_choices[resolved_choice_index]
-        selected = choice.selection in assignment_workspace.shooting_selections
-        shooting_group = (
+    choices = assignment_workspace.shooting_choices or assignment_workspace.melee_choices
+    resolved_choice_index = choice_index % len(choices) if choices else 0
+    choice_group: tuple[AssignmentHudGroupView, ...] = ()
+    if choices:
+        choice = choices[resolved_choice_index]
+        selected = (
+            choice.selection in assignment_workspace.shooting_selections
+            if assignment_workspace.shooting_choices
+            else choice.selection in assignment_workspace.melee_selections
+        )
+        choice_group = (
             AssignmentHudGroupView(
                 group_id=choice.choice_id,
                 label=f"{'[x]' if selected else '[ ]'} {choice.label}",
@@ -748,7 +752,7 @@ def _generic_assignment_hud_panel(
             assignment_workspace,
             combined_diagnostics,
         ),
-        groups=shooting_group
+        groups=choice_group
         or tuple(
             AssignmentHudGroupView(
                 group_id=row.row_id,
@@ -779,7 +783,7 @@ def _generic_assignment_hud_panel(
         preference_source_label=preference_source_label,
         decline_available=assignment_workspace.declinable,
         editable=assignment_workspace.editable,
-        choice_count=len(shooting_choices),
+        choice_count=len(choices),
         choice_index=resolved_choice_index,
     )
 

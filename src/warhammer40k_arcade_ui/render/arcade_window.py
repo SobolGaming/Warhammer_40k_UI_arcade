@@ -88,6 +88,7 @@ from warhammer40k_arcade_ui.state.assignment_submission import (
     submit_assignment_workspace,
 )
 from warhammer40k_arcade_ui.state.assignment_workspace import (
+    MELEE_DECLARATION_PROPOSAL_KIND,
     SHOOTING_DECLARATION_PROPOSAL_KIND,
     AssignmentWorkspace,
     AssignmentWorkspaceError,
@@ -1226,8 +1227,14 @@ class ArcadeWarhammerWindow(arcade.Window):
         if workspace is not None and workspace.proposal_kind == SHOOTING_DECLARATION_PROPOSAL_KIND:
             self._toggle_shooting_choice(group_id)
             return
+        if workspace is not None and workspace.proposal_kind == MELEE_DECLARATION_PROPOSAL_KIND:
+            self._choose_melee_choice(group_id)
+            return
         if workspace is not None and workspace.stratagem_mode_choices:
             self._choose_stratagem_mode(group_id)
+            return
+        if workspace is not None and workspace.stratagem_target_selectable:
+            self._choose_stratagem_target(group_id)
             return
         group = self._assignment_workspace_row(group_id)
         if workspace is None or group is None:
@@ -1307,6 +1314,44 @@ class ArcadeWarhammerWindow(arcade.Window):
             extra_summary={"mode": mode, "target_unit_id": target.unit_id},
         )
 
+    def _choose_stratagem_target(self, group_id: str) -> None:
+        workspace = self._assignment_workspace
+        decision = self._pending_decision
+        if workspace is None or decision is None:
+            return
+        if group_id not in (row.row_id for row in workspace.rows):
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="unknown_stratagem_target_row",
+                    message="Stratagem target row is no longer in the current request.",
+                    field="target_binding",
+                )
+            )
+            return
+        target = selected_unit(self._battlefield_view, self._selection_state)
+        if target is None or target.player_id != workspace.actor_id:
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="stratagem_target_required",
+                    message="Select a projected friendly unit before choosing a Stratagem target.",
+                    field="target_binding.target_unit_instance_id",
+                )
+            )
+            return
+        try:
+            self._assignment_workspace = workspace.with_stratagem_intent(
+                decision,
+                target_unit_id=target.unit_id,
+            )
+        except AssignmentWorkspaceError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        self._selected_assignment_group_id = self._assignment_workspace.rows[0].row_id
+        self._trace_assignment_workspace_event(
+            "ui.assignment_stratagem_target_selected",
+            extra_summary={"target_unit_id": target.unit_id},
+        )
+
     def _toggle_shooting_choice(self, choice_id: str) -> None:
         workspace = self._assignment_workspace
         decision = self._pending_decision
@@ -1363,6 +1408,46 @@ class ArcadeWarhammerWindow(arcade.Window):
             extra_summary={"choice_id": choice_id, "selected": selected in selections},
         )
 
+    def _choose_melee_choice(self, choice_id: str) -> None:
+        workspace = self._assignment_workspace
+        decision = self._pending_decision
+        if workspace is None or decision is None:
+            return
+        choice = next(
+            (
+                candidate
+                for candidate in workspace.melee_choices
+                if candidate.choice_id == choice_id
+            ),
+            None,
+        )
+        if choice is None:
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="unknown_melee_choice",
+                    message="Melee choice is no longer in the current request.",
+                    field="melee_choice",
+                )
+            )
+            return
+        try:
+            self._assignment_workspace = workspace.with_melee_selection(decision, choice.selection)
+        except AssignmentWorkspaceError as exc:
+            self._set_finite_state(self._fatal_game_engine_state(exc))
+            return
+        self._selected_assignment_group_id = choice_id
+        self._assignment_choice_index = workspace.melee_choices.index(choice)
+        if _view_has_unit(self._battlefield_view, choice.selection.target_unit_instance_id):
+            self._selection_state = self._selection_state.select_model_id(
+                unit_id=choice.selection.target_unit_instance_id,
+                model_id=None,
+                preferences=self._preferences,
+            )
+        self._trace_assignment_workspace_event(
+            "ui.assignment_melee_choice_selected",
+            extra_summary={"choice_id": choice_id},
+        )
+
     def _assignment_workspace_row(self, group_id: str) -> AssignmentWorkspaceRow | None:
         workspace = self._assignment_workspace
         if workspace is None:
@@ -1370,6 +1455,24 @@ class ArcadeWarhammerWindow(arcade.Window):
         for row in workspace.rows:
             if row.row_id == group_id:
                 return row
+        for choice in workspace.shooting_choices:
+            if choice.choice_id == group_id:
+                return AssignmentWorkspaceRow(
+                    row_id=choice.choice_id,
+                    label=choice.label,
+                    source_ref_keys=choice.source_ref_keys,
+                    target_ref_keys=choice.target_ref_keys,
+                    summary_lines=choice.summary_lines,
+                )
+        for melee_choice in workspace.melee_choices:
+            if melee_choice.choice_id == group_id:
+                return AssignmentWorkspaceRow(
+                    row_id=melee_choice.choice_id,
+                    label=melee_choice.label,
+                    source_ref_keys=melee_choice.source_ref_keys,
+                    target_ref_keys=melee_choice.target_ref_keys,
+                    summary_lines=melee_choice.summary_lines,
+                )
         return None
 
     def _selected_assignment_target_ref_keys(self) -> tuple[str, ...]:
@@ -1952,7 +2055,11 @@ class ArcadeWarhammerWindow(arcade.Window):
         row_ids = (
             tuple(choice.choice_id for choice in workspace.shooting_choices)
             if workspace.proposal_kind == SHOOTING_DECLARATION_PROPOSAL_KIND
-            else tuple(row.row_id for row in workspace.rows)
+            else (
+                tuple(choice.choice_id for choice in workspace.melee_choices)
+                if workspace.proposal_kind == MELEE_DECLARATION_PROPOSAL_KIND
+                else tuple(row.row_id for row in workspace.rows)
+            )
         )
         if not row_ids:
             self._selected_assignment_group_id = None
@@ -2004,10 +2111,19 @@ class ArcadeWarhammerWindow(arcade.Window):
     def _clear_assignment_workspace(self) -> None:
         workspace = self._assignment_workspace
         decision = self._pending_decision
-        if workspace is not None and decision is not None and workspace.stratagem_mode_choices:
+        if (
+            workspace is not None
+            and decision is not None
+            and (
+                workspace.stratagem_target_selectable
+                or workspace.proposal_kind == MELEE_DECLARATION_PROPOSAL_KIND
+            )
+        ):
             self._assignment_workspace = AssignmentWorkspace.start_for_pending(decision)
             self._selected_assignment_group_id = None
-            self._trace_assignment_workspace_event("ui.assignment_stratagem_intent_cleared")
+            self._assignment_choice_index = 0
+            self._sync_selected_assignment_group()
+            self._trace_assignment_workspace_event("ui.assignment_choice_cleared")
             return
         if (
             workspace is None
@@ -2026,15 +2142,14 @@ class ArcadeWarhammerWindow(arcade.Window):
 
     def _cycle_assignment_choice(self) -> None:
         workspace = self._assignment_workspace
-        if workspace is None or workspace.proposal_kind != SHOOTING_DECLARATION_PROPOSAL_KIND:
+        if workspace is None:
             return
-        choice_count = len(workspace.shooting_choices)
+        choices = workspace.shooting_choices or workspace.melee_choices
+        choice_count = len(choices)
         if choice_count < 2:
             return
         self._assignment_choice_index = (self._assignment_choice_index + 1) % choice_count
-        self._selected_assignment_group_id = workspace.shooting_choices[
-            self._assignment_choice_index
-        ].choice_id
+        self._selected_assignment_group_id = choices[self._assignment_choice_index].choice_id
         self._trace_assignment_workspace_event("ui.assignment_choice_cycled")
 
     def _apply_movement_selection_at(

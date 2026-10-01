@@ -78,6 +78,29 @@ class ShootingAssignmentChoice:
 
 
 @dataclass(frozen=True, slots=True)
+class MeleeAssignmentSelection:
+    """One engine-offered melee weapon, target, and ability source choice."""
+
+    model_instance_id: str
+    weapon_instance_id: str
+    weapon_profile_id: str
+    target_unit_instance_id: str
+    selected_weapon_ability_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class MeleeAssignmentChoice:
+    """One request-scoped melee choice displayed by the assignment HUD."""
+
+    choice_id: str
+    selection: MeleeAssignmentSelection
+    label: str
+    source_ref_keys: tuple[str, ...]
+    target_ref_keys: tuple[str, ...]
+    summary_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AssignmentWorkspace:
     """Request-keyed advisory assignment payload preview."""
 
@@ -94,9 +117,12 @@ class AssignmentWorkspace:
     editable: bool = False
     shooting_choices: tuple[ShootingAssignmentChoice, ...] = ()
     shooting_selections: tuple[ShootingAssignmentSelection, ...] = ()
+    melee_choices: tuple[MeleeAssignmentChoice, ...] = ()
+    melee_selections: tuple[MeleeAssignmentSelection, ...] = ()
     stratagem_mode_choices: tuple[str, ...] = ()
     stratagem_selected_mode: str | None = None
     stratagem_target_unit_id: str | None = None
+    stratagem_target_selectable: bool = False
 
     @property
     def is_ready(self) -> bool:
@@ -173,16 +199,23 @@ class AssignmentWorkspace:
         pending_decision: UiDecision,
         *,
         target_unit_id: str,
-        source_mode: str,
+        source_mode: str | None = None,
     ) -> AssignmentWorkspace:
-        """Preview a user-selected target and a mode offered by the current source."""
+        """Preview a friendly target and any source-offered effect mode."""
 
         if self.proposal_kind != STRATAGEM_TARGET_BINDING_PROPOSAL_KIND or not self.is_for(
             pending_decision
         ):
             raise AssignmentWorkspaceError("Stratagem intent requires the current request.")
-        if source_mode not in self.stratagem_mode_choices:
-            raise AssignmentWorkspaceError("Stratagem mode was not offered by the current source.")
+        if not self.stratagem_target_selectable:
+            raise AssignmentWorkspaceError("Stratagem source has no selectable friendly target.")
+        if self.stratagem_mode_choices:
+            if source_mode not in self.stratagem_mode_choices:
+                raise AssignmentWorkspaceError(
+                    "Stratagem mode was not offered by the current source."
+                )
+        elif source_mode is not None:
+            raise AssignmentWorkspaceError("Stratagem source has no selectable effect mode.")
         if not target_unit_id:
             raise AssignmentWorkspaceError("Stratagem target unit is required.")
         return _stratagem_workspace(
@@ -190,6 +223,31 @@ class AssignmentWorkspace:
             target_unit_id=target_unit_id,
             source_mode=source_mode,
         )
+
+    def with_melee_selection(
+        self,
+        pending_decision: UiDecision,
+        selection: MeleeAssignmentSelection,
+    ) -> AssignmentWorkspace:
+        """Choose a current emitted melee row for one model."""
+
+        if self.proposal_kind != MELEE_DECLARATION_PROPOSAL_KIND or not self.is_for(
+            pending_decision
+        ):
+            raise AssignmentWorkspaceError("Melee selection requires the current request.")
+        if selection not in (choice.selection for choice in self.melee_choices):
+            raise AssignmentWorkspaceError(
+                "Melee selection was not offered by the current request."
+            )
+        selections = (
+            *(
+                current
+                for current in self.melee_selections
+                if current.model_instance_id != selection.model_instance_id
+            ),
+            selection,
+        )
+        return _melee_workspace(pending_decision, selections=selections)
 
 
 def is_assignment_parameterized_decision(pending_decision: UiDecision | None) -> bool:
@@ -455,30 +513,82 @@ def _shooting_workspace(
     )
 
 
-def _melee_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
+def _melee_workspace(
+    pending_decision: UiDecision,
+    *,
+    selections: tuple[MeleeAssignmentSelection, ...] | None = None,
+) -> AssignmentWorkspace:
     proposal = _required_parameterized_proposal(pending_decision)
     rows: list[AssignmentWorkspaceRow] = []
     declarations: list[JsonValue] = []
     diagnostics: list[str] = []
-    primary_model_ids: set[str] = set()
     available_weapons = _json_object_list(
         proposal.payload.get("available_weapons"),
         key="available_weapons",
         diagnostics=diagnostics,
     )
-    for weapon in available_weapons:
-        model_id = _text(weapon.get("model_instance_id"))
+    choices = _melee_choices(
+        request_id=proposal.request_id,
+        available_weapons=available_weapons,
+        diagnostics=diagnostics,
+    )
+    if selections is None:
+        current_selections: list[MeleeAssignmentSelection] = []
+        default_models: set[str] = set()
+        for weapon in available_weapons:
+            model_id = _text(weapon.get("model_instance_id"))
+            target_id = _first_string(weapon.get("engaged_target_unit_instance_ids"))
+            if not model_id or not target_id or model_id in default_models:
+                continue
+            if weapon.get("is_extra_attacks") is True:
+                continue
+            default_models.add(model_id)
+            matching = tuple(
+                choice.selection
+                for choice in choices
+                if choice.selection.model_instance_id == model_id
+                and choice.selection.weapon_instance_id == weapon.get("weapon_instance_id")
+                and choice.selection.weapon_profile_id == weapon.get("weapon_profile_id")
+                and choice.selection.target_unit_instance_id == target_id
+            )
+            if len(matching) == 1:
+                current_selections.append(matching[0])
+    else:
+        current_selections = list(selections)
+    offered_models = {choice.selection.model_instance_id for choice in choices}
+    selected_models = [selection.model_instance_id for selection in current_selections]
+    if len(selected_models) != len(set(selected_models)):
+        diagnostics.append("Melee choices must select at most one primary weapon per model.")
+    if offered_models.difference(selected_models):
+        diagnostics.append("Select an emitted melee weapon and ability source for each model.")
+    for selection in current_selections:
+        matches = tuple(
+            weapon
+            for weapon in available_weapons
+            if weapon.get("model_instance_id") == selection.model_instance_id
+            and weapon.get("weapon_instance_id") == selection.weapon_instance_id
+            and weapon.get("weapon_profile_id") == selection.weapon_profile_id
+            and weapon.get("is_extra_attacks") is not True
+            and selection.target_unit_instance_id
+            in _string_list(weapon.get("engaged_target_unit_instance_ids"))
+        )
+        if len(matches) != 1 or selection not in (choice.selection for choice in choices):
+            diagnostics.append("Melee selection must reference one current emitted weapon choice.")
+            continue
+        weapon = matches[0]
+        model_id = selection.model_instance_id
+        weapon_instance_id = selection.weapon_instance_id
+        weapon_profile_id = selection.weapon_profile_id
+        target_id = selection.target_unit_instance_id
         wargear_id = _text(weapon.get("wargear_id"))
-        weapon_profile_id = _text(weapon.get("weapon_profile_id"))
-        if not model_id or not wargear_id or not weapon_profile_id:
-            diagnostics.append("Melee weapon candidate is missing model/wargear/profile IDs.")
+        selected_ids = _selected_weapon_ability_ids(
+            weapon,
+            selected_ids=selection.selected_weapon_ability_ids,
+            diagnostics=diagnostics,
+        )
+        if not wargear_id or selected_ids is None:
+            diagnostics.append("Melee weapon candidate is missing wargear or ability source IDs.")
             continue
-        if model_id in primary_model_ids or weapon.get("is_extra_attacks") is True:
-            continue
-        target_id = _first_string(weapon.get("engaged_target_unit_instance_ids"))
-        if not target_id:
-            continue
-        primary_model_ids.add(model_id)
         target_allocations: list[JsonValue] = [
             {
                 "target_unit_instance_id": target_id,
@@ -487,19 +597,23 @@ def _melee_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
         declarations.append(
             {
                 "attacker_model_instance_id": model_id,
+                "weapon_instance_id": weapon_instance_id,
                 "wargear_id": wargear_id,
                 "weapon_profile_id": weapon_profile_id,
                 "target_allocations": target_allocations,
+                "selected_weapon_ability_ids": list(selected_ids),
             }
         )
         rows.append(
             AssignmentWorkspaceRow(
-                row_id=f"melee:{model_id}:{weapon_profile_id}",
+                row_id=f"melee:{model_id}:{weapon_instance_id}:{weapon_profile_id}",
                 label=f"{_short(model_id)} -> {_short(target_id)}",
                 source_ref_keys=(f"model:{model_id}",),
                 target_ref_keys=(f"unit:{target_id}",),
                 summary_lines=(
+                    f"Physical weapon: {weapon_instance_id}",
                     f"Primary melee profile: {weapon_profile_id}",
+                    *(f"Weapon ability source: {option_id}" for option_id in selected_ids),
                     "Single-target allocation uses full attack count.",
                 ),
             )
@@ -565,11 +679,72 @@ def _melee_workspace(pending_decision: UiDecision) -> AssignmentWorkspace:
         rows=tuple(rows),
         payload_preview=payload,
         local_hint_lines=(
-            "Melee declaration is seeded from engine-emitted engaged targets.",
+            "Melee preview uses engine-emitted physical weapons, targets, and ability sources.",
             "Split attacks and optional extra-attacks editing are follow-on interactions.",
         ),
         diagnostic_lines=tuple(diagnostics),
+        editable=True,
+        melee_choices=choices,
+        melee_selections=tuple(current_selections),
     )
+
+
+def _melee_choices(
+    *,
+    request_id: str,
+    available_weapons: tuple[JsonObject, ...],
+    diagnostics: list[str],
+) -> tuple[MeleeAssignmentChoice, ...]:
+    choices: list[MeleeAssignmentChoice] = []
+    for weapon_index, weapon in enumerate(available_weapons):
+        model_id = _text(weapon.get("model_instance_id"))
+        weapon_instance_id = _text(weapon.get("weapon_instance_id"))
+        wargear_id = _text(weapon.get("wargear_id"))
+        profile_id = _text(weapon.get("weapon_profile_id"))
+        if not model_id or not weapon_instance_id or not wargear_id or not profile_id:
+            diagnostics.append(
+                "Melee weapon candidate is missing physical/model/wargear/profile IDs."
+            )
+            continue
+        if weapon.get("is_extra_attacks") is True:
+            continue
+        target_ids = _string_list(weapon.get("engaged_target_unit_instance_ids"))
+        if not target_ids:
+            continue
+        option_sets = _shooting_ability_option_sets(weapon, diagnostics=diagnostics)
+        if option_sets is None:
+            continue
+        for target_id in target_ids:
+            for chosen_options in product(*option_sets):
+                selected_ids = tuple(option_id for option_id, _ in chosen_options)
+                selection = MeleeAssignmentSelection(
+                    model_instance_id=model_id,
+                    weapon_instance_id=weapon_instance_id,
+                    weapon_profile_id=profile_id,
+                    target_unit_instance_id=target_id,
+                    selected_weapon_ability_ids=selected_ids,
+                )
+                source_labels = tuple(label for _, label in chosen_options)
+                label = f"{_short(model_id)} {_short(weapon_instance_id)} -> {_short(target_id)}"
+                if source_labels:
+                    label += f" ({', '.join(source_labels)})"
+                parts = (request_id, str(weapon_index), target_id, *selected_ids)
+                choices.append(
+                    MeleeAssignmentChoice(
+                        choice_id="melee-choice:"
+                        + "".join(f"{len(part)}:{part}" for part in parts),
+                        selection=selection,
+                        label=label,
+                        source_ref_keys=(f"model:{model_id}",),
+                        target_ref_keys=(f"unit:{target_id}",),
+                        summary_lines=(
+                            f"Physical weapon: {weapon_instance_id}",
+                            f"Weapon profile: {profile_id}",
+                            *(f"Weapon ability source: {option_id}" for option_id in selected_ids),
+                        ),
+                    )
+                )
+    return tuple(choices)
 
 
 def _stratagem_workspace(
@@ -589,7 +764,10 @@ def _stratagem_workspace(
         diagnostics=diagnostics,
     )
     heroic_modes = _heroic_source_modes(catalog_record, diagnostics=diagnostics)
-    if heroic_modes and target_unit_id is not None:
+    selectable_friendly_target = bool(heroic_modes) or (
+        target_binding is None and _source_allows_friendly_target_intent(catalog_record)
+    )
+    if selectable_friendly_target and target_unit_id is not None:
         intent_binding: JsonObject = {
             "target_kind": "friendly_unit",
             "target_player_id": proposal.actor_id,
@@ -643,7 +821,12 @@ def _stratagem_workspace(
         target_binding_missing_line = (
             "Stratagem request does not expose a selectable target binding candidate yet."
         )
-        if declinable:
+        if selectable_friendly_target:
+            stratagem_hint_lines = (
+                *stratagem_hint_lines,
+                "Select a projected friendly unit, then choose this Stratagem target row.",
+            )
+        elif declinable:
             stratagem_hint_lines = (
                 *stratagem_hint_lines,
                 "No selectable target is exposed yet; decline is available.",
@@ -697,10 +880,11 @@ def _stratagem_workspace(
         diagnostic_lines=tuple(diagnostics),
         declinable=declinable,
         decline_payload=DECLINE_STRATAGEM_WINDOW_PAYLOAD if declinable else None,
-        editable=bool(heroic_modes),
+        editable=selectable_friendly_target,
         stratagem_mode_choices=heroic_modes,
         stratagem_selected_mode=source_mode,
         stratagem_target_unit_id=target_unit_id,
+        stratagem_target_selectable=selectable_friendly_target,
     )
 
 
@@ -1253,6 +1437,18 @@ def _heroic_source_modes(
     if not modes:
         diagnostics.append("Heroic Intervention source offers no effect modes.")
     return tuple(modes)
+
+
+def _source_allows_friendly_target_intent(catalog_record: JsonObject | None) -> bool:
+    if catalog_record is None:
+        return False
+    definition = catalog_record.get("definition")
+    target_spec = None if type(definition) is not dict else definition.get("target_spec")
+    return (
+        type(target_spec) is dict
+        and target_spec.get("target_kind") == "friendly_unit"
+        and target_spec.get("enumerable") is False
+    )
 
 
 def _stratagem_request_is_declinable(payload: JsonValue) -> bool:
