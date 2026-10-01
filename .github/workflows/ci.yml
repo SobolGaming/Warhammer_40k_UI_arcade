@@ -69,8 +69,8 @@ jobs:
       - name: Build package
         run: uv build
 
-  tests:
-    name: tests
+  fast_tests:
+    name: fast tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -105,8 +105,124 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked --all-groups
 
-      - name: Run tests with coverage
-        run: uv run coverage run -m pytest
+      - name: Run fast tests with coverage
+        run: uv run coverage run --parallel-mode -m pytest -m "not integration" --durations=10
 
-      - name: Coverage threshold
-        run: uv run coverage report
+      - name: Upload fast test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-fast
+          path: Warhammer_40k_UI_arcade/.coverage.*
+          if-no-files-found: error
+          include-hidden-files: true
+
+  integration:
+    name: integration
+    needs: [quality, fast_tests]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Warhammer_40k_UI_arcade
+    steps:
+      - name: Checkout UI repository
+        uses: actions/checkout@v4
+        with:
+          path: Warhammer_40k_UI_arcade
+
+      - name: Checkout supported core engine repository
+        uses: actions/checkout@v4
+        with:
+          repository: SobolGaming/Warhammer_40k_AI
+          ref: ${{ env.SUPPORTED_CORE_REVISION }}
+          path: Warhammer_40k_AI
+          token: ${{ secrets.CORE_REPO_TOKEN || github.token }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.14.5
+
+      - name: Install headless OpenGL dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1-mesa-dri
+
+      - name: Sync dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Run integration tests with coverage
+        run: uv run coverage run --parallel-mode -m pytest -m integration --durations=10
+
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-integration
+          path: Warhammer_40k_UI_arcade/.coverage.*
+          if-no-files-found: error
+          include-hidden-files: true
+
+  tests:
+    name: tests
+    if: ${{ always() }}
+    needs: [quality, fast_tests, integration]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Warhammer_40k_UI_arcade
+    steps:
+      - name: Require preceding jobs to pass
+        if: ${{ always() }}
+        working-directory: ${{ github.workspace }}
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          FAST_TESTS_RESULT: ${{ needs.fast_tests.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+        run: |
+          if [[ "$QUALITY_RESULT" != success || "$FAST_TESTS_RESULT" != success || "$INTEGRATION_RESULT" != success ]]; then
+            echo "Prerequisites: quality=$QUALITY_RESULT fast_tests=$FAST_TESTS_RESULT integration=$INTEGRATION_RESULT"
+            exit 1
+          fi
+
+      - name: Checkout UI repository
+        uses: actions/checkout@v4
+        with:
+          path: Warhammer_40k_UI_arcade
+
+      - name: Checkout supported core engine repository
+        uses: actions/checkout@v4
+        with:
+          repository: SobolGaming/Warhammer_40k_AI
+          ref: ${{ env.SUPPORTED_CORE_REVISION }}
+          path: Warhammer_40k_AI
+          token: ${{ secrets.CORE_REPO_TOKEN || github.token }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.14.5
+
+      - name: Sync dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Download fast test coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-fast
+          path: Warhammer_40k_UI_arcade
+
+      - name: Download integration coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-integration
+          path: Warhammer_40k_UI_arcade
+
+      - name: Full-suite coverage threshold
+        run: |
+          uv run coverage combine
+          uv run coverage report

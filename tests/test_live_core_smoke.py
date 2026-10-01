@@ -91,6 +91,7 @@ def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
     assert len(startup.battlefield_view.terrain) == 46
 
 
+@pytest.mark.integration
 def test_live_core_smoke_supports_reachable_setup_prebattle_stop_points() -> None:
     expected_decisions = {
         "setup": ("player-a", "select_secondary_missions"),
@@ -114,6 +115,7 @@ def test_live_core_smoke_supports_reachable_setup_prebattle_stop_points() -> Non
         assert startup.viewer_player_id == expected_actor
 
 
+@pytest.mark.integration
 def test_live_core_smoke_reports_unreachable_late_checkpoint() -> None:
     assert {"shooting", "charge", "fight"}.issubset(LIVE_CORE_SMOKE_STOP_PHASES)
 

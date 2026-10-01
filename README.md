@@ -120,6 +120,10 @@ uv run pre-commit run --all-files
 uv build
 ```
 
+CI runs `uv run pytest -m "not integration"` first. After quality checks and the fast tests pass,
+it runs the slow real-core checkpoint tests with `uv run pytest -m integration`. Use either command
+locally to run that section alone; plain `uv run pytest` still runs the full suite.
+
 ## Headless render tests
 
 The GUI event and render-evidence tests run Arcade in headless mode through pytest. On Linux, the
