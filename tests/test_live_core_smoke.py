@@ -116,14 +116,15 @@ def test_live_core_smoke_supports_reachable_setup_prebattle_stop_points() -> Non
 
 
 @pytest.mark.integration
-def test_live_core_smoke_reports_unreachable_late_checkpoint() -> None:
+def test_live_core_smoke_reaches_shooting_after_declining_overwatch() -> None:
     assert {"shooting", "charge", "fight"}.issubset(LIVE_CORE_SMOKE_STOP_PHASES)
-
-    with pytest.raises(
-        LiveCoreSmokeError,
-        match="Game became terminal before smoke checkpoint 'shooting'",
-    ):
-        build_live_core_smoke_startup(stop_at_phase="shooting")
+    startup = build_live_core_smoke_startup(stop_at_phase="shooting")
+    decision = startup.status.decision
+    assert decision is not None
+    assert decision.decision_type == "select_shooting_unit"
+    assert decision.actor_id == "player-a"
+    assert startup.game_view.current_battle_phase == "shooting"
+    assert startup.viewer_player_id == "player-a"
 
 
 def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> None:

@@ -173,6 +173,8 @@ def _automated_option_id(decision: UiDecision) -> str:
         )
     if decision.decision_type == "select_secondary_missions":
         return _required_option(decision, LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID)
+    if decision.decision_type == "use_stratagem":
+        return _required_option(decision, "decline_stratagem_window")
     if decision.decision_type == "select_reserve_declaration":
         return _required_option(decision, "complete_reserve_declarations")
     if decision.decision_type == "select_deployment_unit":
@@ -242,6 +244,11 @@ def _automated_parameterized_payload(
         raise LiveCoreSmokeError(
             f"Smoke request {decision.decision_type!r} requires explicit variant selection."
         )
+    if decision.decision_type == "submit_stratagem_target_proposal":
+        request = decision.payload
+        if type(request) is dict and request.get("declinable") is True:
+            return {"submission_kind": "decline_stratagem_window"}
+        raise LiveCoreSmokeError("Smoke Stratagem proposal does not declare a decline option.")
     kind = interaction.interaction_kind
     if kind in {"model_pose_placement", "multi_model_placement"}:
         return _placement_payload(proposal.payload, view=view)
