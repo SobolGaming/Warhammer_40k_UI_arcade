@@ -4,6 +4,9 @@ model = "gpt-6-astra"
 model_reasoning_effort = "ultra"
 sandbox_mode = "read-only"
 
+# Avoid automatically injecting memories from previous sessions.
+memories.use_memories = false
+
 developer_instructions = """
 Audit the exact base/head commits identified by the coordinator.
 Read the original milestone requirements and relevant source independently.
