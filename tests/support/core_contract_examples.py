@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import cast
 
 from warhammer40k_arcade_ui.core_client.compatibility import (
@@ -108,6 +108,11 @@ def verified_core_examples_root(
                 f"Core fixture manifest has unresolved example schema {schema_name!r} "
                 f"for {example_path}."
             )
+    for example_path in hash_map:
+        if example_path.startswith("examples/") and example_path not in schema_map:
+            raise CoreContractFixtureError(
+                f"Core fixture manifest example lacks a schema reference: {example_path}."
+            )
     for schema_name, schema_uri in schema_id_map.items():
         if (
             "/" in schema_name
@@ -172,10 +177,29 @@ def required_core_example_paths(
     """Collect an example family without silently producing zero test cases."""
 
     root = verified_core_examples_root(checkout, expected_revision=expected_revision)
+    manifest = _pinned_manifest(root)
+    schemas = cast(dict[str, str], manifest["example_schema_by_path"])
+    declared = {
+        root / contract_path.removeprefix("examples/")
+        for contract_path in schemas
+        if PurePosixPath(contract_path.removeprefix("examples/")).full_match(pattern)
+    }
     paths = tuple(sorted(root.glob(pattern)))
-    if not paths or any(not path.is_file() for path in paths):
+    if not declared and not paths:
         raise CoreContractFixtureError(
             f"Core contract example pattern {pattern!r} has no complete files under {root}."
+        )
+    unexpected = set(paths).difference(declared)
+    if unexpected:
+        raise CoreContractFixtureError(
+            f"Core contract example pattern {pattern!r} has files not manifest-listed: "
+            f"{', '.join(str(path) for path in sorted(unexpected))}."
+        )
+    missing = declared.difference(paths)
+    if missing:
+        raise CoreContractFixtureError(
+            f"Core contract example pattern {pattern!r} is missing manifest-listed examples: "
+            f"{', '.join(str(path) for path in sorted(missing))}."
         )
     return tuple(_verified_example_file(path, root) for path in paths)
 
@@ -196,10 +220,7 @@ def _verified_example_file(path: Path, root: Path) -> Path:
             f"Core contract example lies outside {root}: {path}."
         ) from exc
     contract_path = f"examples/{relative}"
-    manifest = cast(
-        dict[str, object],
-        json.loads((root.parent / "manifest.json").read_bytes()),
-    )
+    manifest = _pinned_manifest(root)
     hashes = cast(dict[str, str], manifest["file_sha256"])
     schemas = cast(dict[str, str], manifest["example_schema_by_path"])
     if contract_path not in hashes or contract_path not in schemas:
@@ -214,6 +235,13 @@ def _verified_example_file(path: Path, root: Path) -> Path:
             f"Core contract example differs from pinned Git tree: {path}."
         )
     return path
+
+
+def _pinned_manifest(root: Path) -> dict[str, object]:
+    return cast(
+        dict[str, object],
+        json.loads(_git_blob(root.parent.parent, "contracts/manifest.json")),
+    )
 
 
 def _git_output(core: Path, *args: str) -> str:

@@ -209,6 +209,61 @@ def test_tracked_but_unlisted_glob_match_is_rejected(
         required_core_example_paths("projections/*.json", checkout=core, expected_revision=revision)
 
 
+def test_sparse_checkout_missing_member_cannot_shrink_a_nonempty_family(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, _ = fixture_checkout
+    second = core / "contracts/examples/projections/second.json"
+    second.write_text('{"second": true}\n', encoding="utf-8")
+    manifest = _manifest(core)
+    cast(dict[str, str], manifest["file_sha256"])["examples/projections/second.json"] = (
+        hashlib.sha256(second.read_bytes()).hexdigest()
+    )
+    cast(dict[str, str], manifest["example_schema_by_path"])["examples/projections/second.json"] = (
+        "game-view.schema.json"
+    )
+    _save_manifest(core, manifest)
+    revision = _commit(core)
+    expected = (second, core / "contracts/examples/projections/view.json")
+    assert (
+        required_core_example_paths("projections/*.json", checkout=core, expected_revision=revision)
+        == expected
+    )
+
+    _git(core, "update-index", "--skip-worktree", "contracts/examples/projections/second.json")
+    second.unlink()
+    assert _git(core, "status", "--porcelain", "--untracked-files=all", "--", "contracts") == ""
+    with pytest.raises(CoreContractFixtureError, match="missing manifest-listed examples"):
+        required_core_example_paths("projections/*.json", checkout=core, expected_revision=revision)
+
+    second.write_text('{"second": true}\n', encoding="utf-8")
+    assert (
+        required_core_example_paths("projections/*.json", checkout=core, expected_revision=revision)
+        == expected
+    )
+
+
+def test_example_hash_without_schema_reference_is_rejected(
+    fixture_checkout: tuple[Path, str],
+) -> None:
+    core, _ = fixture_checkout
+    second = core / "contracts/examples/projections/second.json"
+    second.write_text("{}\n", encoding="utf-8")
+    manifest = _manifest(core)
+    cast(dict[str, str], manifest["file_sha256"])["examples/projections/second.json"] = (
+        hashlib.sha256(second.read_bytes()).hexdigest()
+    )
+    cast(dict[str, str], manifest["example_schema_by_path"])["examples/projections/second.json"] = (
+        "game-view.schema.json"
+    )
+    del cast(dict[str, str], manifest["example_schema_by_path"])["examples/projections/view.json"]
+    _save_manifest(core, manifest)
+    revision = _commit(core)
+
+    with pytest.raises(CoreContractFixtureError, match="example lacks a schema reference"):
+        verified_core_examples_root(core, expected_revision=revision)
+
+
 def test_missing_examples_directory_fails_clearly(fixture_checkout: tuple[Path, str]) -> None:
     core, _ = fixture_checkout
     (core / "contracts/examples/projections/view.json").unlink()
