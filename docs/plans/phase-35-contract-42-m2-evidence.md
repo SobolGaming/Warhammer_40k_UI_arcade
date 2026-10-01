@@ -62,21 +62,37 @@ public decision records. Independent mutable tests start fresh sessions. `charge
 argument validation because the canonical fixture reaches terminal without those requests after
 79 accepted decisions; separate real-session tests cover those editors.
 
-The same-runner corrected Contract 42 baseline at UI SHA
-`7b1b0339f1c39e35d1846543b997c915b28004d4` ran nine smoke tests in 198.01 seconds
-(198.96 seconds wall); the unchanged repeated-checkpoint test took 75.27 seconds. The first
-pre-cleanup run had eight passes and one failure because its generic Stratagem policy chose an
-unsupported parameterized target. The corrected baseline added an explicit public decline and a
-verified Shooting checkpoint before timing the successful suite; both raw runs are retained.
-The unchanged external probe measured 40 projections across 20 boundaries, including 20
-duplicate calls, in 1.775 seconds, and full
-headless window startup in 29.052 seconds. Half of the measured projection time, about 0.89
-seconds, is a rough duplicate-call estimate for the probed Movement traversal; it was not
-separately instrumented within window startup. A general view cache would add viewer and mutation
-invalidation complexity for that estimated saving, so this change keeps Core views uncached and
-removes the repeated traversal instead. The external probe and raw baseline logs are in the Phase 35
-campaign performance packet. The final candidate comparison must use that same probe on an idle
-runner, with exact UI SHA, command, test count, and Core build recorded there.
+The same idle runner measured corrected baseline UI SHA
+`7b1b0339f1c39e35d1846543b997c915b28004d4` against premeasurement candidate SHA
+`0618eb7628c6eec666307c2d7dacf357526b924d`, each with installed and locked Core SHA
+`6e86f44b87c4559a9297596d5d18dc4247b8cbc3`. The smoke command was
+`uv run --no-sync pytest -q tests/test_live_core_smoke.py --durations=0`, wrapped by
+`/usr/bin/time`; the same external `contract42_probe.py --phase all` measured both commits.
+The probe script, exact invocation and raw JSONL are in the Phase 35 campaign performance packet,
+not in this repository.
+
+| Measurement | Corrected baseline | Consolidated candidate |
+| --- | ---: | ---: |
+| Smoke module | 9 passed, 198.01 s pytest, 198.96 s wall | 13 passed, 117.77 s pytest, 118.76 s wall |
+| Verified cold package identity | 0.263 s, 173 instrumented JSON reads | 0.256 s, 173 instrumented JSON reads |
+| Smoke fixture import | 1.945 s, 48 instrumented JSON reads | 1.959 s, 48 instrumented JSON reads |
+| First / warm config creation | 7.119 / 0.102 s, 0 instrumented JSON reads | 7.165 / 0.100 s, 0 instrumented JSON reads |
+| Public decision traversal | 12.875 s, 19 accepted submissions | 12.925 s, 19 accepted submissions |
+| Viewer projection probe | 1.775 s, 40 calls including 20 same-boundary duplicates | 1.774 s, same 40 calls |
+| Full synchronous headless startup | 29.052 s | 28.874 s |
+
+The smoke module's measured pytest time fell 40.5% in this one pair of runs, despite the
+candidate module containing four more tests; this is not a statistical estimate or a claim that
+headless startup accelerated. The first pre-cleanup suite run had eight passes and one failure
+because its generic Stratagem policy chose an unsupported parameterized target. The corrected
+baseline added an explicit public decline and verified Shooting checkpoint before timing the
+successful suite; its unchanged repeated-checkpoint test alone took 75.27 seconds. Both raw
+baseline runs remain in the packet. The JSON read counts instrument `Path.read_bytes` in the
+installed Core package, not all operating-system I/O. In the probed Movement traversal, half of
+the 1.775-second projection total, about 0.89 seconds, is a rough duplicate-call estimate;
+window-specific duplicate time was not measured. A general view cache would add viewer and
+mutation invalidation complexity for that estimated saving, so this change keeps Core views
+uncached and removes repeated setup traversal instead.
 
 Exact-build public session `fork()` was also probed as a possible way to share setup among mutable
 tests. Core restore failed with `Primary mission boundary contradicts preceding movement history`.
@@ -86,7 +102,8 @@ runtime; switching the UI dependency does not reinterpret them.
 
 ## Gate status
 
-Final clean install, quality, coverage, and optimized performance gates are scheduled on the
-frozen M2 candidate. The pull request checks and Phase 35 review packet are the authoritative
-record of their commands, counts, result index, and raw logs. No measured comparison above is a
-CI budget or an unverified claim about JSON loading.
+The idle performance comparison above completed at the premeasurement candidate SHA. The final
+documentation commit changes this record only. Clean install, project quality, and coverage gates
+run on that final candidate; the pull request checks and Phase 35 review packet are the
+authoritative record of their commands, counts, result index, and raw logs. No measured comparison
+above is a CI budget or an unverified claim about JSON loading.
