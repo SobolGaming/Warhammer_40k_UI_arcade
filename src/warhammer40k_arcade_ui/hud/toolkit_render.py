@@ -1267,7 +1267,7 @@ def _dice_tray(
         )
     )
     summary_parts = [subtitle]
-    if total_text:
+    if total_text and f"total {total_text}" not in subtitle:
         summary_parts.append(f"total {total_text}")
     if _attribute_bool(node, "show_source", default=True) and source:
         summary_parts.append(source)
@@ -1301,15 +1301,56 @@ def _dice_tray(
     )
     if content_rect.height <= 0.0 or content_rect.width <= 0.0:
         return tuple(primitives)
-    primitives.extend(
-        _dice_face_columns(
-            node,
-            rect=content_rect,
-            theme=theme,
-            data=data,
-            reroll_request=reroll_request,
-        )
+    assignment_lines = _dice_assignment_lines(data)
+    assignment_height = min(
+        content_rect.height,
+        (len(assignment_lines) * theme.line_height_px) + 8.0 if assignment_lines else 0.0,
     )
+    for index, line in enumerate(assignment_lines):
+        is_diagnostic = line.startswith("Diagnostic:")
+        primitives.append(
+            TextPrimitive(
+                layer="hud_widget_dice_assignment",
+                text=_overflow_text(
+                    line,
+                    width_px=content_rect.width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
+                position=(content_rect.x, content_rect.top - (index * theme.line_height_px) - 2.0),
+                color=(
+                    theme.warning
+                    if is_diagnostic
+                    else theme.muted_text
+                    if index > 0
+                    else theme.selected
+                ),
+                font_size=_font_size_for_text(
+                    line,
+                    width_px=content_rect.width,
+                    font_size_px=theme.compact_font_size_px,
+                    policy=overflow,
+                ),
+                coordinate_space="screen",
+                anchor_y="top",
+            )
+        )
+    face_rect = ScreenRect(
+        content_rect.x,
+        content_rect.y,
+        content_rect.width,
+        max(0.0, content_rect.height - assignment_height),
+    )
+    if face_rect.height > 0.0:
+        primitives.extend(
+            _dice_face_columns(
+                node,
+                rect=face_rect,
+                theme=theme,
+                data=data,
+                reroll_request=reroll_request,
+            )
+        )
     if diagnostics:
         primitives.append(
             TextPrimitive(
@@ -1328,6 +1369,69 @@ def _dice_tray(
             )
         )
     return tuple(primitives)
+
+
+def _dice_assignment_lines(data: JsonObject) -> tuple[str, ...]:
+    """Label Core's physical, assigned and aggregate result evidence without recomputing it."""
+
+    raw_override = data.get("result_override")
+    if raw_override is None and "assigned_values" not in data:
+        return ()
+    physical = _dice_values(data.get("values"))
+    assigned = _dice_values(data.get("assigned_values"))
+    if physical is None or assigned is None or (physical and len(physical) != len(assigned)):
+        return ("Diagnostic: Malformed dice assignment evidence.",)
+    if raw_override is None and physical == assigned:
+        return ()
+    if not physical:
+        if raw_override is not None:
+            return ("Diagnostic: Dice override has no visible physical faces.",)
+        return (f"Assigned components: {_dice_values_text(assigned)}; physical faces unavailable",)
+
+    physical_text = f"Physical {_dice_values_text(physical)}"
+    assigned_text = f" | Assigned {_dice_values_text(assigned)}" if assigned != physical else ""
+    if raw_override is None:
+        return (physical_text + assigned_text,)
+    override = _data_object(raw_override)
+    component_index = override.get("component_index")
+    replacement = override.get("replacement_value")
+    source_rule_id = override.get("source_rule_id")
+    if (
+        "component_index" not in override
+        or type(replacement) is not int
+        or replacement <= 0
+        or type(source_rule_id) is not str
+        or not source_rule_id
+        or (
+            component_index is not None
+            and (type(component_index) is not int or not 0 <= component_index < len(physical))
+        )
+    ):
+        return ("Diagnostic: Malformed dice override evidence.",)
+    scope_text = (
+        f"Aggregate assigned {replacement}"
+        if component_index is None
+        else f"die {component_index + 1}={replacement}"
+    )
+    return (
+        f"{physical_text}{assigned_text} | {scope_text}",
+        f"Rule source: {source_rule_id}",
+    )
+
+
+def _dice_values(value: JsonValue | None) -> tuple[int, ...] | None:
+    if type(value) is not list:
+        return None
+    values: list[int] = []
+    for item in value:
+        if type(item) is not int:
+            return None
+        values.append(item)
+    return tuple(values)
+
+
+def _dice_values_text(values: tuple[int, ...]) -> str:
+    return ", ".join(str(value) for value in values)
 
 
 def _dice_face_columns(
