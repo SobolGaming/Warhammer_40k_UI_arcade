@@ -28,8 +28,12 @@ Unit as `unit_instance_id`, but does not publish its component unit IDs or model
 battlefield projection contains physical component rows only. The current movement editor correctly
 reports a projection mismatch instead of guessing attachment membership from names or model-ID
 prefixes. `test_contract42_charge_sources.py` retains the failing accepted-path regression and the
-emitted request/view evidence. This remains an in-scope acceptance gap pending a public Core
-contract change or reviewed resolution.
+emitted request/view evidence. The exact public request and both viewer projections are saved in
+the Phase 35 review packet at `m2/artifacts/attached-charge-public.json`, with its capture script,
+source-fixture hash, and result index beside it. The request context lists the canonical actor and
+committed target, while the viewer model rows name only `army-alpha:source` and
+`army-alpha:leader` as physical owners. This remains an in-scope acceptance gap pending a public
+Core contract change or reviewed resolution.
 
 **General Firing Deck.** Core requires `already_shot_unit_instance_ids` in the exact
 `firing_deck_selection` snapshot, but the ordinary shooting declaration request does not publish
