@@ -8,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+import pytest
 from warhammer40k_core.adapters.local_session import LocalGameSession
 from warhammer40k_core.adapters.setup_smoke import canonical_setup_prebattle_smoke_config
 from warhammer40k_core.core.datasheet import (
@@ -44,6 +45,8 @@ from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_
 from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
 from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
+
+pytestmark = pytest.mark.integration
 
 
 def test_split_successor_origin_and_owner_survive_viewer_switch_and_placement(

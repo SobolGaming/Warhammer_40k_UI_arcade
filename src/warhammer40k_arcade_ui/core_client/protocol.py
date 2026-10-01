@@ -1244,14 +1244,34 @@ class UiPlacementProposalRequest:
                 "placement request decision_type",
             )
             effect = _json_object("healing effect", proposal["effect"])
-            unit_instance_id = _required_string(effect, "target_unit_instance_id")
+            target_unit_instance_id = _required_string(effect, "target_unit_instance_id")
+            component_unit_instance_id = _required_string(proposal, "component_unit_instance_id")
+            phase_start = _json_object("revival_phase_start", proposal["revival_phase_start"])
+            _require_exact_keys(
+                phase_start,
+                _HEALING_REVIVAL_PHASE_START_KEYS,
+                "revival phase-start witness",
+            )
+            for key in _HEALING_REVIVAL_PHASE_START_KEYS - {"battle_round", "model_ids"}:
+                _required_string(phase_start, key)
+            if _required_int(phase_start, "battle_round") < 1:
+                raise UiClientProtocolError("Revival phase-start battle_round must be positive.")
+            model_ids = _string_list(phase_start, "model_ids")
+            if model_ids != sorted(set(model_ids)):
+                raise UiClientProtocolError(
+                    "Revival phase-start model_ids must be sorted and unique."
+                )
+            if phase_start["target_unit_instance_id"] != target_unit_instance_id:
+                raise UiClientProtocolError(
+                    "Revival phase-start target differs from the healing effect."
+                )
             return cls(
                 request_id=request_id,
                 decision_type=decision_type,
                 actor_id=actor_id,
                 game_id=None,
                 player_id=actor_id,
-                unit_instance_id=unit_instance_id,
+                unit_instance_id=component_unit_instance_id,
                 proposal_kind=proposal_kind,
                 placement_kind="return_to_battlefield",
                 placement_kinds=("return_to_battlefield",),
@@ -1268,7 +1288,12 @@ class UiPlacementProposalRequest:
                 setup_step=None,
                 action_kind=None,
                 source_rule_id=_required_string(effect, "source_rule_id"),
-                context={},
+                context={
+                    "target_rules_unit_instance_id": target_unit_instance_id,
+                    "step_index": _required_int(proposal, "step_index"),
+                    "effect": effect,
+                    "revival_phase_start": phase_start,
+                },
             )
         if decision_type == "submit_return_on_death_placement":
             _require_exact_keys(
@@ -2048,6 +2073,22 @@ def invalid_diagnostics_from_status(
     resolution = body.get("resolution")
     if resolution is not None:
         return _invalid_diagnostics_from_resolution(body=body, resolution=resolution)
+    if "violations" in body:
+        violations = _json_list("invalid status violations", body["violations"])
+        if not violations:
+            return (_malformed_invalid_status_diagnostic("has no violations"),)
+        request_id = _optional_string_value(body, "request_id")
+        top_level_kind = _optional_string_value(body, "proposal_kind") or _optional_string_value(
+            body, "placement_kind"
+        )
+        return tuple(
+            _invalid_diagnostic_from_top_level_violation(
+                violation=violation,
+                proposal_request_id=request_id,
+                proposal_kind=top_level_kind,
+            )
+            for violation in violations
+        )
     invalid_reason = body.get("invalid_reason")
     field = body.get("field")
     if invalid_reason is not None:
@@ -2100,6 +2141,23 @@ def _invalid_diagnostics_from_resolution(
             "proposal resolution violations",
             resolution_payload["violations"],
         )
+    )
+
+
+def _invalid_diagnostic_from_top_level_violation(
+    *,
+    violation: JsonValue,
+    proposal_request_id: str | None,
+    proposal_kind: str | None,
+) -> UiInvalidDiagnostic:
+    payload = _json_object("invalid status violation", violation)
+    return UiInvalidDiagnostic(
+        violation_code=_required_string(payload, "violation_code"),
+        message=_required_string(payload, "message"),
+        field=_optional_string_value(payload, "field"),
+        proposal_request_id=proposal_request_id,
+        proposal_kind=proposal_kind,
+        status="invalid",
     )
 
 
@@ -2278,11 +2336,25 @@ _HEALING_REVIVAL_REQUEST_KEYS = {
     "submission_kind",
     "proposal_kind",
     "effect",
+    "revival_phase_start",
     "step_index",
     "model_instance_id",
     "component_unit_instance_id",
     "source_selection_request_id",
     "source_selection_result_id",
+}
+
+_HEALING_REVIVAL_PHASE_START_KEYS = {
+    "rule_source_id",
+    "source_package_hash",
+    "game_id",
+    "battle_round",
+    "turn_owner_player_id",
+    "phase",
+    "phase_start_event_id",
+    "phase_start_window_id",
+    "target_unit_instance_id",
+    "model_ids",
 }
 
 _RETURN_ON_DEATH_REQUEST_KEYS = {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import cast
 
 from warhammer40k_core.adapters.local_session import LocalGameSession
@@ -45,8 +46,24 @@ COMMITTED = "army-beta:new"
 OTHER_REACHABLE = "army-beta:old"
 
 
-def seeded_charge_client() -> LocalSessionClient:
+def seeded_charge_client(*, fly: bool = False) -> LocalSessionClient:
     catalog = ArmyCatalog.phase9a_canonical_content_pack()
+    if fly:
+        catalog = replace(
+            catalog,
+            datasheets=tuple(
+                replace(
+                    sheet,
+                    keywords=replace(
+                        sheet.keywords,
+                        keywords=(*sheet.keywords.keywords, "FLY"),
+                    ),
+                )
+                if sheet.datasheet_id == "core-intercessor-like-infantry"
+                else sheet
+                for sheet in catalog.datasheets
+            ),
+        )
     mission_pack = warhammer_event_companion_2026_07_mission_pack()
     mission = MissionSetup(
         mission_pack_id=mission_pack.mission_pack_id,

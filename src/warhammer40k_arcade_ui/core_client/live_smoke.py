@@ -36,8 +36,6 @@ type LiveCoreSmokeStopPhase = Literal[
     "scout-move",
     "movement",
     "shooting",
-    "charge",
-    "fight",
 ]
 LIVE_CORE_SMOKE_STOP_PHASES: tuple[LiveCoreSmokeStopPhase, ...] = (
     "setup",
@@ -49,8 +47,6 @@ LIVE_CORE_SMOKE_STOP_PHASES: tuple[LiveCoreSmokeStopPhase, ...] = (
     "scout-move",
     "movement",
     "shooting",
-    "charge",
-    "fight",
 )
 
 _SETUP_STOP_DECISION_TYPES = {
@@ -62,8 +58,30 @@ _SETUP_STOP_DECISION_TYPES = {
     "prebattle": "select_prebattle_action",
     "scout-move": "submit_scout_move",
 }
-_BATTLE_STOP_PHASES = {"movement", "shooting", "charge", "fight"}
+_BATTLE_STOP_PHASES = {"movement", "shooting"}
 _MAX_AUTOMATED_DECISIONS = 200
+_CANONICAL_DEPLOYMENT_OPTION_IDS = (
+    "deploy:army-beta:scout-redeploy-unit",
+    "deploy:army-alpha:deep-strike-unit",
+    "deploy:army-alpha:scout-redeploy-unit",
+    "deploy:army-alpha:strategic-reserve-unit",
+)
+_CANONICAL_REDEPLOY_OPTION_IDS = {
+    "player-a": "redeploy:army-alpha:scout-redeploy-unit",
+    "player-b": "redeploy:army-beta:scout-redeploy-unit",
+}
+_CANONICAL_SCOUT_OPTION_IDS = {
+    "player-a": "scout_move:army-alpha:scout-redeploy-unit",
+    "player-b": "scout_move:army-beta:scout-redeploy-unit",
+}
+_CANONICAL_MOVEMENT_OPTION_IDS = {
+    "player-a": (
+        "army-alpha:deep-strike-unit",
+        "army-alpha:scout-redeploy-unit",
+        "army-alpha:strategic-reserve-unit",
+    ),
+    "player-b": ("army-beta:scout-redeploy-unit",),
+}
 
 
 class LiveCoreSmokeError(ValueError):
@@ -178,49 +196,64 @@ def _automated_option_id(decision: UiDecision) -> str:
     if decision.decision_type == "select_reserve_declaration":
         return _required_option(decision, "complete_reserve_declarations")
     if decision.decision_type == "select_deployment_unit":
-        return option_ids[0]
-    if decision.decision_type == "resolve_ordering":
-        player_b_order = next(
-            (option_id for option_id in option_ids if option_id.endswith(":player-b")),
+        chosen = next(
+            (
+                option_id
+                for option_id in _CANONICAL_DEPLOYMENT_OPTION_IDS
+                if option_id in option_ids
+            ),
             None,
         )
-        return player_b_order or option_ids[0]
+        if chosen is None:
+            raise LiveCoreSmokeError(
+                f"Canonical deployment option is absent from {decision.request_id!r}."
+            )
+        return chosen
     if decision.decision_type == "select_redeploy_unit":
-        redeploy = next(
-            (option_id for option_id in option_ids if option_id.startswith("redeploy:")),
-            None,
+        return _required_option(
+            decision,
+            _canonical_actor_option(decision, _CANONICAL_REDEPLOY_OPTION_IDS),
         )
-        return redeploy or _preferred_completion_option(option_ids)
     if decision.decision_type == "select_prebattle_action":
-        scout = next(
-            (option_id for option_id in option_ids if option_id.startswith("scout_move:")),
+        return _required_option(
+            decision,
+            _canonical_actor_option(decision, _CANONICAL_SCOUT_OPTION_IDS),
+        )
+    if decision.decision_type == "select_movement_unit":
+        actor_id = decision.actor_id
+        if actor_id is None or actor_id not in _CANONICAL_MOVEMENT_OPTION_IDS:
+            raise LiveCoreSmokeError(
+                f"Canonical smoke has no movement actor policy at {decision.request_id!r}."
+            )
+        chosen = next(
+            (
+                option_id
+                for option_id in _CANONICAL_MOVEMENT_OPTION_IDS[actor_id]
+                if option_id in option_ids
+            ),
             None,
         )
-        return scout or _preferred_completion_option(option_ids)
+        if chosen is None:
+            raise LiveCoreSmokeError(
+                f"Canonical movement option is absent from {decision.request_id!r}."
+            )
+        return chosen
     if decision.decision_type == "select_movement_action":
-        return _first_available_option(
-            option_ids,
-            ("remain_stationary", "normal_move", "fall_back"),
+        return _required_option(decision, "remain_stationary")
+    raise LiveCoreSmokeError(
+        f"Canonical smoke has no option policy for {decision.decision_type!r} "
+        f"at {decision.request_id!r}."
+    )
+
+
+def _canonical_actor_option(decision: UiDecision, choices: dict[str, str]) -> str:
+    actor_id = decision.actor_id
+    if actor_id is None or actor_id not in choices:
+        raise LiveCoreSmokeError(
+            f"Canonical smoke has no actor policy for {decision.decision_type!r} "
+            f"at {decision.request_id!r}."
         )
-    return _preferred_completion_option(option_ids)
-
-
-def _preferred_completion_option(option_ids: tuple[str, ...]) -> str:
-    for token in ("complete", "decline", "pass", "skip", "none", "no_"):
-        option = next((value for value in option_ids if token in value.lower()), None)
-        if option is not None:
-            return option
-    return option_ids[0]
-
-
-def _first_available_option(
-    option_ids: tuple[str, ...],
-    preferred: tuple[str, ...],
-) -> str:
-    for option_id in preferred:
-        if option_id in option_ids:
-            return option_id
-    return _preferred_completion_option(option_ids)
+    return choices[actor_id]
 
 
 def _required_option(decision: UiDecision, option_id: str) -> str:

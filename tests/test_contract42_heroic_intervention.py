@@ -28,6 +28,8 @@ from warhammer40k_arcade_ui.state.assignment_workspace import AssignmentWorkspac
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
+pytestmark = pytest.mark.integration
+
 
 def _request(client: LocalSessionClient) -> UiDecision:
     status = client.advance_until_decision_or_terminal()

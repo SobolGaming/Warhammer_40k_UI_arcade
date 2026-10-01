@@ -2,6 +2,11 @@
 
 Status: Proposed (reviewed 2026-09-30)
 
+Implementation note: this is the reviewed baseline plan. The Phase 35 branch now pins the exact
+Contract 42 revision; [M2 evidence and limits](phase-35-contract-42-m2-evidence.md) records the
+observed runtime behavior and remaining acceptance gaps. The baseline descriptions below are
+historical and do not describe the current branch state.
+
 ## Purpose and baseline
 
 Adapt the Arcade UI to the reviewed core revision without adding a second rules path. The UI

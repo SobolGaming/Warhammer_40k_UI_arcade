@@ -354,6 +354,8 @@ class MovementDraft:
             movement_phase_action=self.movement_phase_action,
             movement_mode=self.movement_mode,
             fall_back_mode=self.fall_back_mode,
+            allows_nullable_movement_mode=self.proposal_context.get("context_kind")
+            == "triggered_movement",
         )
         if context_diagnostic is not None:
             raise MovementDraftError(context_diagnostic.message)
@@ -941,7 +943,7 @@ class MovementDraft:
             "proposal_kind": self.proposal_kind,
             "unit_instance_id": self.selected_unit_id,
             "movement_phase_action": self.movement_phase_action,
-            "movement_mode": _non_empty_string("movement_mode", self.movement_mode),
+            "movement_mode": self.movement_mode,
             "witness": {
                 "model_paths": [
                     {
@@ -1026,7 +1028,7 @@ class MovementDraft:
             "proposal_kind": self.proposal_kind,
             "unit_instance_id": self.selected_unit_id,
             "movement_phase_action": self.movement_phase_action,
-            "movement_mode": _non_empty_string("movement_mode", self.movement_mode),
+            "movement_mode": self.movement_mode,
         }
         self._add_family_payload_fields(body, no_move=True)
         return _json_object("movement no-move payload", body)
@@ -1143,6 +1145,7 @@ def movement_proposal_context_diagnostic(
         movement_phase_action=proposal.movement_phase_action,
         movement_mode=_proposal_movement_mode(proposal),
         fall_back_mode=_context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY),
+        allows_nullable_movement_mode=proposal.context.get("context_kind") == "triggered_movement",
     )
 
 
@@ -1180,6 +1183,7 @@ def _movement_context_diagnostic(
     movement_phase_action: str | None,
     movement_mode: str | None,
     fall_back_mode: str | None,
+    allows_nullable_movement_mode: bool,
 ) -> MovementProposalContextDiagnostic | None:
     if decision_type not in SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES:
         return MovementProposalContextDiagnostic(
@@ -1190,7 +1194,11 @@ def _movement_context_diagnostic(
                 f"{decision_type}."
             ),
         )
-    if proposal_kind in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS and movement_mode is None:
+    if (
+        proposal_kind in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS
+        and movement_mode is None
+        and not allows_nullable_movement_mode
+    ):
         return MovementProposalContextDiagnostic(
             violation_code="movement_mode_missing_from_proposal_context",
             field=f"context.{MOVEMENT_MODE_CONTEXT_KEY}",
@@ -1275,6 +1283,10 @@ def _proposal_movement_budget_inches(
     explicit_budget = _context_positive_float(proposal.context, profile.distance_context_key)
     if explicit_budget is not None:
         return explicit_budget
+    if proposal.proposal_kind == "surge_move":
+        descriptor = proposal.context.get("descriptor")
+        if type(descriptor) is dict:
+            return _context_positive_float(descriptor, "max_distance_inches")
     base_budget = _proposal_base_movement_budget_inches(proposal=proposal, unit=unit)
     if proposal.proposal_kind == "advance":
         advance_roll = _advance_roll_value(proposal.context)

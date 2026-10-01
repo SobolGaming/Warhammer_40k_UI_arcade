@@ -20,6 +20,8 @@ from warhammer40k_arcade_ui.state.assignment_workspace import (
     ShootingAssignmentSelection,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def _required_decision(client: LocalSessionClient) -> UiDecision:
     status = client.advance_until_decision_or_terminal()

@@ -198,13 +198,12 @@ uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase redeploy --ui-pr
 uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase prebattle --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase scout-move --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase movement --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase shooting --ui-prefs docs/preferences/default.yaml
 ```
 
-The CLI also recognizes `shooting`, `charge`, and `fight` as contract checkpoints. The current
-canonical core fixture becomes terminal before reaching them, so requesting one exits the smoke
-startup path with a typed `Game became terminal before smoke checkpoint ...` diagnostic. They are
-not advertised as reachable smoke checkpoints until a core-owned fixture can reach them through
-public decisions.
+`charge` and `fight` are rejected at argument validation: the canonical core fixture exposes no
+public Charge or Fight decision before becoming terminal. Separate real-session tests cover those
+editors.
 
 Stop points:
 
@@ -223,6 +222,8 @@ Stop points:
 - `movement`: auto-answer setup and prebattle smoke decisions, complete reserve declarations, deploy
   all smoke units, resolve Scout Move, then pause at the first battle-round `select_movement_unit`
   request.
+- `shooting`: continue the same public decision traversal through Movement, then pause at the first
+  battle-round Shooting request.
 
 All scripted choices are submitted through the public real-local-session facade. The harness does
 not inspect lifecycle queues or replace authoritative battlefield state. Scripted choices are only

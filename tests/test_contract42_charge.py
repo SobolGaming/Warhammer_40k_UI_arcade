@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from warhammer40k_core.engine.event_log import JsonValue
 
 from tests.support.contract42_charge_fixture import (
@@ -17,6 +18,8 @@ from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_game_view
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
+
+pytestmark = pytest.mark.integration
 
 
 def test_charge_draft_submits_only_committed_reachable_target() -> None:

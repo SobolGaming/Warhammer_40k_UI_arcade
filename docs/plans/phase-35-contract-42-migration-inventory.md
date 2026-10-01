@@ -2,9 +2,11 @@
 
 Reviewed against `Warhammer_40k_AI` commit
 `6e86f44b87c4559a9297596d5d18dc4247b8cbc3`. This is evidence for the Phase 35 plan,
-not a claim that the UI already supports Contract 42. The UI still pins
-`dbfcc3a99e9d560d1354506352a09d48ca555a94` / Contract `10.2.0` until the atomic
-compatibility milestone passes its acceptance gates.
+not a claim that every UI workflow supports Contract 42. The original planning baseline pinned
+`dbfcc3a99e9d560d1354506352a09d48ca555a94` / Contract `10.2.0`; the Phase 35 implementation
+branch now pins the reviewed Contract 42 commit. The pin must not merge until the atomic
+compatibility milestone passes its acceptance gates. The separate M2 evidence record tracks
+implemented behavior, measured performance, and unresolved public-contract gaps.
 
 Sources at the reviewed commit: every file from `contracts/migrations/10-to-11.md` through
 `41-to-42.md`, `contracts/manifest.json`,

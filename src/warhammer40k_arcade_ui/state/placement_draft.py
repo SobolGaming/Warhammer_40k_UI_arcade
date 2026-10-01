@@ -270,9 +270,9 @@ class PlacementDraft:
         if proposal is None:
             return None
         unit = _unit_by_id(view, proposal.unit_instance_id)
-        model_ids = proposal.required_model_ids or (
-            tuple(model.model_id for model in unit.models) if unit is not None else ()
-        )
+        model_ids = proposal.required_model_ids or _context_model_ids(proposal.context)
+        if not model_ids and unit is not None:
+            model_ids = tuple(model.model_id for model in unit.models)
         if not model_ids:
             return None
         models_by_id = _models_by_id(unit)
@@ -568,9 +568,15 @@ class PlacementDraft:
             "transport_movement_status",
             "large_model_exceptions",
             "restriction_overrides",
+            "start_engaged_enemy_unit_instance_ids",
         ):
-            value = (self.context or {}).get(key)
-            if value not in (None, (), []):
+            context = self.context or {}
+            value = context.get(key)
+            if key == "start_engaged_enemy_unit_instance_ids":
+                include = key in context and value is not None
+            else:
+                include = value not in (None, (), [])
+            if include:
                 body[key] = validate_json_value(value)
         return _json_object("placement proposal payload", body)
 
@@ -661,6 +667,20 @@ def _models_by_id(unit: UnitView | None) -> dict[str, ModelBaseView]:
     if unit is None:
         return {}
     return {model.model_id: model for model in unit.models}
+
+
+def _context_model_ids(context: JsonObject) -> tuple[str, ...]:
+    """Use the public request's model inventory for units absent from the battlefield."""
+
+    raw = context.get("model_instance_ids")
+    if raw is None:
+        return ()
+    if type(raw) is not list:
+        raise PlacementDraftError("context.model_instance_ids must be a list.")
+    model_ids = tuple(_non_empty_string("context.model_instance_id", value) for value in raw)
+    if len(model_ids) != len(set(model_ids)):
+        raise PlacementDraftError("context.model_instance_ids must be unique.")
+    return model_ids
 
 
 def _placement_pose_from_projection(

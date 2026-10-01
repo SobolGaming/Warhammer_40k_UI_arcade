@@ -53,6 +53,8 @@ from warhammer40k_arcade_ui.state.assignment_workspace import (
     ShootingAssignmentSelection,
 )
 
+pytestmark = pytest.mark.integration
+
 _CARGO = ("army-alpha:passenger-1", "army-alpha:passenger-2")
 _TRANSPORT = "army-alpha:transport-1"
 _TARGET = "army-beta:enemy"

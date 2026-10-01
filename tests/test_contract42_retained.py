@@ -25,6 +25,8 @@ from warhammer40k_arcade_ui.render.primitives import PLAYER_2_COLOR
 from warhammer40k_arcade_ui.state.assignment_workspace import AssignmentWorkspace
 from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.parametrize(
     "reaction_kind",

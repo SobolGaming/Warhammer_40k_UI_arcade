@@ -207,6 +207,7 @@ def _duplicate_core_config() -> GameConfig:
     )
 
 
+@pytest.mark.integration
 def test_real_setup_duplicate_core_sources_are_owner_private_and_reject_forgery() -> None:
     client = LocalSessionClient(session=LocalGameSession())
     status = client.start_game(_duplicate_core_config())
@@ -434,6 +435,7 @@ def _lethal_battle_with_duplicate_demise(
     )
 
 
+@pytest.mark.integration
 def test_real_duplicate_deadly_demise_requires_an_issued_source_without_decline() -> None:
     client = _lethal_battle_with_duplicate_demise()
     status = client.advance_until_decision_or_terminal()
@@ -510,6 +512,7 @@ def test_real_duplicate_deadly_demise_requires_an_issued_source_without_decline(
     assert client.get_view("player-b").projection_state_hash == stale_hash
 
 
+@pytest.mark.integration
 def test_real_save_choice_preserves_floor_and_separate_ap_and_roll_sources() -> None:
     client = _lethal_battle_with_duplicate_demise(save_sources=True)
     status = client.advance_until_decision_or_terminal()
@@ -653,6 +656,7 @@ def _evaluated_random_values(value: JsonValue) -> tuple[JsonObject, ...]:
     return tuple(found)
 
 
+@pytest.mark.integration
 def test_real_random_range_keeps_raw_evaluation_identity_and_source_modifiers() -> None:
     client = _lethal_battle_with_duplicate_demise(random_range=True)
     status = client.advance_until_decision_or_terminal()
@@ -701,6 +705,7 @@ def test_real_random_range_keeps_raw_evaluation_identity_and_source_modifiers() 
     assert result.status_kind != "invalid", result.invalid_diagnostics
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("component_index", "replacement_value"),
     [(0, 9), (None, 14)],
@@ -985,6 +990,7 @@ def _mission_action_client() -> tuple[LocalSessionClient, str]:
     )
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("ignore_bonus", [False, True])
 def test_real_action_oc_scope_reenumerates_after_source_choices(ignore_bonus: bool) -> None:
     client, unit_id = _mission_action_client()
