@@ -1,7 +1,7 @@
 name = "sol_code_reviewer"
 description = "Independent review of a frozen candidate for defects and regressions."
 
-model = "gpt-6.1-sol"
+model = "gpt-6-sol"
 model_reasoning_effort = "ultra"
 sandbox_mode = "read-only"
 
