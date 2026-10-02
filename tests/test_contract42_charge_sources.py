@@ -321,7 +321,6 @@ def _ready_attached_draft(client: LocalSessionClient, decision: UiDecision) -> M
     draft = draft.add_waypoint(view=battlefield, world_point=(17.0, 25.0))
     ready = draft.mark_ready(view=battlefield)
     assert ready.payload_preview is not None
-    assert ready.synthetic_witness_model_ids == ()
     return ready
 
 
@@ -604,7 +603,7 @@ def _scout_client(*, attached: bool, transport: bool) -> LocalSessionClient:
                 if unit_id == "army-alpha:scout-redeploy-unit"
                 else Pose.at(7.0, 54.5)
                 if unit_id == "army-alpha:leader"
-                else Pose.at(15.0, 52.0)
+                else Pose.at(20.0, 55.0)
                 if unit_id == "army-alpha:transport"
                 else Pose.at(32.0, 7.0)
             )
@@ -808,3 +807,73 @@ def test_scout_source_distance_choices_are_projected_and_routed(
             result_id="ui-scout-stale-source",
         )
     assert _records_and_battlefield(client) == after_selection
+    if transport:
+        _verify_transport_scout_endpoint_submission(client, proposal)
+
+
+def _verify_transport_scout_endpoint_submission(
+    client: LocalSessionClient, proposal: UiDecision
+) -> None:
+    """Submit a real two-pose Scout witness, after an invalid start-position attempt."""
+
+    owner_view = client.get_view("player-a")
+    battlefield = battlefield_view_from_game_view(owner_view)
+    unit_id = "army-alpha:transport"
+    preferences = default_preferences()
+    selection = SelectionState.initial(preferences).select_model_id(
+        unit_id=unit_id,
+        model_id=None,
+        preferences=preferences,
+    )
+    draft = MovementDraft.start_for_pending(
+        view=battlefield,
+        selection=selection,
+        pending_decision=proposal,
+    )
+    assert draft is not None
+    start_x, start_y = draft.model_paths[0].points[0]
+    ready = draft.add_waypoint(
+        view=battlefield,
+        world_point=(start_x + 1.0, start_y),
+    ).mark_ready(view=battlefield)
+    payload = ready.payload_preview
+    assert payload is not None
+    request = proposal.movement_proposal
+    assert request is not None
+    assert payload["proposal_request_id"] == proposal.request_id
+    assert payload["source_rule_id"] == request.source_rule_id
+    assert payload["action_kind"] == "dedicated_transport_scout_move"
+    assert payload["context"] == request.context
+    paths = cast(list[JsonObject], _object(payload["witness"])["model_paths"])
+    assert paths
+    assert all(len(cast(list[JsonObject], path["poses"])) == 2 for path in paths)
+    before = _records_and_battlefield(client)
+    invalid = deepcopy(payload)
+    invalid_paths = cast(list[JsonObject], _object(invalid["witness"])["model_paths"])
+    first_pose = _object(cast(list[JsonObject], invalid_paths[0]["poses"])[0])
+    position = _object(first_pose["position"])
+    position["x"] = cast(float, position["x"]) + 1.0
+    rejected = client.submit_parameterized_payload(
+        request_id=proposal.request_id,
+        payload=invalid,
+        result_id="ui-scout-invalid-start-path",
+    )
+    assert rejected.status_kind == "invalid"
+    assert any(
+        diagnostic.violation_code == "witness_start_drift"
+        for diagnostic in rejected.invalid_diagnostics
+    )
+    assert _records_and_battlefield(client) == before
+    assert client.get_view("player-a").pending_decision == proposal
+    accepted = client.submit_parameterized_payload(
+        request_id=proposal.request_id,
+        payload=payload,
+        result_id="ui-scout-endpoint-path",
+    )
+    assert accepted.status_kind != "invalid", accepted.invalid_diagnostics
+    completion = next(
+        event
+        for event in client.get_events_since(0, "player-a").events
+        if event["event_type"] == "prebattle_scout_move_completed"
+    )
+    assert completion in client.get_events_since(0, "player-b").events

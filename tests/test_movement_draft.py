@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from tests.support.contract_fixtures import decision_from_fixture
-from warhammer40k_arcade_ui.core_client.protocol import UiDecision
+from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView
@@ -230,8 +230,6 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     payload = draft.payload_preview
 
     assert payload is not None
-    assert draft.synthetic_witness_model_ids == ()
-    assert draft.synthetic_witness_point_count == 0
     assert not any("synthetic midpoint witness evidence" in hint for hint in draft.local_hint_lines)
     assert draft.payload_witness_summary_lines == (
         "intercessor_1: 2 witness point(s)",
@@ -294,7 +292,6 @@ def test_charge_move_payload_preserves_entered_witness_and_committed_targets() -
     )
     assert draft is not None
     one_waypoint = draft.add_waypoint(view=view, world_point=(10.0, 18.0))
-    assert one_waypoint.synthetic_witness_model_ids == ()
     one_waypoint_witness = one_waypoint.to_payload()["witness"]
     assert type(one_waypoint_witness) is dict
     one_waypoint_paths = one_waypoint_witness["model_paths"]
@@ -317,7 +314,6 @@ def test_charge_move_payload_preserves_entered_witness_and_committed_targets() -
     assert payload["proposal_kind"] == "charge_move"
     assert payload["movement_mode"] == "charge"
     assert payload["charge_target_unit_instance_ids"] == ["guardian_squad"]
-    assert ready.synthetic_witness_model_ids == ()
     witness = payload["witness"]
     assert type(witness) is dict
     model_paths = witness["model_paths"]
@@ -329,6 +325,87 @@ def test_charge_move_payload_preserves_entered_witness_and_committed_targets() -
         {"position": {"x": 8.5, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
         {"position": {"x": 10.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
     ]
+
+
+@pytest.mark.parametrize(
+    ("proposal_kind", "action_kind"),
+    [
+        ("scout_move", "scout_move"),
+        ("scout_move", "dedicated_transport_scout_move"),
+        ("pile_in", "pile_in"),
+        ("consolidate", "consolidate"),
+    ],
+)
+def test_current_path_witness_preserves_entered_endpoints_and_waypoints(
+    proposal_kind: str, action_kind: str
+) -> None:
+    view = default_battlefield_view()
+    decision = (
+        _scout_move_proposal_decision(action_kind=action_kind)
+        if proposal_kind == "scout_move"
+        else _movement_proposal_decision(
+            proposal_kind=proposal_kind,
+            movement_phase_action=proposal_kind,
+            phase="fight",
+            context={
+                "movement_mode": proposal_kind,
+                "maximum_distance_inches": 3.0,
+                f"legal_{proposal_kind}_target_unit_instance_ids": ["guardian_squad"],
+                "legal_consolidation_modes": ["engaging"] if proposal_kind == "consolidate" else [],
+            },
+        )
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+    assert draft is not None
+
+    endpoint_only = draft.add_waypoint(view=view, world_point=(9.0, 18.0)).mark_ready(view=view)
+    endpoint_payload = endpoint_only.payload_preview
+    assert endpoint_payload is not None
+    assert endpoint_payload["proposal_request_id"] == decision.request_id
+    assert endpoint_payload["proposal_kind"] == proposal_kind
+    if proposal_kind == "scout_move":
+        assert endpoint_payload["action_kind"] == action_kind
+        assert endpoint_payload["source_rule_id"] == "core:scouts"
+        assert endpoint_payload["scout_distance_inches"] == 6.0
+    else:
+        assert endpoint_payload["movement_mode"] == proposal_kind
+        assert endpoint_payload["movement_phase_action"] == proposal_kind
+    endpoint_paths = _witness_model_paths(endpoint_payload)
+    assert _path_points(endpoint_paths["intercessor_1"]) == ((7.0, 18.0), (9.0, 18.0))
+    assert _path_points(endpoint_paths["intercessor_2"]) == ((7.0, 22.0), (7.0, 22.0))
+    assert _path_points(endpoint_paths["intercessor_3"]) == ((7.0, 26.0), (7.0, 26.0))
+    assert endpoint_only.payload_witness_summary_lines[0] == "intercessor_1: 2 witness point(s)"
+    if proposal_kind != "scout_move":
+        movements = endpoint_payload["model_movements"]
+        assert type(movements) is list
+        movement_paths: dict[str, object] = {}
+        for row in movements:
+            assert type(row) is dict
+            model_id = row.get("model_instance_id")
+            assert type(model_id) is str
+            movement_paths[model_id] = row["path"]
+        assert movement_paths == {
+            model_id: path["poses"] for model_id, path in endpoint_paths.items()
+        }
+
+    with_waypoint = (
+        draft.add_waypoint(view=view, world_point=(8.0, 18.5))
+        .add_waypoint(view=view, world_point=(9.0, 18.0))
+        .mark_ready(view=view)
+    )
+    waypoint_payload = with_waypoint.payload_preview
+    assert waypoint_payload is not None
+    waypoint_paths = _witness_model_paths(waypoint_payload)
+    assert _path_points(waypoint_paths["intercessor_1"]) == (
+        (7.0, 18.0),
+        (8.0, 18.5),
+        (9.0, 18.0),
+    )
+    assert with_waypoint.payload_witness_summary_lines[0] == "intercessor_1: 3 witness point(s)"
 
 
 def test_charge_move_refuses_missing_target_commitment() -> None:
@@ -621,6 +698,7 @@ def _movement_proposal_decision(
     request_id: str = "decision-request-000005",
     proposal_kind: str = "normal_move",
     movement_phase_action: str = "normal_move",
+    phase: str = "movement",
     context: dict[str, object] | None = None,
 ) -> UiDecision:
     proposal_context = (
@@ -644,7 +722,7 @@ def _movement_proposal_decision(
                     "actor_id": "player_1",
                     "game_id": "phase9-game",
                     "battle_round": 1,
-                    "phase": "movement",
+                    "phase": phase,
                     "unit_instance_id": "intercessor_squad",
                     "proposal_kind": proposal_kind,
                     "source_decision_request_id": "decision-request-000004",
@@ -664,6 +742,85 @@ def _movement_proposal_decision(
             ],
         }
     )
+
+
+def _scout_move_proposal_decision(*, action_kind: str) -> UiDecision:
+    request_id = "decision-request-scout-endpoints"
+    return decision_from_fixture(
+        {
+            "request_id": request_id,
+            "decision_type": "submit_scout_move",
+            "actor_id": "player_1",
+            "payload": {
+                "proposal_request": {
+                    "request_id": request_id,
+                    "decision_type": "submit_scout_move",
+                    "actor_id": "player_1",
+                    "game_id": "scout-endpoint-fixture",
+                    "setup_step": "resolve_prebattle_actions",
+                    "player_id": "player_1",
+                    "unit_instance_id": "intercessor_squad",
+                    "component_unit_instance_ids": ["intercessor_squad"],
+                    "model_instance_ids": [
+                        "intercessor_1",
+                        "intercessor_2",
+                        "intercessor_3",
+                    ],
+                    "proposal_kind": "scout_move",
+                    "action_kind": action_kind,
+                    "source_rule_id": "core:scouts",
+                    "placement_kind": None,
+                    "scout_distance_inches": 6.0,
+                    "deployment_zone_ids": ["deployment-zone-a"],
+                    "legal_deployment_zones": [],
+                    "mission_setup": {},
+                    "ruleset_descriptor_hash": "ruleset-scout-endpoints",
+                    "source_decision_request_id": "decision-request-prebattle-endpoints",
+                    "source_decision_result_id": "ui-result-prebattle-endpoints",
+                    "context": {"source_selected_option_id": f"{action_kind}:intercessor_squad"},
+                }
+            },
+            "is_parameterized": True,
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )
+
+
+def _witness_model_paths(payload: JsonObject) -> dict[str, JsonObject]:
+    witness = payload.get("witness")
+    assert type(witness) is dict
+    rows = witness.get("model_paths")
+    assert type(rows) is list
+    paths: dict[str, JsonObject] = {}
+    for row in rows:
+        assert type(row) is dict
+        model_id = row.get("model_id")
+        assert type(model_id) is str
+        paths[model_id] = row
+    return paths
+
+
+def _path_points(path: JsonObject) -> tuple[tuple[float, float], ...]:
+    poses = path.get("poses")
+    assert type(poses) is list
+    points: list[tuple[float, float]] = []
+    for pose in poses:
+        assert type(pose) is dict
+        position = pose.get("position")
+        assert type(position) is dict
+        x, y = position.get("x"), position.get("y")
+        assert isinstance(x, (int, float))
+        assert not isinstance(x, bool)
+        assert isinstance(y, (int, float))
+        assert not isinstance(y, bool)
+        points.append((float(x), float(y)))
+    return tuple(points)
 
 
 def _shooting_proposal_decision() -> UiDecision:

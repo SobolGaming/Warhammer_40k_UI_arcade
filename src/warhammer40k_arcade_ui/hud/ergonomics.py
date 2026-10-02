@@ -1113,7 +1113,7 @@ def _assignment_notice_rows(
             component_id=f"assignment_notice_{index}",
             icon_id="action.summary",
             primary_label=_assignment_notice_label(line),
-            secondary_label=_assignment_notice_body(line),
+            secondary_label=line,
             state="warning" if _is_warning_assignment_advisory(line) else "active",
             density="compact",
         )
@@ -1130,8 +1130,7 @@ def _prioritized_assignment_advisories(lines: tuple[str, ...]) -> tuple[str, ...
 def _is_warning_assignment_advisory(line: str) -> bool:
     lower_line = line.lower()
     return (
-        "synthetic midpoint" in lower_line
-        or "invalid" in lower_line
+        "invalid" in lower_line
         or "unsupported" in lower_line
         or "projection/request drift" in lower_line
         or "missing from this viewer projection" in lower_line
@@ -1141,8 +1140,6 @@ def _is_warning_assignment_advisory(line: str) -> bool:
 
 
 def _assignment_notice_label(line: str) -> str:
-    if "synthetic midpoint" in line.lower():
-        return "Synthetic witness"
     if (
         "projection/request drift" in line.lower()
         or "missing from this viewer projection" in line.lower()
@@ -1151,18 +1148,6 @@ def _assignment_notice_label(line: str) -> str:
     if "mode context" in line.lower():
         return "Context missing"
     return "Advisory"
-
-
-def _assignment_notice_body(line: str) -> str:
-    synthetic_prefix = "UI-generated synthetic midpoint witness evidence will be inserted for "
-    if synthetic_prefix in line:
-        suffix = line.split(synthetic_prefix, maxsplit=1)[1]
-        count_summary = suffix.split(":", maxsplit=1)[0].replace(
-            "straight moved model path(s)",
-            "straight path(s)",
-        )
-        return f"Synthetic midpoint witness evidence: {count_summary}."
-    return line
 
 
 def _assignment_subtitle(assignment_hud_panel: AssignmentHudPanelView | None) -> str:

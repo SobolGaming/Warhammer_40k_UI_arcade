@@ -57,13 +57,6 @@ SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS = frozenset(
         "scout_move",
     )
 )
-SAMPLED_WITNESS_PROPOSAL_KINDS = frozenset(
-    (
-        "pile_in",
-        "consolidate",
-        "scout_move",
-    )
-)
 NO_WITNESS_NO_MOVE_PROPOSAL_KINDS = frozenset(
     (
         "charge_move",
@@ -101,7 +94,6 @@ class MovementProposalProfile:
 
     proposal_kind: str
     decision_type: str
-    requires_sampled_witness: bool
     allows_no_witness_no_move: bool
     distance_context_key: str | None
 
@@ -149,31 +141,17 @@ class MovementModelPath:
 
         return any(math.dist(start, end) > 0.0 for start, end in pairwise(self.points))
 
-    def uses_synthetic_payload_midpoint(self, *, requires_sampled_witness: bool) -> bool:
-        """Return whether payload serialization inserts midpoint witness evidence."""
-
-        return (
-            requires_sampled_witness
-            and len(self.points) == 2
-            and math.dist(self.points[0], self.points[1]) > 0.0
-        )
-
     @property
     def path_length_inches(self) -> float:
         """Return total path length in inches."""
 
         return _polyline_length(self.points)
 
-    def payload_points(self, *, requires_sampled_witness: bool) -> tuple[WorldPoint, ...]:
-        """Return payload points, including explicit no-op start/end for unchanged models."""
+    def payload_points(self) -> tuple[WorldPoint, ...]:
+        """Preserve entered points and expand an unchanged model to explicit start/end."""
 
         if len(self.points) == 1:
             return (self.points[0], self.points[0])
-        if self.uses_synthetic_payload_midpoint(requires_sampled_witness=requires_sampled_witness):
-            # The engine needs non-endpoint path evidence even for straight moved segments.
-            start, end = self.points
-            midpoint = ((start[0] + end[0]) / 2.0, (start[1] + end[1]) / 2.0)
-            return (start, midpoint, end)
         return self.points
 
     def with_translated_waypoint(
@@ -553,47 +531,15 @@ class MovementDraft:
         return self.total_model_count - self.assigned_model_count
 
     @property
-    def synthetic_witness_model_ids(self) -> tuple[str, ...]:
-        """Return model IDs whose payload paths receive generated midpoint evidence."""
-
-        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
-        return tuple(
-            path.model_id
-            for path in self.model_paths
-            if path.uses_synthetic_payload_midpoint(
-                requires_sampled_witness=requires_sampled_witness
-            )
-        )
-
-    @property
-    def synthetic_witness_point_count(self) -> int:
-        """Return the number of generated witness points in the payload preview."""
-
-        return len(self.synthetic_witness_model_ids)
-
-    @property
     def payload_witness_summary_lines(self) -> tuple[str, ...]:
         """Return ready-preview path witness point summaries for debug HUD display."""
 
         if self.ready_payload is None:
             return ()
         lines: list[str] = []
-        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
         for path in self.model_paths:
-            suffix = (
-                ", synthetic midpoint"
-                if path.uses_synthetic_payload_midpoint(
-                    requires_sampled_witness=requires_sampled_witness
-                )
-                else ", no-op"
-                if not path.has_movement
-                else ""
-            )
-            lines.append(
-                f"{path.model_id}: "
-                f"{len(path.payload_points(requires_sampled_witness=requires_sampled_witness))} "
-                f"witness point(s){suffix}"
-            )
+            suffix = ", no-op" if not path.has_movement else ""
+            lines.append(f"{path.model_id}: {len(path.payload_points())} witness point(s){suffix}")
         return tuple(lines)
 
     @property
@@ -937,7 +883,6 @@ class MovementDraft:
             return self._scout_move_payload()
         if not self.has_assignments and self.proposal_profile.allows_no_witness_no_move:
             return self._no_witness_no_move_payload()
-        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
         body: JsonObject = {
             "proposal_request_id": self.proposal_request_id,
             "proposal_kind": self.proposal_kind,
@@ -948,12 +893,7 @@ class MovementDraft:
                 "model_paths": [
                     {
                         "model_id": path.model_id,
-                        "poses": [
-                            _pose_payload(point)
-                            for point in path.payload_points(
-                                requires_sampled_witness=requires_sampled_witness
-                            )
-                        ],
+                        "poses": [_pose_payload(point) for point in path.payload_points()],
                     }
                     for path in self.model_paths
                 ],
@@ -961,15 +901,8 @@ class MovementDraft:
             "model_movements": [
                 {
                     "model_instance_id": path.model_id,
-                    "path": [
-                        _pose_payload(point)
-                        for point in path.payload_points(
-                            requires_sampled_witness=requires_sampled_witness
-                        )
-                    ],
-                    "final_pose": _pose_payload(
-                        path.payload_points(requires_sampled_witness=requires_sampled_witness)[-1]
-                    ),
+                    "path": [_pose_payload(point) for point in path.payload_points()],
+                    "final_pose": _pose_payload(path.payload_points()[-1]),
                 }
                 for path in self.model_paths
             ],
@@ -985,7 +918,6 @@ class MovementDraft:
         return _json_object("movement proposal payload", body)
 
     def _scout_move_payload(self) -> JsonObject:
-        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
         body: JsonObject = {
             "proposal_request_id": self.proposal_request_id,
             "proposal_kind": self.proposal_kind,
@@ -1007,12 +939,7 @@ class MovementDraft:
                 "model_paths": [
                     {
                         "model_id": path.model_id,
-                        "poses": [
-                            _pose_payload(point)
-                            for point in path.payload_points(
-                                requires_sampled_witness=requires_sampled_witness
-                            )
-                        ],
+                        "poses": [_pose_payload(point) for point in path.payload_points()],
                     }
                     for path in self.model_paths
                 ],
@@ -1261,7 +1188,6 @@ def movement_proposal_profile(
     return MovementProposalProfile(
         proposal_kind=proposal_kind,
         decision_type=decision_type,
-        requires_sampled_witness=proposal_kind in SAMPLED_WITNESS_PROPOSAL_KINDS,
         allows_no_witness_no_move=proposal_kind in NO_WITNESS_NO_MOVE_PROPOSAL_KINDS,
         distance_context_key=distance_key,
     )
@@ -1400,13 +1326,6 @@ def _seed_entity_selection(
 
 def _local_hint_lines(*, view: BattlefieldView, draft: MovementDraft) -> tuple[str, ...]:
     hints: list[str] = ["Preview/advisory only; engine validates movement."]
-    if draft.synthetic_witness_model_ids:
-        hints.append(
-            "Preview note: "
-            "UI-generated synthetic midpoint witness evidence will be inserted for "
-            f"{draft.synthetic_witness_point_count} straight moved model path(s): "
-            f"{_compact_model_ids(draft.synthetic_witness_model_ids)}."
-        )
     selected_count = len(draft.selected_model_ids)
     hints.append(f"Active movement selection: {selected_count} model(s).")
     if draft.unchanged_model_count:
@@ -1469,13 +1388,6 @@ def _has_self_overlap(draft: MovementDraft) -> bool:
             ):
                 return True
     return False
-
-
-def _compact_model_ids(model_ids: tuple[str, ...], *, limit: int = 3) -> str:
-    if len(model_ids) <= limit:
-        return ", ".join(model_ids)
-    shown = ", ".join(model_ids[:limit])
-    return f"{shown}, +{len(model_ids) - limit} more"
 
 
 def _polyline_length(points: tuple[WorldPoint, ...]) -> float:

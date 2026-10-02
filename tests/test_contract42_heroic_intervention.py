@@ -310,7 +310,6 @@ def test_source_mode_continues_through_shared_charge_and_witnessed_move(mode: st
     assert move_payload is not None
     assert move_payload["proposal_request_id"] == movement.request_id
     assert move_payload["charge_target_unit_instance_ids"] == [COMMITTED]
-    assert ready.synthetic_witness_model_ids == ()
     witness = cast(JsonObject, move_payload["witness"])
     model_paths = cast(list[JsonObject], witness["model_paths"])
     assert len(model_paths) == len(source.models)

@@ -103,8 +103,6 @@ class MovementDraftPanelView:
     current_segment_inches: float | None
     total_path_inches: float | None
     remaining_budget_inches: float | None
-    synthetic_witness_model_ids: tuple[str, ...]
-    synthetic_witness_point_count: int
     payload_witness_lines: tuple[str, ...]
     ready: bool
     hint_lines: tuple[str, ...]
@@ -346,8 +344,6 @@ def build_movement_draft_panel(
             current_segment_inches=movement_draft.current_segment_length,
             total_path_inches=movement_draft.total_path_length,
             remaining_budget_inches=movement_draft.remaining_budget_inches,
-            synthetic_witness_model_ids=movement_draft.synthetic_witness_model_ids,
-            synthetic_witness_point_count=movement_draft.synthetic_witness_point_count,
             payload_witness_lines=movement_draft.payload_witness_summary_lines,
             ready=movement_draft.is_ready,
             hint_lines=movement_draft.local_hint_lines,
@@ -371,8 +367,6 @@ def build_movement_draft_panel(
             current_segment_inches=None,
             total_path_inches=None,
             remaining_budget_inches=None,
-            synthetic_witness_model_ids=(),
-            synthetic_witness_point_count=0,
             payload_witness_lines=(),
             ready=False,
             hint_lines=("Proposal visible; movement draft tool is not applicable.",),
@@ -398,8 +392,6 @@ def build_movement_draft_panel(
             current_segment_inches=None,
             total_path_inches=None,
             remaining_budget_inches=None,
-            synthetic_witness_model_ids=(),
-            synthetic_witness_point_count=0,
             payload_witness_lines=(),
             ready=False,
             hint_lines=(),
@@ -428,8 +420,6 @@ def build_movement_draft_panel(
             current_segment_inches=None,
             total_path_inches=None,
             remaining_budget_inches=None,
-            synthetic_witness_model_ids=(),
-            synthetic_witness_point_count=0,
             payload_witness_lines=(),
             ready=False,
             hint_lines=(
@@ -462,8 +452,6 @@ def build_movement_draft_panel(
             current_segment_inches=None,
             total_path_inches=None,
             remaining_budget_inches=None,
-            synthetic_witness_model_ids=(),
-            synthetic_witness_point_count=0,
             payload_witness_lines=(),
             ready=False,
             hint_lines=(
@@ -491,8 +479,6 @@ def build_movement_draft_panel(
         current_segment_inches=None,
         total_path_inches=None,
         remaining_budget_inches=None,
-        synthetic_witness_model_ids=(),
-        synthetic_witness_point_count=0,
         payload_witness_lines=(),
         ready=False,
         hint_lines=("Requested unit is not selected.",),

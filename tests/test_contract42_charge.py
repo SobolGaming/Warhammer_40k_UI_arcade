@@ -123,7 +123,6 @@ def test_charge_draft_submits_only_committed_reachable_target() -> None:
     assert payload["charge_target_unit_instance_ids"] == [COMMITTED]
     assert payload["proposal_request_id"] == move_request.request_id
     assert payload["unit_instance_id"] == SOURCE
-    assert ready.synthetic_witness_model_ids == ()
     assert ready.assigned_model_count == len(source.models)
     witness = payload["witness"]
     assert type(witness) is dict
