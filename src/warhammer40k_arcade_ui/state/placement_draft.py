@@ -158,6 +158,7 @@ class PlacementDraft:
     submission_variant_id: str | None = None
     spatial_context_hash: str | None = None
     projection_state_hash: str | None = None
+    army_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -251,6 +252,17 @@ class PlacementDraft:
             "projection_state_hash",
             _optional_string("projection_state_hash", self.projection_state_hash),
         )
+        object.__setattr__(self, "army_id", _optional_string("army_id", self.army_id))
+        if (
+            self.decision_type == "submit_catalog_model_materialization_placement"
+            and self.army_id is None
+        ):
+            raise PlacementDraftError("Model materialization requires the emitted army_id.")
+        if (
+            self.decision_type != "submit_catalog_model_materialization_placement"
+            and self.army_id is not None
+        ):
+            raise PlacementDraftError("Only model materialization may carry an emitted army_id.")
 
     @classmethod
     def start_for_pending(
@@ -282,10 +294,15 @@ class PlacementDraft:
         if route.editor_id != PLACEMENT_EDITOR or not route.supported:
             return None
         submission_variant_id = route.submission_variant_id
+        materialized_models_by_id = {
+            _non_empty_string("materialized model_instance_id", model["model_instance_id"]): model
+            for model in proposal.materialized_models
+        }
         model_poses = tuple(
             _placement_pose_from_projection(
                 model_id=model_id,
                 model=models_by_id.get(model_id),
+                materialized_model=materialized_models_by_id.get(model_id),
                 model_display_by_id=model_display_by_id,
                 authoritative_models_by_id=authoritative_models_by_id,
                 expected_unit_id=proposal.unit_instance_id,
@@ -315,6 +332,7 @@ class PlacementDraft:
             submission_variant_id=submission_variant_id,
             spatial_context_hash=proposal.spatial_context_hash,
             projection_state_hash=projection_state_hash,
+            army_id=proposal.army_id,
         )
 
     @property
@@ -402,6 +420,11 @@ class PlacementDraft:
             and proposal.source_decision_request_id == self.source_decision_request_id
             and proposal.source_decision_result_id == self.source_decision_result_id
             and proposal.spatial_context_hash == self.spatial_context_hash
+            and proposal.army_id == self.army_id
+            and (
+                self.decision_type != "submit_catalog_model_materialization_placement"
+                or proposal.required_model_ids == tuple(pose.model_id for pose in self.model_poses)
+            )
             and variant_id == self.submission_variant_id
             and (
                 self.projection_state_hash is None
@@ -542,7 +565,7 @@ class PlacementDraft:
                 body["context"] = self.context
             return _json_object("pre-battle placement payload", body)
         attempted_placement: JsonObject = {
-            "army_id": _army_id_from_unit_instance_id(self.selected_unit_id, self.player_id),
+            "army_id": _placement_army_id(self),
             "player_id": self.player_id,
             "unit_instance_id": self.selected_unit_id,
             "model_placements": model_placements,
@@ -625,7 +648,7 @@ def _model_placement_payload(draft: PlacementDraft, pose: PlacementModelPose) ->
     unit_id = pose.unit_instance_id or draft.selected_unit_id
     player_id = pose.owner_player_id or draft.player_id
     payload: JsonObject = {
-        "army_id": _army_id_from_unit_instance_id(draft.selected_unit_id, draft.player_id),
+        "army_id": _placement_army_id(draft),
         "player_id": player_id,
         "unit_instance_id": unit_id,
         "model_instance_id": pose.model_id,
@@ -687,11 +710,31 @@ def _placement_pose_from_projection(
     *,
     model_id: str,
     model: ModelBaseView | None,
+    materialized_model: JsonObject | None,
     model_display_by_id: JsonObject | None,
     authoritative_models_by_id: JsonObject | None,
     expected_unit_id: str,
     expected_player_id: str,
 ) -> PlacementModelPose:
+    if materialized_model is not None:
+        # Core has instantiated these models in the request, before adding them to the
+        # physical projection. Their emitted base and identities are the draft authority.
+        if model is not None or (
+            authoritative_models_by_id is not None and model_id in authoritative_models_by_id
+        ):
+            raise PlacementDraftError(
+                "Request-created materialized model already exists in the physical projection."
+            )
+        return PlacementModelPose(
+            model_id=model_id,
+            base_radius=_base_radius_from_size(
+                _json_object("materialized model base_size", materialized_model.get("base_size")),
+                field_name="materialized model base_size",
+            ),
+            position=None,
+            unit_instance_id=expected_unit_id,
+            owner_player_id=expected_player_id,
+        )
     unit_id = expected_unit_id
     player_id = expected_player_id
     split_origin: JsonObject | None = None
@@ -732,15 +775,27 @@ def _model_base_radius(
     )
     if display is None:
         return _DEFAULT_PRESENTATION_BASE_RADIUS_INCHES
-    base_size = _json_object("model_display.base_size", display.get("base_size"))
-    kind = _non_empty_string("model_display.base_size.kind", base_size.get("kind"))
+    return _base_radius_from_size(
+        _json_object("model_display.base_size", display.get("base_size")),
+        field_name="model_display.base_size",
+    )
+
+
+def _base_radius_from_size(base_size: JsonObject, *, field_name: str) -> float:
+    kind = _non_empty_string(f"{field_name}.kind", base_size.get("kind"))
     if kind == "circular":
         return _positive_float_field(base_size, "diameter_mm") / _MM_PER_INCH / 2.0
     if kind == "oval":
         length = _positive_float_field(base_size, "length_mm")
         width = _positive_float_field(base_size, "width_mm")
         return max(length, width) / _MM_PER_INCH / 2.0
-    raise PlacementDraftError(f"model_display base_size kind is unsupported: {kind}.")
+    raise PlacementDraftError(f"{field_name} kind is unsupported: {kind}.")
+
+
+def _placement_army_id(draft: PlacementDraft) -> str:
+    if draft.decision_type == "submit_catalog_model_materialization_placement":
+        return _required_string_value("army_id", draft.army_id)
+    return _army_id_from_unit_instance_id(draft.selected_unit_id, draft.player_id)
 
 
 def _optional_model_display(

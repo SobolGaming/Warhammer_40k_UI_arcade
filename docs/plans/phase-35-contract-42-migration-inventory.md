@@ -38,6 +38,22 @@ Ambush marker has place and no-marker variants. The flat families are Cult Ambus
 model materialization, healing revival, and return-on-death placement. Other parameterized
 families retain nested `payload.proposal_request` examples.
 
+Model materialization is a flat placement family whose newly created model IDs are absent
+from `battlefield_view.authoritative.models_by_id` until Core accepts placement. Its current
+request supplies the exact `models`, ordered `model_instance_ids`, `army_id`, source physical
+unit, and player. The editor uses those fields for the new model base and submission identity;
+it continues to require projected ownership and `split_origin` for existing placement models.
+The source unit may also lack a rendered `UnitView` after its last old model is destroyed.
+The materialization regression covers the headless editor, Core payload shape, stale/invalid
+retry, viewer switch, and accepted placement through a public session built from a pinned
+Core-generated checkpoint. No local model profile or placement legality is inferred.
+
+The additional first-failed-save Damage-to-zero regression in
+`tests/test_contract42_damage_zero.py` follows the public `select_modifier_ignores` request
+through both keep and ignore branches. It checks the emitted sourced `SET 0` operation,
+forged and stale option rejection without a decision record or projection change, and
+owner/opponent event and pending-request scope. The UI never computes replacement damage.
+
 The target manifest's JSON schema URI revisions are distinct from the runtime payload
 discriminators. The target runtime still emits `decision-request-view-v5-phase17n-step4` and
 `interaction-descriptor-v2-variants`; their manifest schema URIs are v6 and v3 respectively.

@@ -909,6 +909,8 @@ class UiPlacementProposalRequest:
     source_rule_id: str | None
     context: JsonObject
     spatial_context_hash: str | None = None
+    army_id: str | None = None
+    materialized_models: tuple[JsonObject, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "request_id", _non_empty_string("request_id", self.request_id))
@@ -982,6 +984,29 @@ class UiPlacementProposalRequest:
             "spatial_context_hash",
             _optional_string("spatial_context_hash", self.spatial_context_hash),
         )
+        object.__setattr__(self, "army_id", _optional_string("army_id", self.army_id))
+        if type(self.materialized_models) is not tuple:
+            raise UiClientProtocolError("materialized_models must be a tuple.")
+        models = tuple(
+            _json_object("materialized model", model) for model in self.materialized_models
+        )
+        if self.decision_type == "submit_catalog_model_materialization_placement":
+            if self.army_id is None or not models:
+                raise UiClientProtocolError(
+                    "Model materialization requires an army and emitted models."
+                )
+            model_ids = tuple(_required_string(model, "model_instance_id") for model in models)
+            if model_ids != self.required_model_ids or len(set(model_ids)) != len(model_ids):
+                raise UiClientProtocolError(
+                    "Materialized models must match the emitted model_instance_ids exactly."
+                )
+            for model in models:
+                _json_object("materialized model base_size", _required_value(model, "base_size"))
+        elif self.army_id is not None or models:
+            raise UiClientProtocolError(
+                "Only model materialization may carry request-created model authority."
+            )
+        object.__setattr__(self, "materialized_models", models)
 
     @classmethod
     def from_payload(
@@ -1204,7 +1229,10 @@ class UiPlacementProposalRequest:
                 decision_type,
                 "placement request decision_type",
             )
-            _json_list("materialized models", proposal["models"])
+            models = tuple(
+                _json_object("materialized model", model)
+                for model in _json_list("materialized models", proposal["models"])
+            )
             placement_kind = _required_string(proposal, "placement_kind")
             player_id = _required_matching_string(
                 proposal,
@@ -1230,6 +1258,8 @@ class UiPlacementProposalRequest:
                 action_kind=_required_string(proposal, "action_phase"),
                 source_rule_id=_required_string(proposal, "source_rule_id"),
                 context={},
+                army_id=_required_string(proposal, "army_id"),
+                materialized_models=models,
             )
         if decision_type == "submit_healing_revival_placement":
             _require_exact_keys(
