@@ -14,6 +14,7 @@ actually checks. The approved acceptance criteria remain unchanged.
 | Finite decisions and source evidence | `test_contract42_finite_source.py` routes all nine new finite families using current engine-authored request/option IDs. Real sessions exercise duplicate Core ability privacy, mandatory Deadly Demise, Mission Action OC reenumeration, random values, source modifiers and dice evidence. | Canonical request examples prove UI routing; they do not claim nine independent gameplay scenarios. |
 | Dice assignment display | `test_contract42_finite_source.py` reads Core-authored component and aggregate override events through both viewer projections. `test_dice_tray_render.py` checks that identical physical faces and totals produce distinct component versus aggregate labels and headless pixels, keeps the Core total and source rule evidence, and reports malformed evidence visibly. | Domain seeding demonstrates presentation of existing results; it does not assert permission to create a dice assignment during play. |
 | Shooting, melee, Charge, placement | `test_contract42_shooting.py`, `test_contract42_shooting_hud.py`, `test_contract42_melee_sources.py`, `test_contract42_charge.py`, and `test_contract42_split_placement.py` cover real accepted/invalid submissions, physical weapon/profile and duplicated ability-instance choices, explicit empty and nullable shooting declarations, committed Charge subset, and current split successor origin/owner proof. Melee HUD choice selection is also exercised headlessly in `test_assignment_workspace.py`. | The attached Charge and general Firing Deck public-data gaps below remain open. |
+| Movement path witnesses | `test_movement_draft.py` checks exact endpoint-only and entered multi-point serialization for Scout, dedicated Transport Scout, Pile In, and Consolidate, including explicit duplicate start/end for unchanged models. The real Transport Scout path in `test_contract42_charge_sources.py` checks a shifted start returns typed `witness_start_drift` without state change, then submits an exact two-pose UI witness for an accepted Core completion. | The UI preserves entered poses; Core alone validates path legality and samples segments. Attached-unit Scout and Charge still need the missing public component membership described below. |
 | Setup and arrival | `test_contract42_setup_arrival.py` covers public nullable mission edges, oversized exception rejection and retry, loaded Transport ingress with Rapid Disembark restrictions and redaction, Shock's explicit empty engagement list, tactical setup history and subsequent Embark option suppression, Aircraft ingress/return options without Hover, and real revival with its source-linked phase-start witness. | This mission fixture offers reserve ingress in round one, so it does not prove a deadline that suppresses ingress. Its oversized arrival hands control to the opponent in round two, so that path does not establish a same-turn activity lock; the test checks current emitted options without local enforcement. |
 | Source-specific continuations | `test_contract42_heroic_intervention.py`, `test_contract42_heroic_hud.py`, `test_contract42_overwatch.py`, `test_contract42_firing_deck.py`, and `test_contract42_public_contexts.py` exercise current actor/mode and phase-end shooter selection through the HUD, a first-shooter Firing Deck inventory, scoring attribution, nullable terrain capability, flight, Surge, and public contact redaction. | The Firing Deck fixture knows the initial shot history from its own setup. Contact redaction is seeded with typed Core event data and does not assert the engine generates that event in this fixture. |
 
@@ -64,37 +65,39 @@ argument validation because the canonical fixture reaches terminal without those
 79 accepted decisions; separate real-session tests cover those editors.
 
 The idle runner measured corrected baseline UI SHA
-`7b1b0339f1c39e35d1846543b997c915b28004d4` against the dice-renderer implementation
-SHA `619110c3dca52cad605dc4b8c031805e6666890f`, each with installed and locked Core SHA
+`7b1b0339f1c39e35d1846543b997c915b28004d4` against the path-witness implementation
+SHA `0b19fc6fd3b6ad0fdb8e3ae8fd4548d346717fb6`, each with installed and locked Core SHA
 `6e86f44b87c4559a9297596d5d18dc4247b8cbc3`. The smoke command was
 `uv run --no-sync pytest -q tests/test_live_core_smoke.py --durations=0`, wrapped by
 `/usr/bin/time`; the same external `contract42_probe.py --phase all` measured both commits.
+The unchanged probe has SHA256 `46222d21a1a27b1d588a8667c0176874f8f3c5910fbdc9161d7311357e8d9cce`.
 The probe script, exact invocation and raw JSONL are in the Phase 35 campaign performance packet,
 not in this repository.
 
-| Measurement | Corrected baseline | Dice-renderer implementation |
+| Measurement | Corrected baseline | Path-witness implementation |
 | --- | ---: | ---: |
-| Smoke module | 9 passed, 198.01 s pytest, 198.96 s wall | 13 passed, 120.72 s pytest, 121.71 s wall |
-| Core import | 0.002 s | 0.002 s |
-| Verified cold package identity | 0.263 s, 173 instrumented JSON reads | 0.256 s, 173 instrumented JSON reads |
-| Smoke fixture import | 1.945 s, 48 instrumented JSON reads | 1.917 s, 48 instrumented JSON reads |
-| First / warm config creation | 7.119 / 0.102 s, 0 instrumented JSON reads | 7.146 / 0.100 s, 0 instrumented JSON reads |
-| Native session start / first advance | 0.182 / 2.320 s | 0.178 / 2.326 s |
-| UI client session start | 0.175 s | 0.174 s |
-| Public decision traversal | 12.875 s, 19 accepted submissions | 12.819 s, 19 accepted submissions |
-| Viewer projection probe | 1.775 s, 40 calls including 20 same-boundary duplicates | 1.757 s, same 40 calls |
-| Application import / window creation / first frame | 2.248 / 26.323 / 0.481 s | 2.233 / 26.149 / 0.475 s |
-| Full synchronous headless startup | 29.052 s | 28.857 s |
+| Smoke module | 9 passed, 198.01 s pytest, 198.96 s wall | 13 passed, 117.73 s pytest, 118.81 s wall |
+| Core import | 0.002 s | 0.003 s |
+| Verified cold package identity | 0.263 s, 173 instrumented JSON reads | 0.263 s, 173 instrumented JSON reads |
+| Smoke fixture import | 1.945 s, 48 instrumented JSON reads | 2.017 s, 48 instrumented JSON reads |
+| First / warm config creation | 7.119 / 0.102 s, 0 instrumented JSON reads | 7.433 / 0.107 s, 0 instrumented JSON reads |
+| Native session start / first advance | 0.182 / 2.320 s | 0.189 / 2.392 s |
+| UI client session start | 0.175 s | 0.184 s |
+| Public decision traversal | 12.875 s, 19 accepted submissions | 13.477 s, 19 accepted submissions |
+| Viewer projection probe | 1.775 s, 40 calls including 20 same-boundary duplicates | 1.855 s, same 40 calls |
+| Application import / window creation / first frame | 2.248 / 26.323 / 0.481 s | 2.254 / 26.217 / 0.484 s |
+| Full synchronous headless startup | 29.052 s | 28.956 s |
 
-The smoke module's measured pytest time fell 39.03% in this one pair of runs, despite the
+The smoke module's measured pytest time fell 40.54% in this one pair of runs, despite the
 candidate module containing four more tests; this is not a statistical estimate or a claim that
 headless startup accelerated. The first pre-cleanup suite run had eight passes and one failure
 because its generic Stratagem policy chose an unsupported parameterized target. The corrected
 baseline added an explicit public decline and verified Shooting checkpoint before timing the
 successful suite; its unchanged repeated-checkpoint test alone took 75.27 seconds. Both raw
-baseline runs remain in the packet. The earlier optimized run at SHA
-`0618eb7628c6eec666307c2d7dacf357526b924d` measured 117.77 seconds for the smoke module;
-it predates the dice display change and remains historical evidence. The JSON read counts
+baseline runs remain in the packet. Earlier optimized runs at SHA
+`0618eb7628c6eec666307c2d7dacf357526b924d` and dice-renderer SHA
+`619110c3dca52cad605dc4b8c031805e6666890f` measured 117.77 and 120.72 seconds for the
+smoke module; both remain historical evidence. The JSON read counts
 instrument `Path.read_bytes` in the installed Core package, not all operating-system I/O. In the
 probed Movement traversal, half of the baseline 1.775-second projection total, about 0.89 seconds,
 is a rough duplicate-call estimate;
@@ -110,7 +113,7 @@ runtime; switching the UI dependency does not reinterpret them.
 
 ## Gate status
 
-The idle performance comparison above completed at the dice-renderer implementation SHA. The final
+The idle performance comparison above completed at the path-witness implementation SHA. The final
 documentation commit changes this record only. Clean install, project quality, and coverage gates
 run on that final candidate; the pull request checks and Phase 35 review packet are the
 authoritative record of their commands, counts, result index, and raw logs. No measured comparison
