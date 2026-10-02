@@ -250,6 +250,26 @@ def _assert_finite_attached_surfaces(
         assert selected_models[0].center == physical_model.position
 
 
+def _assert_no_physical_roster_focus(
+    window: ArcadeWarhammerWindow, hud_frames: list[HudErgonomicsView]
+) -> None:
+    physical_ids = {
+        unit.unit_id
+        for unit in window.battlefield_view.units
+        if unit.player_id == window.viewer_player_id
+    }
+    assert physical_ids
+    rows = {
+        button.unit_id: button
+        for button in hud_frames[-1].player_unit_buttons
+        if button.unit_id in physical_ids
+    }
+    assert set(rows) == physical_ids
+    assert all(not row.selected and not row.focused for row in rows.values()), [
+        (row.unit_id, row.selected, row.focused) for row in rows.values()
+    ]
+
+
 def test_attached_deployment_opens_editor_rejects_nonmember_and_submits_current_request() -> None:
     client, original_points = _empty_deployment_client()
     request = _attached_deployment_request(client, original_points)
@@ -793,14 +813,11 @@ def test_attached_scout_finite_membership_and_viewer_drift_fail_closed(
             isinstance(primitive, CirclePrimitive) and primitive.layer == "selected_unit_overlay"
             for primitive in world_frames[-1]
         )
-        assert not any(
-            button.selected
-            for button in hud_frames[-1].player_unit_buttons
-            if button.unit_id in {LEADER, _BODYGUARD}
-        )
+        _assert_no_physical_roster_focus(window, hud_frames)
         window.on_key_press(arcade.key.ENTER, 0)
         assert session.decision_record_count() == records_before
         assert client.get_view(_OWNER).pending_decision == selection
+        assert client.get_view(_OWNER).battlefield_view == owner.battlefield_view
 
         foreign_model = next(
             model_id
@@ -809,14 +826,19 @@ def test_attached_scout_finite_membership_and_viewer_drift_fail_closed(
         )
         original_payload = _object(chosen.payload)
         model_ids = cast(list[str], original_payload["model_instance_ids"])
-        changes: tuple[JsonObject, ...] = (
-            {"model_instance_ids": [*model_ids[:-1], foreign_model]},
-            {"component_unit_instance_ids": "malformed"},
-            {"player_id": _OPPONENT},
-            {"unit_instance_id": LEADER},
+        malformed_payloads: tuple[JsonObject, ...] = (
+            {**original_payload, "model_instance_ids": [*model_ids[:-1], foreign_model]},
+            {
+                key: value
+                for key, value in original_payload.items()
+                if key != "component_unit_instance_ids"
+            },
+            {**original_payload, "component_unit_instance_ids": "malformed"},
+            {**original_payload, "player_id": _OPPONENT},
+            {**original_payload, "unit_instance_id": LEADER},
         )
-        for change in changes:
-            malformed_option = replace(chosen, payload={**original_payload, **change})
+        for payload in malformed_payloads:
+            malformed_option = replace(chosen, payload=payload)
             malformed_decision = replace(selection, options=(malformed_option, alternate))
             malformed_view = replace(owner, pending_decision=malformed_decision)
             next_state = window.finite_state.apply_view(malformed_view).highlight_option(
@@ -834,6 +856,19 @@ def test_attached_scout_finite_membership_and_viewer_drift_fail_closed(
                 and primitive.layer == "selected_unit_overlay"
                 for primitive in world_frames[-1]
             )
+            _assert_no_physical_roster_focus(window, hud_frames)
+            roster = next(
+                region
+                for region in window.hud_button_hit_regions
+                if region.action_kind == "select_unit" and region.unit_id == LEADER
+            )
+            roster_x = round((roster.bounds[0] + roster.bounds[2]) / 2.0)
+            roster_y = round((roster.bounds[1] + roster.bounds[3]) / 2.0)
+            window.on_mouse_press(roster_x, roster_y, arcade.MOUSE_BUTTON_LEFT, 0)
+            assert window.finite_state.highlighted_option == malformed_option
+            assert window.selection_state.selected_unit_id is None
+            window.on_draw()
+            _assert_no_physical_roster_focus(window, hud_frames)
             leader_model = next(
                 unit for unit in window.battlefield_view.units if unit.unit_id == LEADER
             ).models[0]
@@ -843,6 +878,8 @@ def test_attached_scout_finite_membership_and_viewer_drift_fail_closed(
             assert window.selection_state.selected_unit_id is None
             window.on_key_press(arcade.key.ENTER, 0)
             assert session.decision_record_count() == records_before
+            assert client.get_view(_OWNER).pending_decision == selection
+            assert client.get_view(_OWNER).battlefield_view == owner.battlefield_view
 
         next_state = window.finite_state.apply_view(opponent)
         window._apply_refreshed_game_view(view=opponent, state=next_state)
@@ -850,7 +887,9 @@ def test_attached_scout_finite_membership_and_viewer_drift_fail_closed(
         assert window.viewer_player_id == _OPPONENT
         assert window.selection_state.selected_unit_id is None
         window.on_draw()
-        assert not any(button.selected for button in hud_frames[-1].player_unit_buttons)
+        assert not any(
+            button.selected or button.focused for button in hud_frames[-1].player_unit_buttons
+        )
         assert not any(
             isinstance(primitive, CirclePrimitive) and primitive.layer == "selected_unit_overlay"
             for primitive in world_frames[-1]

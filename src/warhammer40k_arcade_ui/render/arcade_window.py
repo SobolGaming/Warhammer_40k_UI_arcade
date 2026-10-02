@@ -2027,6 +2027,9 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._sync_assignment_workspace()
 
     def _hud_selected_unit_id(self) -> str | None:
+        if self._highlighted_option_is_attached_scout():
+            # Rejected membership must not fall back to unrelated roster focus.
+            return self._highlighted_option_hud_unit_id()
         highlighted_unit_id = self._highlighted_option_hud_unit_id()
         if highlighted_unit_id is not None:
             return highlighted_unit_id
@@ -2038,6 +2041,9 @@ class ArcadeWarhammerWindow(arcade.Window):
         highlighted_option = self._finite_state.highlighted_option
         if highlighted_option is None:
             return None
+        if is_attached_scout_option(highlighted_option):
+            membership = self._attached_scout_selection_for_option(highlighted_option)
+            return None if membership is None else membership.canonical_unit_id
         return _option_hud_unit_id(
             option_id=highlighted_option.option_id,
             payload=highlighted_option.payload,
