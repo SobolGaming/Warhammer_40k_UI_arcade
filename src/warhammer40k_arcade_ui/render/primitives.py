@@ -17,6 +17,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
+from warhammer40k_arcade_ui.state.attached_scout_selection import AttachedScoutSelection
 from warhammer40k_arcade_ui.state.movement_draft import MovementAssignmentView, MovementDraft
 from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState, selected_model, selected_unit
@@ -121,6 +122,7 @@ def build_world_primitives(
     movement_budget_ring_mode: MovementBudgetRingMode = "total",
     assignment_target_ref_keys: tuple[str, ...] = (),
     assignment_target_highlight_color: Color = (220, 54, 64, 72),
+    attached_scout_selection: AttachedScoutSelection | None = None,
 ) -> tuple[RenderPrimitive, ...]:
     """Build deterministic world-space primitives from a battlefield view model."""
 
@@ -156,7 +158,9 @@ def build_world_primitives(
     for previous_placement in placement_history:
         primitives.extend(_placement_draft_primitives(previous_placement, history=True))
     if selection_state is not None:
-        primitives.extend(_selection_primitives(view, selection_state, movement_draft))
+        primitives.extend(
+            _selection_primitives(view, selection_state, movement_draft, attached_scout_selection)
+        )
         if movement_draft is not None:
             primitives.extend(
                 _movement_draft_primitives(
@@ -450,9 +454,16 @@ def _selection_primitives(
     view: BattlefieldView,
     selection_state: SelectionState,
     movement_draft: MovementDraft | None,
+    attached_scout_selection: AttachedScoutSelection | None,
 ) -> tuple[RenderPrimitive, ...]:
     primitives: list[RenderPrimitive] = []
     unit = selected_unit(view, selection_state)
+    if (
+        unit is None
+        and attached_scout_selection is not None
+        and selection_state.selected_unit_id == attached_scout_selection.canonical_unit_id
+    ):
+        unit = attached_scout_selection.unit_view(view)
     if (
         unit is None
         and movement_draft is not None
@@ -465,13 +476,16 @@ def _selection_primitives(
             for candidate in view.units
             if candidate.unit_id in movement_draft.component_unit_instance_ids
         )
-        models = tuple(
-            model
-            for component in components
-            for model in component.models
-            if model.model_id in model_ids
-        )
-        if len(models) == len(model_ids):
+        models = tuple(model for component in components for model in component.models)
+        if (
+            len(components) == len(movement_draft.component_unit_instance_ids)
+            and {component.unit_id for component in components}
+            == set(movement_draft.component_unit_instance_ids)
+            and len(models) == len(model_ids)
+            and {model.model_id for model in models} == model_ids
+            and components
+            and all(component.player_id == movement_draft.player_id for component in components)
+        ):
             unit = UnitView(
                 unit_id=movement_draft.selected_unit_id,
                 player_id=components[0].player_id,

@@ -18,6 +18,17 @@ actually checks. The approved acceptance criteria remain unchanged.
 | Setup and arrival | `test_contract42_setup_arrival.py` covers public nullable mission edges, oversized exception rejection and retry, loaded Transport ingress with Rapid Disembark restrictions and redaction, Shock's explicit empty engagement list, tactical setup history and subsequent Embark option suppression, Aircraft ingress/return options without Hover, and real revival with its source-linked phase-start witness. A separate real session keeps the affected player active after oversized ingress: the engine offers a support unit but excludes the arrived unit from Shooting, while ordinary ingress offers both. Round-one Strategic Reserve placement returns both typed source-policy violations and a fresh request without reserve or battlefield mutation. | The finite selector still offers round-one ingress; Core rejects it on placement and records its invalid-decision audit/retry events. The round-three public continuation remains blocked as described below. |
 | Source-specific continuations | `test_contract42_heroic_intervention.py`, `test_contract42_heroic_hud.py`, `test_contract42_overwatch.py`, `test_contract42_firing_deck.py`, and `test_contract42_public_contexts.py` exercise current actor/mode and phase-end shooter selection through the HUD, a first-shooter Firing Deck inventory, scoring attribution, nullable terrain capability, flight, Surge, and public contact redaction. | The Firing Deck fixture knows the initial shot history from its own setup. Contact redaction is seeded with typed Core event data and does not assert the engine generates that event in this fixture. |
 
+The attached Scout finite-focus cases in `test_contract42_attached_prebattle.py` capture the
+headless window's actual composed Current Action, physical roster rows, and battlefield primitives
+before Enter. They select each physical component model, retain the chosen six-inch option and
+distance, then open the existing proposal draft and check its component roster behavior. A second
+case cycles to the eight-inch option while the HUD is hidden, reveals it, and verifies roster clicks
+retain that option; a roster click from the unrelated completion option does not choose either
+distance by default. Request/viewer drift, malformed or foreign membership, and an alternate valid
+distance clear the advisory attached focus and block finite submission without a Core decision
+record. This is UI selection and submission-boundary evidence, not an accepted attached Scout
+movement result; the Core resolver limitation below remains.
+
 The pinned Core interaction examples exercise the generic parameterized envelope for healing
 revival but omit `revival_phase_start`. Actual emitted revival requests include that mandatory
 source-linked witness. The specialized healing placement parser requires and preserves the real

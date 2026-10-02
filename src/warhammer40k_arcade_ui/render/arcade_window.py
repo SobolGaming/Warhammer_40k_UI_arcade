@@ -9,7 +9,6 @@ from dataclasses import dataclass, replace
 from itertools import pairwise
 from pathlib import Path
 from textwrap import wrap
-from typing import TypeGuard
 
 import arcade
 
@@ -21,6 +20,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiClientStatus,
     UiCoreClient,
     UiDecision,
+    UiFiniteOption,
     UiGameView,
     UiRulesCatalogView,
     UiSupportProfile,
@@ -95,6 +95,11 @@ from warhammer40k_arcade_ui.state.assignment_workspace import (
     AssignmentWorkspaceError,
     AssignmentWorkspaceRow,
     ShootingAssignmentSelection,
+)
+from warhammer40k_arcade_ui.state.attached_scout_selection import (
+    AttachedScoutSelection,
+    attached_scout_selection,
+    is_attached_scout_option,
 )
 from warhammer40k_arcade_ui.state.entity_selection import entity_ref_for_model
 from warhammer40k_arcade_ui.state.finite_decision import (
@@ -531,6 +536,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             viewport_width_px=self.width,
             viewport_height_px=self.height,
         )
+        scout_selection = self._current_attached_scout_selection()
         ergonomic_hud = build_hud_ergonomics_view(
             view=self._battlefield_view,
             preferences=self._preferences,
@@ -544,6 +550,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             pending_decision=self._pending_decision,
             hovered_hud_button_id=self._hovered_hud_button_id,
             selected_unit_id=self._hud_selected_unit_id(),
+            selected_component_unit_ids=self._selected_scout_component_unit_ids(scout_selection),
             viewer_player_id=self._viewer_player_id,
             unit_display_by_id=self._known_unit_display_by_id,
             model_display_by_id=self._known_model_display_by_id,
@@ -560,6 +567,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             movement_budget_ring_mode=self._preferences.hud.movement_budget_ring_mode,
             assignment_target_ref_keys=self._selected_assignment_target_ref_keys(),
             assignment_target_highlight_color=self._preferences.hud.assignment_target_highlight_color,
+            attached_scout_selection=scout_selection,
         )
         overlay_primitives = build_screen_overlay_primitives(
             context_menu=context_menu,
@@ -732,15 +740,34 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
             self._trace_placement_draft_event("ui.placement_draft_model_placed")
             return
-        self._selection_state = self._selection_state.select_at(
+        physical_selection = self._selection_state.select_at(
             view=self._battlefield_view,
             world_point=self._mouse_world_position,
             preferences=self._preferences,
         )
+        physical_unit_id = physical_selection.selected_unit_id
+        physical_model_id = physical_selection.selected_model_id
+        if physical_unit_id is not None and physical_model_id is not None:
+            attached_scout = self._attached_scout_option_for_component(physical_unit_id)
+            if attached_scout is not None:
+                option_id, canonical_id = attached_scout
+                self._selection_state = physical_selection.select_model_id(
+                    unit_id=canonical_id,
+                    model_id=physical_model_id,
+                    preferences=self._preferences,
+                )
+                self._set_finite_state(
+                    self._finite_state.highlight_option(option_id),
+                    focus_source="battlefield_model",
+                )
+                return
+        self._selection_state = physical_selection
         self._finite_state = self._finite_state.highlight_option_for_unit(
             self._selection_state.selected_unit_id
         )
         self._pending_decision = self._finite_state.pending_decision
+        if self._highlighted_option_is_attached_scout():
+            self._sync_selection_to_highlighted_option(source="battlefield_model")
         self._sync_movement_draft()
         self._sync_placement_draft()
         self._sync_assignment_workspace()
@@ -1246,6 +1273,8 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         self._finite_state = self._finite_state.highlight_option_for_unit(unit_id)
         self._pending_decision = self._finite_state.pending_decision
+        if self._highlighted_option_is_attached_scout():
+            self._sync_selection_to_highlighted_option(source="hud_roster_unit")
         self._sync_movement_draft()
         self._sync_placement_draft()
         self._sync_assignment_workspace()
@@ -1551,48 +1580,67 @@ class ArcadeWarhammerWindow(arcade.Window):
     def _attached_scout_option_for_component(self, unit_id: str) -> tuple[str, str] | None:
         """Resolve a physical roster row through current public Scout option membership."""
 
-        pending = self._finite_state.pending_decision
-        if pending is None or pending.decision_type != "select_prebattle_action":
-            return None
-        physical = next(
-            (unit for unit in self._battlefield_view.units if unit.unit_id == unit_id), None
-        )
-        if physical is None or physical.player_id != pending.actor_id:
+        highlighted = self._finite_state.highlighted_option
+        if (
+            highlighted is not None
+            and is_attached_scout_option(highlighted)
+            and self._attached_scout_selection_for_option(highlighted) is None
+        ):
             return None
         matches: list[tuple[str, str]] = []
         for option in self._finite_state.finite_options:
-            payload = option.payload
-            if type(payload) is not dict or payload.get("action_kind") != "scout_move":
-                continue
-            if payload.get("is_attached_rules_unit") is not True:
-                continue
-            if payload.get("player_id") != pending.actor_id:
-                continue
-            canonical_id = payload.get("unit_instance_id")
-            components = payload.get("component_unit_instance_ids")
-            model_ids = payload.get("model_instance_ids")
-            if type(canonical_id) is not str or not canonical_id:
-                continue
-            if not _unique_nonempty_strings(components) or unit_id not in components:
-                continue
-            if not _unique_nonempty_strings(model_ids):
-                continue
-            members = tuple(
-                unit for unit in self._battlefield_view.units if unit.unit_id in components
-            )
-            if len(members) != len(components):
-                continue
-            if any(unit.player_id != pending.actor_id for unit in members):
-                continue
-            if {model.model_id for unit in members for model in unit.models} != set(model_ids):
-                continue
-            matches.append((option.option_id, canonical_id))
-        highlighted = self._finite_state.highlighted_option
+            selection = self._attached_scout_selection_for_option(option)
+            if selection is not None and unit_id in selection.component_unit_ids:
+                matches.append((selection.option_id, selection.canonical_unit_id))
         if highlighted is not None:
             focused = next((match for match in matches if match[0] == highlighted.option_id), None)
             if focused is not None:
                 return focused
         return matches[0] if len(matches) == 1 else None
+
+    def _attached_scout_selection_for_option(
+        self, option: UiFiniteOption | None
+    ) -> AttachedScoutSelection | None:
+        pending = self._finite_state.pending_decision
+        projected = self._last_game_view
+        if projected is not None and (
+            projected.viewer_player_id != self._viewer_player_id
+            or projected.pending_decision != pending
+        ):
+            return None
+        return attached_scout_selection(
+            decision=pending,
+            option=option,
+            view=self._battlefield_view,
+            viewer_player_id=self._viewer_player_id,
+        )
+
+    def _current_attached_scout_selection(self) -> AttachedScoutSelection | None:
+        return self._attached_scout_selection_for_option(self._finite_state.highlighted_option)
+
+    def _highlighted_option_is_attached_scout(self) -> bool:
+        option = self._finite_state.highlighted_option
+        return option is not None and is_attached_scout_option(option)
+
+    def _selected_scout_component_unit_ids(
+        self, finite_selection: AttachedScoutSelection | None
+    ) -> tuple[str, ...]:
+        selected_id = self._selection_state.selected_unit_id
+        if finite_selection is not None and selected_id == finite_selection.canonical_unit_id:
+            return finite_selection.component_unit_ids
+        draft = self._movement_draft
+        if (
+            draft is not None
+            and draft.decision_type == "submit_scout_move"
+            and selected_id == draft.selected_unit_id
+            and draft.is_for(
+                selection=self._selection_state,
+                pending_decision=self._pending_decision,
+                projection_state_hash=self._current_projection_state_hash(),
+            )
+        ):
+            return draft.component_unit_instance_ids
+        return ()
 
     def _focus_entity_for_highlighted_option(
         self,
@@ -1650,6 +1698,27 @@ class ArcadeWarhammerWindow(arcade.Window):
         submitted_option_id = selected_option_id
         if submitted_option_id is None and highlighted_option is not None:
             submitted_option_id = highlighted_option.option_id
+        submitted_option = next(
+            (
+                option
+                for option in self._finite_state.finite_options
+                if option.option_id == submitted_option_id
+            ),
+            None,
+        )
+        if (
+            submitted_option is not None
+            and is_attached_scout_option(submitted_option)
+            and self._attached_scout_selection_for_option(submitted_option) is None
+        ):
+            self._set_finite_state(
+                self._finite_state.with_local_invalid(
+                    violation_code="attached_scout_membership_unavailable",
+                    message="Current attached Scout membership is unavailable for this viewer.",
+                    field="selected_option_id",
+                )
+            )
+            return
         if submitted_option_id is not None:
             self._trace_event(
                 category="ui",
@@ -1977,12 +2046,46 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
 
     def _sync_selection_to_highlighted_option(self, *, source: str) -> None:
+        if self._highlighted_option_is_attached_scout():
+            membership = self._current_attached_scout_selection()
+            if membership is None:
+                self._selection_state = self._selection_state.clear_selection(self._preferences)
+                self._finite_state = self._finite_state.with_local_invalid(
+                    violation_code="attached_scout_membership_unavailable",
+                    message="Current attached Scout membership is unavailable for this viewer.",
+                    field="selected_option_id",
+                )
+                return
+            selected_model_id = (
+                self._selection_state.selected_model_id
+                if self._selection_state.selected_unit_id == membership.canonical_unit_id
+                and self._selection_state.selected_model_id in membership.model_ids
+                else None
+            )
+            if (
+                self._selection_state.selected_unit_id != membership.canonical_unit_id
+                or self._selection_state.selected_model_id != selected_model_id
+            ):
+                self._selection_state = self._selection_state.select_model_id(
+                    unit_id=membership.canonical_unit_id,
+                    model_id=selected_model_id,
+                    preferences=self._preferences,
+                )
+            return
         if self._focus_entity_for_highlighted_option(
             source=source,
             sync_movement_draft=False,
         ):
             return
-        self._focus_hud_unit_for_highlighted_option(source=source)
+        if self._focus_hud_unit_for_highlighted_option(source=source):
+            return
+        if (
+            self._selection_state.selected_unit_id is not None
+            and not _view_has_unit(self._battlefield_view, self._selection_state.selected_unit_id)
+            and self._movement_draft is None
+            and self._placement_draft is None
+        ):
+            self._selection_state = self._selection_state.clear_selection(self._preferences)
 
     def _focus_hud_unit_for_highlighted_option(self, *, source: str) -> bool:
         unit_id = self._highlighted_option_hud_unit_id()
@@ -2746,15 +2849,6 @@ def _finite_option_targets_unit(
         return True
     payload_unit_id = _first_unique_payload_string(payload, OPTION_FOCUS_UNIT_ID_KEYS)
     return payload_unit_id == unit_id
-
-
-def _unique_nonempty_strings(value: JsonValue) -> TypeGuard[list[str]]:
-    return (
-        type(value) is list
-        and bool(value)
-        and all(type(item) is str and bool(item) for item in value)
-        and len(value) == len(set(value))
-    )
 
 
 def _option_hud_unit_id(

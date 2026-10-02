@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from dataclasses import replace
 from typing import cast
@@ -23,9 +24,14 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiGameView,
     UiSupportProfile,
 )
+from warhammer40k_arcade_ui.hud.ergonomics import HudErgonomicsView
+from warhammer40k_arcade_ui.hud.layouts import HudLayoutView
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.render import arcade_window as window_module
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
+from warhammer40k_arcade_ui.render.camera import WorldCamera
 from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_game_view
+from warhammer40k_arcade_ui.render.primitives import CirclePrimitive, RenderPrimitive
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft, MovementDraftError
 from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft, PlacementDraftError
 from warhammer40k_arcade_ui.state.selection import SelectionState
@@ -158,6 +164,90 @@ def _window(client: LocalSessionClient, view: UiGameView) -> ArcadeWarhammerWind
         core_client=client,
         viewer_player_id=view.viewer_player_id,
     )
+
+
+def _capture_composed_surfaces(
+    window: ArcadeWarhammerWindow,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[HudErgonomicsView], list[tuple[RenderPrimitive, ...]]]:
+    """Capture the same HUD and world primitives that the window actually draws."""
+
+    hud_frames: list[HudErgonomicsView] = []
+    world_frames: list[tuple[RenderPrimitive, ...]] = []
+    render_hud = window._hud_composition_primitives
+    draw_primitives = window_module._draw_world_primitives
+
+    def capture_hud(
+        *, ergonomic_hud: HudErgonomicsView, hud_layout: HudLayoutView
+    ) -> tuple[RenderPrimitive, ...]:
+        hud_frames.append(ergonomic_hud)
+        return render_hud(ergonomic_hud=ergonomic_hud, hud_layout=hud_layout)
+
+    def capture_world(primitives: tuple[RenderPrimitive, ...], camera: WorldCamera) -> None:
+        if any(primitive.layer == "table_bounds" for primitive in primitives):
+            world_frames.append(primitives)
+        draw_primitives(primitives, camera)
+
+    monkeypatch.setattr(window, "_hud_composition_primitives", capture_hud)
+    monkeypatch.setattr(window_module, "_draw_world_primitives", capture_world)
+    return hud_frames, world_frames
+
+
+def _assert_finite_attached_surfaces(
+    window: ArcadeWarhammerWindow,
+    *,
+    hud_frames: list[HudErgonomicsView],
+    world_frames: list[tuple[RenderPrimitive, ...]],
+    option_id: str,
+    model_id: str | None = None,
+) -> None:
+    window.on_draw()
+    hud = hud_frames[-1]
+    assert hud.current_action.selected_action_id == option_id
+    assert {button.option_id for button in hud.current_action.buttons if button.selected} == {
+        option_id
+    }
+    physical_ids = {unit.unit_id for unit in window.battlefield_view.units}
+    rows = {
+        button.unit_id: button
+        for button in hud.player_unit_buttons
+        if button.unit_id in physical_ids
+    }
+    assert rows[LEADER].selected
+    assert rows[LEADER].focused
+    assert rows[_BODYGUARD].selected
+    assert rows[_BODYGUARD].focused
+    assert rows[LEADER].state == rows[_BODYGUARD].state == "selected"
+    circles = [
+        primitive for primitive in world_frames[-1] if isinstance(primitive, CirclePrimitive)
+    ]
+    selected_units = [circle for circle in circles if circle.layer == "selected_unit_overlay"]
+    assert len(selected_units) == 1
+    models = (
+        model
+        for unit in window.battlefield_view.units
+        if unit.unit_id in {LEADER, _BODYGUARD}
+        for model in unit.models
+    )
+    positions = tuple(model.position for model in models)
+    expected_center = (
+        sum(point[0] for point in positions) / len(positions),
+        sum(point[1] for point in positions) / len(positions),
+    )
+    assert math.isclose(selected_units[0].center[0], expected_center[0])
+    assert math.isclose(selected_units[0].center[1], expected_center[1])
+    selected_models = [circle for circle in circles if circle.layer == "selected_model_overlay"]
+    if model_id is None:
+        assert selected_models == []
+    else:
+        physical_model = next(
+            model
+            for unit in window.battlefield_view.units
+            for model in unit.models
+            if model.model_id == model_id
+        )
+        assert len(selected_models) == 1
+        assert selected_models[0].center == physical_model.position
 
 
 def test_attached_deployment_opens_editor_rejects_nonmember_and_submits_current_request() -> None:
@@ -439,7 +529,9 @@ def test_attached_scout_draft_preserves_public_inventory_and_rejects_membership_
     assert client.get_view(_OWNER).pending_decision == request
 
 
-def test_attached_scout_headless_current_action_roster_and_battlefield_stay_in_sync() -> None:
+def test_attached_scout_headless_current_action_roster_and_battlefield_stay_in_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = _scout_client(attached=True, transport=False)
     selection = _decision(client.advance_until_decision_or_terminal(), "select_prebattle_action")
     chosen = next(
@@ -450,6 +542,7 @@ def test_attached_scout_headless_current_action_roster_and_battlefield_stay_in_s
     )
     window = _window(client, client.get_view(_OWNER))
     try:
+        hud_frames, world_frames = _capture_composed_surfaces(window, monkeypatch)
         window.on_draw()
         current_action = next(
             region
@@ -462,8 +555,16 @@ def test_attached_scout_headless_current_action_roster_and_battlefield_stay_in_s
         assert window.finite_state.highlighted_option is not None
         assert window.finite_state.highlighted_option.option_id == chosen.option_id
         assert window.selection_state.selected_unit_id == _ATTACHED
+        assert (
+            _object(window.finite_state.highlighted_option.payload)["scout_distance_inches"] == 6.0
+        )
+        _assert_finite_attached_surfaces(
+            window,
+            hud_frames=hud_frames,
+            world_frames=world_frames,
+            option_id=chosen.option_id,
+        )
 
-        window.on_draw()
         roster = next(
             region
             for region in window.hud_button_hit_regions
@@ -475,12 +576,77 @@ def test_attached_scout_headless_current_action_roster_and_battlefield_stay_in_s
         assert window.finite_state.highlighted_option is not None
         assert window.finite_state.highlighted_option.option_id == chosen.option_id
         assert window.selection_state.selected_unit_id == _ATTACHED
+        _assert_finite_attached_surfaces(
+            window,
+            hud_frames=hud_frames,
+            world_frames=world_frames,
+            option_id=chosen.option_id,
+        )
+
+        for component_id in (LEADER, _BODYGUARD):
+            physical = next(
+                unit for unit in window.battlefield_view.units if unit.unit_id == component_id
+            ).models[0]
+            screen_x, screen_y = window.camera.world_to_screen(physical.position)
+            window.on_mouse_press(round(screen_x), round(screen_y), arcade.MOUSE_BUTTON_LEFT, 0)
+            assert window.selection_state.selected_unit_id == _ATTACHED
+            assert window.selection_state.selected_model_id == physical.model_id
+            assert window.finite_state.highlighted_option is not None
+            assert window.finite_state.highlighted_option.option_id == chosen.option_id
+            assert (
+                _object(window.finite_state.highlighted_option.payload)["scout_distance_inches"]
+                == 6.0
+            )
+            _assert_finite_attached_surfaces(
+                window,
+                hud_frames=hud_frames,
+                world_frames=world_frames,
+                option_id=chosen.option_id,
+                model_id=physical.model_id,
+            )
 
         window.on_key_press(arcade.key.ENTER, 0)
         assert window.pending_decision is not None
         assert window.pending_decision.decision_type == "submit_scout_move"
         assert window.movement_draft is not None
         assert window.movement_draft.selected_unit_id == _ATTACHED
+        assert window.movement_draft.scout_distance_inches == 6.0
+        window.on_draw()
+        physical_rows = {
+            button.unit_id: button
+            for button in hud_frames[-1].player_unit_buttons
+            if button.unit_id in {LEADER, _BODYGUARD}
+        }
+        assert physical_rows[LEADER].selected
+        assert physical_rows[_BODYGUARD].selected
+        assert any(
+            isinstance(primitive, CirclePrimitive) and primitive.layer == "selected_unit_overlay"
+            for primitive in world_frames[-1]
+        )
+        roster = next(
+            region
+            for region in window.hud_button_hit_regions
+            if region.action_kind == "select_unit" and region.unit_id == LEADER
+        )
+        x = round((roster.bounds[0] + roster.bounds[2]) / 2.0)
+        y = round((roster.bounds[1] + roster.bounds[3]) / 2.0)
+        window.on_mouse_press(x, y, arcade.MOUSE_BUTTON_LEFT, 0)
+        assert window.selection_state.selected_unit_id == _ATTACHED
+        assert window.movement_draft is not None
+        assert window.selection_state.selected_model_id in {
+            model.model_id
+            for unit in window.battlefield_view.units
+            if unit.unit_id == LEADER
+            for model in unit.models
+        }
+        window.on_draw()
+        physical_rows = {
+            button.unit_id: button
+            for button in hud_frames[-1].player_unit_buttons
+            if button.unit_id in {LEADER, _BODYGUARD}
+        }
+        assert physical_rows[LEADER].selected
+        assert physical_rows[_BODYGUARD].selected
         physical = next(
             unit for unit in window.battlefield_view.units if unit.unit_id == LEADER
         ).models[0]
@@ -490,6 +656,213 @@ def test_attached_scout_headless_current_action_roster_and_battlefield_stay_in_s
         assert window.selection_state.selected_model_id == physical.model_id
         assert window.movement_draft is not None
         assert window.movement_draft.selected_model_ids == (physical.model_id,)
+    finally:
+        window.close()
+
+
+def test_attached_scout_keyboard_hidden_hud_and_ambiguous_roster_keep_current_distance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _scout_client(attached=True, transport=False)
+    selection = _decision(client.advance_until_decision_or_terminal(), "select_prebattle_action")
+    scout_options = {
+        cast(float, _object(option.payload)["scout_distance_inches"]): option
+        for option in selection.options
+        if _object(option.payload).get("unit_instance_id") == _ATTACHED
+    }
+    assert set(scout_options) == {6.0, 8.0}
+    six = scout_options[6.0]
+    eight = scout_options[8.0]
+    complete = next(
+        option for option in selection.options if option.option_id == "complete_prebattle_actions"
+    )
+    window = _window(client, client.get_view(_OWNER))
+    try:
+        hud_frames, world_frames = _capture_composed_surfaces(window, monkeypatch)
+        window._set_finite_state(window.finite_state.highlight_option(six.option_id))
+        _assert_finite_attached_surfaces(
+            window, hud_frames=hud_frames, world_frames=world_frames, option_id=six.option_id
+        )
+        profile = window._hud_composition_profile
+        assert profile is not None
+        window._hud_composition_profile = None
+        for _ in selection.options:
+            window.on_key_press(arcade.key.TAB, 0)
+            if window.finite_state.highlighted_option == eight:
+                break
+        assert window.finite_state.highlighted_option == eight
+        assert window.selection_state.selected_unit_id == _ATTACHED
+        window.on_draw()
+        hidden_regions = window.hud_button_hit_regions
+        assert hidden_regions == ()
+        assert any(
+            isinstance(primitive, CirclePrimitive) and primitive.layer == "selected_unit_overlay"
+            for primitive in world_frames[-1]
+        )
+        window._hud_composition_profile = profile
+        _assert_finite_attached_surfaces(
+            window, hud_frames=hud_frames, world_frames=world_frames, option_id=eight.option_id
+        )
+        roster = next(
+            region
+            for region in window.hud_button_hit_regions
+            if region.action_kind == "select_unit" and region.unit_id == LEADER
+        )
+        x = round((roster.bounds[0] + roster.bounds[2]) / 2.0)
+        y = round((roster.bounds[1] + roster.bounds[3]) / 2.0)
+        window.on_mouse_press(x, y, arcade.MOUSE_BUTTON_LEFT, 0)
+        assert window.finite_state.highlighted_option == eight
+        _assert_finite_attached_surfaces(
+            window, hud_frames=hud_frames, world_frames=world_frames, option_id=eight.option_id
+        )
+
+        window._set_finite_state(window.finite_state.highlight_option(complete.option_id))
+        window.on_draw()
+        roster = next(
+            region
+            for region in window.hud_button_hit_regions
+            if region.action_kind == "select_unit" and region.unit_id == LEADER
+        )
+        x = round((roster.bounds[0] + roster.bounds[2]) / 2.0)
+        y = round((roster.bounds[1] + roster.bounds[3]) / 2.0)
+        window.on_mouse_press(x, y, arcade.MOUSE_BUTTON_LEFT, 0)
+        assert window.finite_state.highlighted_option == complete
+        assert window.selection_state.selected_unit_id == LEADER
+        window.on_draw()
+        assert hud_frames[-1].current_action.selected_action_id == complete.option_id
+        physical_rows = {
+            button.unit_id: button
+            for button in hud_frames[-1].player_unit_buttons
+            if button.unit_id in {LEADER, _BODYGUARD}
+        }
+        assert physical_rows[LEADER].selected
+        assert not physical_rows[_BODYGUARD].selected
+        leader = next(unit for unit in window.battlefield_view.units if unit.unit_id == LEADER)
+        overlays = [
+            primitive
+            for primitive in world_frames[-1]
+            if isinstance(primitive, CirclePrimitive) and primitive.layer == "selected_unit_overlay"
+        ]
+        assert len(overlays) == 1
+        assert overlays[0].center == leader.models[0].position
+    finally:
+        window.close()
+
+
+def test_attached_scout_finite_membership_and_viewer_drift_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _scout_client(attached=True, transport=False)
+    selection = _decision(client.advance_until_decision_or_terminal(), "select_prebattle_action")
+    chosen = next(
+        option
+        for option in selection.options
+        if _object(option.payload).get("unit_instance_id") == _ATTACHED
+        and _object(option.payload).get("scout_distance_inches") == 6.0
+    )
+    alternate = next(
+        option
+        for option in selection.options
+        if _object(option.payload).get("unit_instance_id") == _ATTACHED
+        and _object(option.payload).get("scout_distance_inches") == 8.0
+    )
+    owner = client.get_view(_OWNER)
+    opponent = client.get_view(_OPPONENT)
+    assert owner.battlefield_view is not None
+    session = client.session
+    assert isinstance(session, LocalGameSession)
+    records_before = session.decision_record_count()
+    window = _window(client, owner)
+    try:
+        hud_frames, world_frames = _capture_composed_surfaces(window, monkeypatch)
+        window._set_finite_state(window.finite_state.highlight_option(chosen.option_id))
+        _assert_finite_attached_surfaces(
+            window, hud_frames=hud_frames, world_frames=world_frames, option_id=chosen.option_id
+        )
+
+        window._last_game_view = replace(
+            owner, pending_decision=replace(selection, request_id="stale")
+        )
+        window._set_finite_state(window.finite_state.highlight_option(chosen.option_id))
+        assert window.finite_state.diagnostics[0].violation_code == (
+            "attached_scout_membership_unavailable"
+        )
+        assert window.selection_state.selected_unit_id is None
+        window.on_draw()
+        assert not any(
+            isinstance(primitive, CirclePrimitive) and primitive.layer == "selected_unit_overlay"
+            for primitive in world_frames[-1]
+        )
+        assert not any(
+            button.selected
+            for button in hud_frames[-1].player_unit_buttons
+            if button.unit_id in {LEADER, _BODYGUARD}
+        )
+        window.on_key_press(arcade.key.ENTER, 0)
+        assert session.decision_record_count() == records_before
+        assert client.get_view(_OWNER).pending_decision == selection
+
+        foreign_model = next(
+            model_id
+            for model_id, row in owner.battlefield_view.models_by_id.items()
+            if cast(JsonObject, row)["unit_instance_id"] == _ENEMY
+        )
+        original_payload = _object(chosen.payload)
+        model_ids = cast(list[str], original_payload["model_instance_ids"])
+        changes: tuple[JsonObject, ...] = (
+            {"model_instance_ids": [*model_ids[:-1], foreign_model]},
+            {"component_unit_instance_ids": "malformed"},
+            {"player_id": _OPPONENT},
+            {"unit_instance_id": LEADER},
+        )
+        for change in changes:
+            malformed_option = replace(chosen, payload={**original_payload, **change})
+            malformed_decision = replace(selection, options=(malformed_option, alternate))
+            malformed_view = replace(owner, pending_decision=malformed_decision)
+            next_state = window.finite_state.apply_view(malformed_view).highlight_option(
+                chosen.option_id
+            )
+            window._apply_refreshed_game_view(view=malformed_view, state=next_state)
+            window._set_finite_state(next_state)
+            assert window.finite_state.diagnostics[0].violation_code == (
+                "attached_scout_membership_unavailable"
+            )
+            assert window.selection_state.selected_unit_id is None
+            window.on_draw()
+            assert not any(
+                isinstance(primitive, CirclePrimitive)
+                and primitive.layer == "selected_unit_overlay"
+                for primitive in world_frames[-1]
+            )
+            leader_model = next(
+                unit for unit in window.battlefield_view.units if unit.unit_id == LEADER
+            ).models[0]
+            screen_x, screen_y = window.camera.world_to_screen(leader_model.position)
+            window.on_mouse_press(round(screen_x), round(screen_y), arcade.MOUSE_BUTTON_LEFT, 0)
+            assert window.finite_state.highlighted_option == malformed_option
+            assert window.selection_state.selected_unit_id is None
+            window.on_key_press(arcade.key.ENTER, 0)
+            assert session.decision_record_count() == records_before
+
+        next_state = window.finite_state.apply_view(opponent)
+        window._apply_refreshed_game_view(view=opponent, state=next_state)
+        window._set_finite_state(next_state)
+        assert window.viewer_player_id == _OPPONENT
+        assert window.selection_state.selected_unit_id is None
+        window.on_draw()
+        assert not any(button.selected for button in hud_frames[-1].player_unit_buttons)
+        assert not any(
+            isinstance(primitive, CirclePrimitive) and primitive.layer == "selected_unit_overlay"
+            for primitive in world_frames[-1]
+        )
+
+        next_state = window.finite_state.apply_view(owner).highlight_option(chosen.option_id)
+        window._apply_refreshed_game_view(view=owner, state=next_state)
+        window._set_finite_state(next_state)
+        _assert_finite_attached_surfaces(
+            window, hud_frames=hud_frames, world_frames=world_frames, option_id=chosen.option_id
+        )
+        assert session.decision_record_count() == records_before
     finally:
         window.close()
 
