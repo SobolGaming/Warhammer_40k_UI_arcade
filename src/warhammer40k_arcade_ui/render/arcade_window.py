@@ -106,7 +106,7 @@ from warhammer40k_arcade_ui.state.movement_submission import (
     MovementSubmissionError,
     submit_movement_draft,
 )
-from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft
+from warhammer40k_arcade_ui.state.placement_draft import PlacementDraft, PlacementDraftError
 from warhammer40k_arcade_ui.state.placement_submission import (
     PlacementSubmissionError,
     submit_placement_draft,
@@ -1970,24 +1970,45 @@ class ArcadeWarhammerWindow(arcade.Window):
 
     def _sync_placement_draft(self) -> None:
         current = self._placement_draft
-        if current is not None and current.is_for(
-            pending_decision=self._pending_decision,
-            projection_state_hash=self._current_projection_state_hash(),
-        ):
+        try:
+            current_matches = current is not None and current.is_for(
+                pending_decision=self._pending_decision,
+                projection_state_hash=self._current_projection_state_hash(),
+            )
+        except PlacementDraftError:
+            current_matches = False
+        if current_matches and current is not None:
             self._placement_draft = current.with_recomputed_hints()
             return
-        next_draft = PlacementDraft.start_for_pending(
-            view=self._battlefield_view,
-            selection=self._selection_state,
-            pending_decision=self._pending_decision,
-            model_display_by_id=self._known_model_display_by_id,
-            authoritative_models_by_id=(
-                None
-                if self._last_game_view is None or self._last_game_view.battlefield_view is None
-                else self._last_game_view.battlefield_view.models_by_id
-            ),
-            projection_state_hash=self._current_projection_state_hash(),
-        )
+        try:
+            next_draft = PlacementDraft.start_for_pending(
+                view=self._battlefield_view,
+                selection=self._selection_state,
+                pending_decision=self._pending_decision,
+                model_display_by_id=self._known_model_display_by_id,
+                authoritative_models_by_id=(
+                    None
+                    if self._last_game_view is None or self._last_game_view.battlefield_view is None
+                    else self._last_game_view.battlefield_view.models_by_id
+                ),
+                battlefield_state=(
+                    None if self._last_game_view is None else self._last_game_view.battlefield_state
+                ),
+                projection_state_hash=self._current_projection_state_hash(),
+            )
+        except PlacementDraftError as exc:
+            self._placement_draft = None
+            self._finite_state = self._finite_state.with_local_invalid(
+                violation_code="placement_draft_unavailable",
+                message=str(exc),
+                field="pending_decision",
+            )
+            self._trace_event(
+                category="ui",
+                event_name="ui.placement_draft_unavailable",
+                summary={"reason": str(exc)},
+            )
+            return
         if next_draft is not None:
             self._movement_draft = None
             self._assignment_workspace = None

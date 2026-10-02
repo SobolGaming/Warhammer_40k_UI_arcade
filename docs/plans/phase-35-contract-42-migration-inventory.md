@@ -46,13 +46,35 @@ it continues to require projected ownership and `split_origin` for existing plac
 The source unit may also lack a rendered `UnitView` after its last old model is destroyed.
 The materialization regression covers the headless editor, Core payload shape, stale/invalid
 retry, viewer switch, and accepted placement through a public session built from a pinned
-Core-generated checkpoint. No local model profile or placement legality is inferred.
+Core-generated checkpoint. Core-valid rectangular bases use a circumscribed radius only for
+the current circular draft/render preview; Core validates the exact footprint on submission.
+No local model profile or placement legality is inferred.
+
+Attached reserve and Disembark placement requests publish the current physical component and
+model inventories in their context. The placement editor keeps the canonical rules-unit actor
+separate from those physical owners, checks every requested model against its projected owner
+and emitted component set, and emits `attempted_rules_unit_placement` with one complete row per
+current component. The real attached reserve regression covers headless opening, grouped
+accepted/invalid/stale submissions, and same-owner nonmember rejection. Pinned Core's
+`engine/phases/movement_transports.py` Disembark builder emits the same current component/model
+inventories plus Transport context; a focused test checks the shared UI serializer and Core
+payload decoder. That test does not claim a live attached Disembark acceptance. The grouped draft
+obtains `army_id` from the viewer's unique public placed-army record for the owner. If that record
+is absent or ambiguous, the HUD reports a typed local placement diagnostic because the current
+request does not publish an army ID; it does not derive one from the attached or component ID
+spelling.
 
 The additional first-failed-save Damage-to-zero regression in
 `tests/test_contract42_damage_zero.py` follows the public `select_modifier_ignores` request
 through both keep and ignore branches. It checks the emitted sourced `SET 0` operation,
 forged and stale option rejection without a decision record or projection change, and
 owner/opponent event and pending-request scope. The UI never computes replacement damage.
+Its exact-build checkpoint comes from pinned Core's
+`tests/order93_save_damage_helpers.py` via the explicit
+`scripts/generate_contract42_damage_zero_fixture.py` generator. Runtime UI tests restore the
+committed checkpoint and use public session choices; the generator's Core-owned helper starts
+from an in-progress shooting scenario, not a roster-start traversal. Fixture provenance and
+hashes are recorded in `tests/fixtures/contract42_damage_zero_checkpoint.md`.
 
 The target manifest's JSON schema URI revisions are distinct from the runtime payload
 discriminators. The target runtime still emits `decision-request-view-v5-phase17n-step4` and

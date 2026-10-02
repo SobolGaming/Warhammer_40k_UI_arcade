@@ -142,6 +142,48 @@ def test_materialization_editor_opens_edits_and_submits_request_created_models()
         window.close()
 
 
+def test_rectangular_request_created_base_opens_headless_editor_with_advisory_radius() -> None:
+    raw = _owner_view_payload()
+    for container in (
+        cast(JsonObject, cast(JsonObject, raw["pending_decision"])["payload"]),
+        cast(JsonObject, raw["pending_proposal"]),
+    ):
+        models = cast(list[JsonObject], container["models"])
+        models[0]["base_size"] = {
+            "kind": "rectangular",
+            "diameter_mm": None,
+            "length_mm": 50.0,
+            "width_mm": 40.0,
+        }
+    view = UiGameView.from_payload(raw)
+    assert view.pending_decision is not None
+    proposal = view.pending_decision.placement_proposal
+    assert proposal is not None
+    window = _window(view)
+    try:
+        window._sync_placement_draft()  # pyright: ignore[reportPrivateUsage]
+        draft = window.placement_draft
+        assert draft is not None
+        assert tuple(pose.model_id for pose in draft.model_poses) == proposal.required_model_ids
+        assert math.isclose(draft.model_poses[0].base_radius, math.hypot(25.0, 20.0) / 25.4)
+        assert math.isclose(draft.model_poses[1].base_radius, 32.0 / 25.4 / 2.0)
+        for point in ((20.0, 20.0), (22.0, 20.0)):
+            x, y = window.camera.world_to_screen(point)
+            window.on_mouse_press(round(x), round(y), arcade.MOUSE_BUTTON_LEFT, 0)
+        edited = window.placement_draft
+        assert edited is not None
+        payload = edited.mark_ready().payload_preview
+        assert payload is not None
+        attempted = cast(JsonObject, payload["attempted_placement"])
+        rows = cast(list[JsonObject], attempted["model_placements"])
+        assert [row["model_instance_id"] for row in rows] == list(proposal.required_model_ids)
+        assert all(row["unit_instance_id"] == proposal.unit_instance_id for row in rows)
+        assert all(row["player_id"] == _OWNER for row in rows)
+        assert PlacementProposalPayload.from_payload(cast(PlacementProposalPayloadPayload, payload))
+    finally:
+        window.close()
+
+
 def test_materialization_rejects_missing_or_ambiguous_request_model_authority() -> None:
     raw = _owner_view_payload()
     decision = cast(JsonObject, raw["pending_decision"])

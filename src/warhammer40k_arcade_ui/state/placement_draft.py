@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 from typing import Literal, cast
 
@@ -159,6 +160,7 @@ class PlacementDraft:
     spatial_context_hash: str | None = None
     projection_state_hash: str | None = None
     army_id: str | None = None
+    component_unit_instance_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -253,6 +255,16 @@ class PlacementDraft:
             _optional_string("projection_state_hash", self.projection_state_hash),
         )
         object.__setattr__(self, "army_id", _optional_string("army_id", self.army_id))
+        if type(self.component_unit_instance_ids) is not tuple:
+            raise PlacementDraftError("component_unit_instance_ids must be a tuple.")
+        component_ids = tuple(
+            _non_empty_string("component_unit_instance_id", value)
+            for value in self.component_unit_instance_ids
+        )
+        if len(component_ids) != len(set(component_ids)):
+            raise PlacementDraftError("component_unit_instance_ids must be unique.")
+        object.__setattr__(self, "component_unit_instance_ids", component_ids)
+        grouped = bool(component_ids and self.selected_unit_id not in component_ids)
         if (
             self.decision_type == "submit_catalog_model_materialization_placement"
             and self.army_id is None
@@ -260,9 +272,30 @@ class PlacementDraft:
             raise PlacementDraftError("Model materialization requires the emitted army_id.")
         if (
             self.decision_type != "submit_catalog_model_materialization_placement"
+            and not grouped
             and self.army_id is not None
         ):
-            raise PlacementDraftError("Only model materialization may carry an emitted army_id.")
+            raise PlacementDraftError(
+                "Only grouped or materialized placement may carry an army_id."
+            )
+        if grouped:
+            if self.decision_type != "submit_placement_proposal" or self.army_id is None:
+                raise PlacementDraftError("Grouped placement requires a current army and proposal.")
+            if _context_component_ids(self.context or {}) != component_ids:
+                raise PlacementDraftError(
+                    "Grouped placement components differ from current request."
+                )
+            if _context_model_ids(self.context or {}) != tuple(
+                pose.model_id for pose in self.model_poses
+            ):
+                raise PlacementDraftError("Grouped placement models differ from current request.")
+            if any(
+                pose.unit_instance_id not in component_ids or pose.owner_player_id != self.player_id
+                for pose in self.model_poses
+            ):
+                raise PlacementDraftError("Grouped placement model ownership differs from request.")
+            if {pose.unit_instance_id for pose in self.model_poses} != set(component_ids):
+                raise PlacementDraftError("Grouped placement must cover every current component.")
 
     @classmethod
     def start_for_pending(
@@ -273,6 +306,7 @@ class PlacementDraft:
         pending_decision: UiDecision | None,
         model_display_by_id: JsonObject | None = None,
         authoritative_models_by_id: JsonObject | None = None,
+        battlefield_state: JsonValue = None,
         projection_state_hash: str | None = None,
     ) -> PlacementDraft | None:
         """Create a placement draft for the current placement proposal."""
@@ -294,6 +328,20 @@ class PlacementDraft:
         if route.editor_id != PLACEMENT_EDITOR or not route.supported:
             return None
         submission_variant_id = route.submission_variant_id
+        component_ids = _context_component_ids(proposal.context)
+        grouped = bool(component_ids and proposal.unit_instance_id not in component_ids)
+        if grouped and authoritative_models_by_id is None:
+            raise PlacementDraftError("Grouped placement requires the physical model projection.")
+        army_id = (
+            proposal.army_id
+            if not grouped
+            else _army_id_for_player(
+                battlefield_state=battlefield_state,
+                player_id=proposal.player_id,
+            )
+        )
+        if grouped and proposal.army_id is not None and proposal.army_id != army_id:
+            raise PlacementDraftError("Grouped placement army differs from public projection.")
         materialized_models_by_id = {
             _non_empty_string("materialized model_instance_id", model["model_instance_id"]): model
             for model in proposal.materialized_models
@@ -306,6 +354,7 @@ class PlacementDraft:
                 model_display_by_id=model_display_by_id,
                 authoritative_models_by_id=authoritative_models_by_id,
                 expected_unit_id=proposal.unit_instance_id,
+                allowed_unit_ids=component_ids if grouped else (proposal.unit_instance_id,),
                 expected_player_id=proposal.player_id,
             )
             for model_id in model_ids
@@ -332,7 +381,8 @@ class PlacementDraft:
             submission_variant_id=submission_variant_id,
             spatial_context_hash=proposal.spatial_context_hash,
             projection_state_hash=projection_state_hash,
-            army_id=proposal.army_id,
+            army_id=army_id,
+            component_unit_instance_ids=component_ids,
         )
 
     @property
@@ -420,7 +470,19 @@ class PlacementDraft:
             and proposal.source_decision_request_id == self.source_decision_request_id
             and proposal.source_decision_result_id == self.source_decision_result_id
             and proposal.spatial_context_hash == self.spatial_context_hash
-            and proposal.army_id == self.army_id
+            and (
+                (proposal.army_id is None or proposal.army_id == self.army_id)
+                if self.component_unit_instance_ids
+                and self.selected_unit_id not in self.component_unit_instance_ids
+                else proposal.army_id == self.army_id
+            )
+            and _context_component_ids(proposal.context) == self.component_unit_instance_ids
+            and (
+                not self.component_unit_instance_ids
+                or self.selected_unit_id in self.component_unit_instance_ids
+                or _context_model_ids(proposal.context)
+                == tuple(pose.model_id for pose in self.model_poses)
+            )
             and (
                 self.decision_type != "submit_catalog_model_materialization_placement"
                 or proposal.required_model_ids == tuple(pose.model_id for pose in self.model_poses)
@@ -564,18 +626,21 @@ class PlacementDraft:
             if self.context:
                 body["context"] = self.context
             return _json_object("pre-battle placement payload", body)
-        attempted_placement: JsonObject = {
-            "army_id": _placement_army_id(self),
-            "player_id": self.player_id,
-            "unit_instance_id": self.selected_unit_id,
-            "model_placements": model_placements,
-        }
+        grouped = bool(
+            self.component_unit_instance_ids
+            and self.selected_unit_id not in self.component_unit_instance_ids
+        )
         if self.decision_type == "submit_return_on_death_placement":
             return _json_object(
                 "return-on-death placement payload",
                 {
                     "submission_kind": "submit_return_on_death_placement",
-                    "attempted_placement": attempted_placement,
+                    "attempted_placement": {
+                        "army_id": _placement_army_id(self),
+                        "player_id": self.player_id,
+                        "unit_instance_id": self.selected_unit_id,
+                        "model_placements": model_placements,
+                    },
                 },
             )
         body = {
@@ -583,8 +648,34 @@ class PlacementDraft:
             "proposal_kind": self.proposal_kind,
             "unit_instance_id": self.selected_unit_id,
             "placement_kind": self.placement_kind,
-            "attempted_placement": attempted_placement,
         }
+        if grouped:
+            component_rows: list[JsonValue] = []
+            for component_id in self.component_unit_instance_ids:
+                component_models: list[JsonValue] = [
+                    _model_placement_payload(self, pose)
+                    for pose in self.model_poses
+                    if pose.unit_instance_id == component_id
+                ]
+                component_rows.append(
+                    {
+                        "army_id": _placement_army_id(self),
+                        "player_id": self.player_id,
+                        "unit_instance_id": component_id,
+                        "model_placements": component_models,
+                    }
+                )
+            body["attempted_rules_unit_placement"] = {
+                "rules_unit_instance_id": self.selected_unit_id,
+                "component_unit_placements": component_rows,
+            }
+        else:
+            body["attempted_placement"] = {
+                "army_id": _placement_army_id(self),
+                "player_id": self.player_id,
+                "unit_instance_id": self.selected_unit_id,
+                "model_placements": model_placements,
+            }
         for key in (
             "transport_unit_instance_id",
             "disembark_mode",
@@ -706,6 +797,38 @@ def _context_model_ids(context: JsonObject) -> tuple[str, ...]:
     return model_ids
 
 
+def _context_component_ids(context: JsonObject) -> tuple[str, ...]:
+    raw = context.get("component_unit_instance_ids")
+    if raw is None:
+        return ()
+    if type(raw) is not list:
+        raise PlacementDraftError("context.component_unit_instance_ids must be a list.")
+    component_ids = tuple(
+        _non_empty_string("context.component_unit_instance_id", value) for value in raw
+    )
+    if not component_ids:
+        raise PlacementDraftError("context.component_unit_instance_ids must be non-empty.")
+    if len(component_ids) != len(set(component_ids)):
+        raise PlacementDraftError("context.component_unit_instance_ids must be unique.")
+    return component_ids
+
+
+def _army_id_for_player(*, battlefield_state: JsonValue, player_id: str) -> str:
+    if battlefield_state is None:
+        raise PlacementDraftError("Grouped placement requires public placed-army authority.")
+    placed_armies = _json_object("battlefield_state", battlefield_state).get("placed_armies")
+    if type(placed_armies) is not list:
+        raise PlacementDraftError("Grouped placement requires public placed armies.")
+    army_ids = tuple(
+        _non_empty_string("placed army_id", army.get("army_id"))
+        for value in placed_armies
+        if (army := _json_object("placed army", value)).get("player_id") == player_id
+    )
+    if len(army_ids) != 1:
+        raise PlacementDraftError("Grouped placement requires one public army for its owner.")
+    return army_ids[0]
+
+
 def _placement_pose_from_projection(
     *,
     model_id: str,
@@ -714,6 +837,7 @@ def _placement_pose_from_projection(
     model_display_by_id: JsonObject | None,
     authoritative_models_by_id: JsonObject | None,
     expected_unit_id: str,
+    allowed_unit_ids: tuple[str, ...],
     expected_player_id: str,
 ) -> PlacementModelPose:
     if materialized_model is not None:
@@ -745,7 +869,7 @@ def _placement_pose_from_projection(
         )
         unit_id = _non_empty_string("projected unit_instance_id", projected.get("unit_instance_id"))
         player_id = _non_empty_string("projected owner_player_id", projected.get("owner_player_id"))
-        if unit_id != expected_unit_id or player_id != expected_player_id:
+        if unit_id not in allowed_unit_ids or player_id != expected_player_id:
             raise PlacementDraftError("Projected placement model ownership differs from request.")
         if "split_origin" in projected:
             split_origin = _json_object("projected split_origin", projected["split_origin"])
@@ -785,15 +909,17 @@ def _base_radius_from_size(base_size: JsonObject, *, field_name: str) -> float:
     kind = _non_empty_string(f"{field_name}.kind", base_size.get("kind"))
     if kind == "circular":
         return _positive_float_field(base_size, "diameter_mm") / _MM_PER_INCH / 2.0
-    if kind == "oval":
+    if kind in {"oval", "rectangular"}:
         length = _positive_float_field(base_size, "length_mm")
         width = _positive_float_field(base_size, "width_mm")
+        if kind == "rectangular":
+            return math.hypot(length / 2.0, width / 2.0) / _MM_PER_INCH
         return max(length, width) / _MM_PER_INCH / 2.0
     raise PlacementDraftError(f"{field_name} kind is unsupported: {kind}.")
 
 
 def _placement_army_id(draft: PlacementDraft) -> str:
-    if draft.decision_type == "submit_catalog_model_materialization_placement":
+    if draft.army_id is not None:
         return _required_string_value("army_id", draft.army_id)
     return _army_id_from_unit_instance_id(draft.selected_unit_id, draft.player_id)
 

@@ -891,9 +891,12 @@ def _model_base_radius_inches(*, model_id: str, model_display_by_id: JsonObject)
     kind = _required_string(base_size, "kind")
     if kind == "circular":
         return _required_positive_float(base_size, "diameter_mm") / _MM_PER_INCH / 2.0
-    if kind == "oval":
+    if kind in {"oval", "rectangular"}:
         length = _required_positive_float(base_size, "length_mm")
         width = _required_positive_float(base_size, "width_mm")
+        if kind == "rectangular":
+            # The current renderer draws a circle; contain every rectangle corner.
+            return math.hypot(length / 2.0, width / 2.0) / _MM_PER_INCH
         return max(length, width) / _MM_PER_INCH / 2.0
     raise CoreProjectionRenderError(f"model_display base_size kind is unsupported: {kind}.")
 
