@@ -1312,13 +1312,51 @@ def test_shock_disembark_copies_explicit_empty_start_engagement_and_retries() ->
     assert bad.payload_preview is not None
     assert bad.payload_preview["start_engaged_enemy_unit_instance_ids"] == []
     before = _state_snapshot(client)
+    events_before = client.get_events_since(0, _OWNER).events
     invalid = _submit(client, bad, "shock-invalid")
     assert invalid.status_kind == "invalid"
-    assert invalid.invalid_diagnostics
+    assert "disembark_distance" in {
+        diagnostic.violation_code for diagnostic in invalid.invalid_diagnostics
+    }
     assert _state_snapshot(client) == before
-    retry = _current(client)
+    events_after = client.get_events_since(0, _OWNER).events
+    assert tuple(event["event_type"] for event in events_after[len(events_before) :]) == (
+        "decision_recorded",
+        "disembark_placement_invalid",
+        "movement_setup_failed",
+        "decision_requested",
+    )
+    retry_selection = _current(client)
+    assert retry_selection.decision_type == "select_movement_unit"
+    assert retry_selection.actor_id == _OWNER
+    assert retry_selection.request_id != request.request_id
+    assert _PASSENGER in {option.option_id for option in retry_selection.options}
+    for viewer in (_OWNER, _OPPONENT):
+        pending = client.get_view(viewer).pending_decision
+        assert pending is not None
+        assert pending.request_id == retry_selection.request_id
+    with pytest.raises(UiClientSubmissionError):
+        client.submit_parameterized_payload(
+            request_id=request.request_id,
+            payload=bad.payload_preview,
+            result_id="contract42-setup-arrival:shock-stale",
+        )
+    assert _state_snapshot(client) == before
+    assert client.get_events_since(0, _OWNER).events == events_after
+
+    retry = _movement_placement(
+        client, _PASSENGER, "disembark:shock_disembark", result_suffix="-shock-retry"
+    )
     assert retry.request_id != request.request_id
-    good = _placed(_draft(client), ((13.0, 10.0),))
+    retry_proposal = retry.placement_proposal
+    assert retry_proposal is not None
+    assert retry_proposal.source_decision_request_id != proposal.source_decision_request_id
+    assert retry_proposal.context["start_engaged_enemy_unit_instance_ids"] == []
+    assert retry_proposal.context["disembark_mode"] == "shock_disembark"
+    assert retry_proposal.context["transport_unit_instance_id"] == _TRANSPORT
+    assert retry_proposal.context["model_instance_ids"] == proposal.context["model_instance_ids"]
+    good = _placed(_draft(client), ((10.0, 14.0),))
+    assert good.proposal_request_id == retry.request_id
     assert good.payload_preview is not None
     assert good.payload_preview["start_engaged_enemy_unit_instance_ids"] == []
     accepted = _submit(client, good, "shock-valid")
