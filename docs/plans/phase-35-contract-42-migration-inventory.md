@@ -64,16 +64,19 @@ with conflicts rejected. If both are absent, the HUD reports a typed local place
 it does not derive an ID from the attached or component spelling. Deployment and prebattle
 placement requests instead publish component and model inventories at the request top level.
 The same physical-row editor now consumes them, and a real empty-battlefield attached deployment
-is accepted using the canonical fixture's public mustering row. A direct-ArmyDefinition game may
-lack both owner-army rows before first deployment, so that configuration still needs public Core
-authority for its first attached placement.
+is accepted using the canonical fixture's public mustering row. Pinned Core `GameConfig` requires
+an `army_catalog` and exactly one `ArmyMusterRequest` per player; it has no direct
+`army_definitions` config field. The owner-visible support profile emits that player's mustering
+row. If supplied public authority is missing or conflicting, the editor reports a typed local
+diagnostic for malformed or stale input. This does not establish a supported-session Core blocker.
 
 Attached Scout finite options and `submit_scout_move` requests also publish component and model
 inventories. Current Action, physical roster rows, battlefield selection, and the movement draft
 now share the canonical actor through that explicit membership. The draft keeps the emitted Scout
 distance and model witness IDs. Pinned Core's Scout resolver still looks up the canonical Attached
 Unit as a physical placement and raises `PlacementError`; the real accepted-path regression remains
-failing. Attached Charge's movement request still lacks public component/model membership, so the
+failing ([Core #537](https://github.com/SobolGaming/Warhammer_40k_AI/issues/537)). Attached
+Charge's movement request still lacks public component/model membership, so the
 UI does not transfer the Scout mapping or infer Charge membership.
 
 The additional first-failed-save Damage-to-zero regression in
