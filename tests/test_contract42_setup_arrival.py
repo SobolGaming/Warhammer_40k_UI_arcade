@@ -50,7 +50,12 @@ from warhammer40k_core.rules.source_packages.warhammer_40000_11th import faction
 
 from tests.support.contract42_battle_fixture import shooting_client
 from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
-from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiClientStatus, UiDecision
+from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
+    UiClientStatus,
+    UiClientSubmissionError,
+    UiDecision,
+)
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_game_view
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
@@ -137,8 +142,10 @@ def _state_snapshot(client: LocalSessionClient) -> JsonObject:
     }
 
 
-def _reserve_client(*, oversized: bool = False, aircraft: bool = False) -> LocalSessionClient:
-    client = shooting_client(models=1)
+def _reserve_client(
+    *, oversized: bool = False, aircraft: bool = False, support_unit: bool = False
+) -> LocalSessionClient:
+    client = _reserve_support_client() if support_unit else shooting_client(models=1)
     session = client.session
     assert isinstance(session, LocalGameSession)
     lifecycle = session.lifecycle
@@ -172,7 +179,13 @@ def _reserve_client(*, oversized: bool = False, aircraft: bool = False) -> Local
                 for model in unit.own_models
             ),
         )
-    state.army_definitions[0] = replace(state.army_definitions[0], units=(unit,))
+    state.army_definitions[0] = replace(
+        state.army_definitions[0],
+        units=tuple(
+            unit if candidate.unit_instance_id == _PASSENGER else candidate
+            for candidate in state.army_definitions[0].units
+        ),
+    )
     state.replace_battlefield_state(state.battlefield_state.without_unit_placement(_PASSENGER))
     assert state.mission_setup is not None
     state.mission_setup = replace(
@@ -204,7 +217,91 @@ def _reserve_client(*, oversized: bool = False, aircraft: bool = False) -> Local
             "reserve_state": reserve.to_payload(),
         },
     )
+    if support_unit:
+        objective_ids_before = tuple(
+            row.state_id for row in state.primary_objective_turn_start_states
+        )
+        snapshot_ids_before = tuple(
+            row.snapshot_id for row in state.primary_rules_unit_turn_start_snapshots
+        )
+        record_primary_turn_start_evidence(state=state, decisions=lifecycle.decision_controller)
+        record_new_primary_turn_start_evidence_events(
+            state=state,
+            event_log=lifecycle.decision_controller.event_log,
+            objective_state_ids_before=objective_ids_before,
+            snapshot_ids_before=snapshot_ids_before,
+        )
     return client
+
+
+def _reserve_support_client() -> LocalSessionClient:
+    """Add a separate mustered friendly shooter to expose the owner's phase after ingress."""
+
+    baseline = shooting_client(models=1)
+    session = baseline.session
+    assert isinstance(session, LocalGameSession)
+    initial = session.lifecycle.config
+    alpha, beta = initial.army_muster_requests
+    support = replace(alpha.unit_selections[0], unit_selection_id="support")
+    config = replace(
+        initial,
+        game_id="contract42-oversized-setup-turn-ui",
+        army_muster_requests=(
+            replace(alpha, unit_selections=(*alpha.unit_selections, support)),
+            beta,
+        ),
+    )
+    armies = tuple(
+        muster_army(catalog=config.army_catalog, request=request)
+        for request in config.army_muster_requests
+    )
+    mission = config.mission_setup
+    assert mission is not None
+    battlefield = create_deterministic_battlefield_scenario(
+        battlefield_id="contract42-oversized-setup-turn-field",
+        battlefield_width_inches=mission.battlefield_width_inches,
+        battlefield_depth_inches=mission.battlefield_depth_inches,
+        armies=armies,
+    ).battlefield_state
+    for army in armies:
+        for unit in army.units:
+            if unit.unit_instance_id == _PASSENGER:
+                continue
+            x = 10.0 if unit.unit_instance_id == "army-alpha:support" else 30.0
+            battlefield = battlefield.with_unit_placement(
+                UnitPlacement(
+                    army_id=army.army_id,
+                    player_id=army.player_id,
+                    unit_instance_id=unit.unit_instance_id,
+                    model_placements=tuple(
+                        ModelPlacement(
+                            army_id=army.army_id,
+                            player_id=army.player_id,
+                            unit_instance_id=unit.unit_instance_id,
+                            model_instance_id=model.model_instance_id,
+                            pose=Pose.at(x + index * 1.4, 35.0),
+                        )
+                        for index, model in enumerate(unit.own_models)
+                    ),
+                )
+            )
+    lifecycle = GameLifecycle()
+    lifecycle.start(config)
+    lifecycle.decision_controller.event_log = EventLog()
+    state = lifecycle.state
+    assert state is not None
+    for army in armies:
+        state.record_army_definition(army)
+    state.record_battlefield_state(battlefield)
+    for player_id in state.player_ids:
+        state.record_secondary_mission_choice(
+            SecondaryMissionChoice(
+                player_id=player_id,
+                mode=SecondaryMissionMode.FIXED,
+                fixed_mission_ids=("assassination", "bring_it_down"),
+            )
+        )
+    return LocalSessionClient(session=LocalGameSession(lifecycle=lifecycle))
 
 
 def _transport_client(*, reserve: bool = False, shock: bool = False) -> LocalSessionClient:
@@ -721,22 +818,175 @@ def test_public_nullable_edges_corner_and_oversized_setup_retry() -> None:
     )
 
 
-def test_reserve_first_round_choice_uses_emitted_mission_policy() -> None:
+@pytest.mark.parametrize("oversized", [False, True])
+def test_oversized_arrival_locks_shooting_during_affected_players_setup_turn(
+    oversized: bool,
+) -> None:
+    client = _reserve_client(oversized=oversized, support_unit=True)
+    request = _movement_placement(client, _PASSENGER, "ingress")
+    draft = _draft(client)
+    if oversized:
+        model_id = draft.model_poses[0].model_id
+        assert draft.context is not None
+        draft = replace(
+            draft,
+            context={
+                **draft.context,
+                "large_model_exceptions": [
+                    {"model_instance_id": model_id, "battlefield_edge": "south"}
+                ],
+            },
+        )
+    ready = _placed(draft, ((15.0, 200.0 / 25.4 / 2.0 if oversized else 3.0),))
+    arrived = _submit(client, ready, "oversized-owner-turn")
+    assert arrived.status_kind != "invalid", arrived
+    assert request.actor_id == _OWNER
+    movement = _current(client)
+    assert movement.actor_id == _OWNER
+    assert movement.decision_type == "select_movement_unit"
+    movement_options = {option.option_id for option in movement.options}
+    assert "army-alpha:support" in movement_options
+    # Core's ordinary ingress lock excludes both cases from further Movement.
+    assert _PASSENGER not in movement_options
+    selected = _choose(client, movement, "army-alpha:support", "support-movement")
+    action = selected.decision
+    assert action is not None
+    assert action.actor_id == _OWNER
+    assert action.decision_type == "select_movement_action"
+    stationary = _choose(client, action, "remain_stationary", "support-stationary")
+    assert stationary.status_kind != "invalid", stationary
+    for viewer in (_OWNER, _OPPONENT):
+        view = client.get_view(viewer)
+        assert view.active_player_id == _OWNER
+        assert view.battle_round == 2
+        assert view.current_battle_phase == "shooting"
+        assert view.pending_decision is not None
+        assert view.pending_decision.actor_id == _OWNER
+        assert view.pending_decision.decision_type == "select_shooting_unit"
+        option_ids = {option.option_id for option in view.pending_decision.options}
+        assert "army-alpha:support" in option_ids
+        assert (_PASSENGER in option_ids) == (not oversized)
+    current = _current(client)
+    assert current.actor_id == _OWNER
+    assert current.decision_type == "select_shooting_unit"
+    assert (_PASSENGER in {option.option_id for option in current.options}) == (not oversized)
+    if oversized:
+        before = _state_snapshot(client)
+        owner_events = client.get_events_since(0, _OWNER).events
+        with pytest.raises(UiClientSubmissionError):
+            client.submit_finite(
+                request_id=current.request_id,
+                selected_option_id=_PASSENGER,
+                result_id="contract42-setup-arrival:locked-shooter-forged",
+            )
+        assert _state_snapshot(client) == before
+        assert client.get_events_since(0, _OWNER).events == owner_events
+        assert client.get_view(_OWNER).pending_decision == current
+
+
+def test_round_one_reserve_placement_reports_source_deadline_with_retry() -> None:
     client = _reserve_client()
     session = client.session
     assert isinstance(session, LocalGameSession)
     state = session.lifecycle.state
     assert state is not None
+    policy = session.lifecycle.config.ruleset_descriptor.mission_policy
+    assert policy.reserves_arrival_blocked_battle_rounds == (1,)
     state.battle_round = 1
     request = _current(client)
     assert request.decision_type == "select_movement_unit"
-    # The fixture's Event Companion policy currently offers this ingress. The
-    # client submits only current options and does not impose a local deadline.
+    # The finite selector offers the unit; Core's placement resolution still
+    # validates the source-backed round-one arrival restriction.
     assert _PASSENGER in {option.option_id for option in request.options}
     for viewer in (_OWNER, _OPPONENT):
         view = client.get_view(viewer)
         assert view.pending_decision is not None
         assert view.pending_decision.request_id == request.request_id
+    proposal = _movement_placement(client, _PASSENGER, "ingress")
+    assert proposal.actor_id == _OWNER
+    ready = _placed(_draft(client), ((15.0, 3.0),))
+    before = _state_snapshot(client)
+    events_before = client.get_events_since(0, _OWNER).events
+    invalid = _submit(client, ready, "round-one-deadline")
+    assert invalid.status_kind == "invalid"
+    assert {
+        "reserve_arrival_battle_round_forbidden",
+        "strategic_reserves_battle_round_1",
+    } <= {diagnostic.violation_code for diagnostic in invalid.invalid_diagnostics}
+    assert _state_snapshot(client) == before
+    after_events = client.get_events_since(0, _OWNER).events
+    assert tuple(event["event_type"] for event in after_events[len(events_before) :]) == (
+        "decision_recorded",
+        "reinforcement_placement_invalid",
+        "decision_requested",
+        "placement_proposal_requested",
+    )
+    assert not any(event["event_type"] == "reinforcement_unit_arrived" for event in after_events)
+    retry = client.get_view(_OWNER).pending_decision
+    assert retry is not None
+    assert retry.actor_id == _OWNER
+    assert retry.decision_type == "submit_placement_proposal"
+    assert retry.request_id != proposal.request_id
+    assert retry.placement_proposal is not None
+    assert proposal.placement_proposal is not None
+    assert retry.placement_proposal.source_decision_request_id == (
+        proposal.placement_proposal.source_decision_request_id
+    )
+    for viewer in (_OWNER, _OPPONENT):
+        projected = client.get_view(viewer).pending_decision
+        assert projected is not None
+        assert projected.request_id == retry.request_id
+
+
+def test_round_three_unarrived_reserve_deadline_continues_through_public_session() -> None:
+    client = _transport_client(reserve=True)
+    session = client.session
+    assert isinstance(session, LocalGameSession)
+    state = session.lifecycle.state
+    assert state is not None
+    state.battle_round = 3
+    state.active_player_id = _OPPONENT
+    state.battle_phase_index = state.battle_phase_sequence.index(BattlePhase.FIGHT)
+    objective_ids_before = tuple(row.state_id for row in state.primary_objective_turn_start_states)
+    snapshot_ids_before = tuple(
+        row.snapshot_id for row in state.primary_rules_unit_turn_start_snapshots
+    )
+    record_primary_turn_start_evidence(state=state, decisions=session.lifecycle.decision_controller)
+    record_new_primary_turn_start_evidence_events(
+        state=state,
+        event_log=session.lifecycle.decision_controller.event_log,
+        objective_state_ids_before=objective_ids_before,
+        snapshot_ids_before=snapshot_ids_before,
+    )
+    restored = GameLifecycle.from_payload(session.lifecycle.to_payload())
+    client = LocalSessionClient(session=LocalGameSession(lifecycle=restored))
+    before = client.get_view(_OWNER)
+    assert before.battle_round == 3
+    assert before.active_player_id == _OPPONENT
+    assert before.current_battle_phase == "fight"
+    assert before.battlefield_view is not None
+    transport_model = next(
+        model.model_instance_id
+        for unit in state.army_definitions[0].units
+        if unit.unit_instance_id == _TRANSPORT
+        for model in unit.own_models
+    )
+    before_model = before.battlefield_view.models_by_id[transport_model]
+    assert type(before_model) is dict
+    assert before_model["state"] == "reserves"
+
+    advanced = client.advance_until_decision_or_terminal()
+    assert advanced.status_kind == "waiting_for_decision"
+    for viewer in (_OWNER, _OPPONENT):
+        after = client.get_view(viewer)
+        assert after.battle_round == 4
+        assert after.active_player_id == _OWNER
+        assert after.battlefield_view is not None
+        after_model = after.battlefield_view.models_by_id[transport_model]
+        assert type(after_model) is dict
+        assert after_model["state"] == "destroyed"
+        if after.pending_decision is not None:
+            assert _TRANSPORT not in {option.option_id for option in after.pending_decision.options}
 
 
 def test_aircraft_reserve_only_offers_current_ingress_and_no_hover_action() -> None:

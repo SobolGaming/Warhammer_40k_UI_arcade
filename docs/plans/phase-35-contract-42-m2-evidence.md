@@ -15,7 +15,7 @@ actually checks. The approved acceptance criteria remain unchanged.
 | Dice assignment display | `test_contract42_finite_source.py` reads Core-authored component and aggregate override events through both viewer projections. `test_dice_tray_render.py` checks that identical physical faces and totals produce distinct component versus aggregate labels and headless pixels, keeps the Core total and source rule evidence, and reports malformed evidence visibly. | Domain seeding demonstrates presentation of existing results; it does not assert permission to create a dice assignment during play. |
 | Shooting, melee, Charge, placement | `test_contract42_shooting.py`, `test_contract42_shooting_hud.py`, `test_contract42_melee_sources.py`, `test_contract42_charge.py`, and `test_contract42_split_placement.py` cover real accepted/invalid submissions, physical weapon/profile and duplicated ability-instance choices, explicit empty and nullable shooting declarations, committed Charge subset, and current split successor origin/owner proof. Melee HUD choice selection is also exercised headlessly in `test_assignment_workspace.py`. | The attached Charge and general Firing Deck public-data gaps below remain open. |
 | Movement path witnesses | `test_movement_draft.py` checks exact endpoint-only and entered multi-point serialization for Scout, dedicated Transport Scout, Pile In, and Consolidate, including explicit duplicate start/end for unchanged models. The real Transport Scout path in `test_contract42_charge_sources.py` checks a shifted start returns typed `witness_start_drift` without state change, then submits an exact two-pose UI witness for an accepted Core completion. | The UI preserves entered poses; Core alone validates path legality and samples segments. Attached-unit Scout and Charge still need the missing public component membership described below. |
-| Setup and arrival | `test_contract42_setup_arrival.py` covers public nullable mission edges, oversized exception rejection and retry, loaded Transport ingress with Rapid Disembark restrictions and redaction, Shock's explicit empty engagement list, tactical setup history and subsequent Embark option suppression, Aircraft ingress/return options without Hover, and real revival with its source-linked phase-start witness. | This mission fixture offers reserve ingress in round one, so it does not prove a deadline that suppresses ingress. Its oversized arrival hands control to the opponent in round two, so that path does not establish a same-turn activity lock; the test checks current emitted options without local enforcement. |
+| Setup and arrival | `test_contract42_setup_arrival.py` covers public nullable mission edges, oversized exception rejection and retry, loaded Transport ingress with Rapid Disembark restrictions and redaction, Shock's explicit empty engagement list, tactical setup history and subsequent Embark option suppression, Aircraft ingress/return options without Hover, and real revival with its source-linked phase-start witness. A separate real session keeps the affected player active after oversized ingress: the engine offers a support unit but excludes the arrived unit from Shooting, while ordinary ingress offers both. Round-one Strategic Reserve placement returns both typed source-policy violations and a fresh request without reserve or battlefield mutation. | The finite selector still offers round-one ingress; Core rejects it on placement and records its invalid-decision audit/retry events. The round-three public continuation remains blocked as described below. |
 | Source-specific continuations | `test_contract42_heroic_intervention.py`, `test_contract42_heroic_hud.py`, `test_contract42_overwatch.py`, `test_contract42_firing_deck.py`, and `test_contract42_public_contexts.py` exercise current actor/mode and phase-end shooter selection through the HUD, a first-shooter Firing Deck inventory, scoring attribution, nullable terrain capability, flight, Surge, and public contact redaction. | The Firing Deck fixture knows the initial shot history from its own setup. Contact redaction is seeded with typed Core event data and does not assert the engine generates that event in this fixture. |
 
 The pinned Core interaction examples exercise the generic parameterized envelope for healing
@@ -31,7 +31,7 @@ add production APIs or let the UI compute legality. Source expressions, source o
 split proof, and nullable values are copied from public Core payloads. The UI does not compute
 rules results from them.
 
-## Confirmed public-data gaps
+## Confirmed Core dependencies
 
 **Attached Charge.** A real `submit_movement_proposal` Charge request names the canonical Attached
 Unit as `unit_instance_id`, but does not publish its component unit IDs or model IDs. The public
@@ -53,6 +53,21 @@ public-evidence diagnostic for a general declaration; it does not silently suppl
 read private session state. The issued declaration and both viewer projections are captured in the
 review packet at `m2/artifacts/firing-deck-public.json`, with fixture provenance in the result
 index. This remains an in-scope public-data limitation.
+
+**Round-three reserve deadline continuation.** The active
+`test_round_three_unarrived_reserve_deadline_continues_through_public_session` seeds an
+unarrived loaded Transport at player-b's round-three Fight boundary, records current turn
+evidence, and verifies that the preboundary Core lifecycle restores successfully. Pinned Core
+then applies the round-three destruction to the Transport and cargo, but the same public
+`advance_until_decision_or_terminal()` call raises `GameLifecycleError: Every living rules unit
+must have exactly one authoritative movement location` while preparing the next Movement
+decision. No post-deadline option set or typed late-arrival rejection is available to the UI.
+This retained failing integration test exposes an in-scope Core continuation dependency; it
+is neither skipped nor treated as a passing deadline case. The separate passing round-one test
+proves the earlier arrival minimum through current Core choices, typed invalid diagnostics,
+unchanged reserve/battlefield/army/cargo snapshots, and the expected four public audit/retry
+events. It does not prove
+the round-three cleanup continuation or suppress those required audit events.
 
 ## Smoke and performance method
 
@@ -114,7 +129,8 @@ runtime; switching the UI dependency does not reinterpret them.
 ## Gate status
 
 The idle performance comparison above completed at the path-witness implementation SHA. The final
-documentation commit changes this record only. Clean install, project quality, and coverage gates
+repair changes integration tests and this record only; the measured runtime, smoke module, and
+external probe are unchanged. Clean install, project quality, and coverage gates
 run on that final candidate; the pull request checks and Phase 35 review packet are the
 authoritative record of their commands, counts, result index, and raw logs. No measured comparison
 above is a CI budget or an unverified claim about JSON loading.
