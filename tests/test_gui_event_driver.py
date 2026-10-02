@@ -551,11 +551,12 @@ def test_player_units_roster_button_selects_undeployed_finite_unit_option() -> N
         center_x = round((roster_button.bounds[0] + roster_button.bounds[2]) / 2.0)
         center_y = round((roster_button.bounds[1] + roster_button.bounds[3]) / 2.0)
 
-        driver.click_screen(center_x, center_y)
+        for _ in range(2):
+            driver.click_screen(center_x, center_y)
 
-        assert driver.selected_unit_id == "army-beta:scout-redeploy-unit"
-        assert driver.selected_model_id is None
-        assert driver.highlighted_finite_option_id == "deploy:army-beta:scout-redeploy-unit"
+            assert driver.selected_unit_id == "army-beta:scout-redeploy-unit"
+            assert driver.selected_model_id is None
+            assert driver.highlighted_finite_option_id == "deploy:army-beta:scout-redeploy-unit"
 
         driver.press_key(arcade.key.ENTER)
 

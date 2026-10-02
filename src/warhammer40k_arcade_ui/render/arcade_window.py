@@ -2095,7 +2095,9 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._selection_state.selected_unit_id == unit_id
             and self._selection_state.selected_model_id is None
         ):
-            return False
+            # A current finite option can name an undeployed unit with no battlefield row.
+            # Already-correct focus still protects it from stale-selection cleanup.
+            return True
         self._selection_state = self._selection_state.select_model_id(
             unit_id=unit_id,
             model_id=None,
