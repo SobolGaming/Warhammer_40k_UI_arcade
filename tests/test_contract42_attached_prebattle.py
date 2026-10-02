@@ -769,6 +769,136 @@ def test_attached_scout_keyboard_hidden_hud_and_ambiguous_roster_keep_current_di
         window.close()
 
 
+def test_attached_scout_missing_marker_raw_view_clears_focus_and_blocks_enter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _scout_client(attached=True, transport=False)
+    selection = _decision(client.advance_until_decision_or_terminal(), "select_prebattle_action")
+    chosen = next(
+        option
+        for option in selection.options
+        if _object(option.payload).get("unit_instance_id") == _ATTACHED
+        and _object(option.payload).get("scout_distance_inches") == 6.0
+    )
+    owner = client.get_view(_OWNER)
+    session = client.session
+    assert isinstance(session, LocalGameSession)
+    window = _window(client, owner)
+    try:
+        hud_frames, world_frames = _capture_composed_surfaces(window, monkeypatch)
+        window.on_draw()
+        action = next(
+            region
+            for region in window.hud_button_hit_regions
+            if region.action_kind == "finite_option" and region.option_id == chosen.option_id
+        )
+        window.on_mouse_press(
+            round((action.bounds[0] + action.bounds[2]) / 2.0),
+            round((action.bounds[1] + action.bounds[3]) / 2.0),
+            arcade.MOUSE_BUTTON_LEFT,
+            0,
+        )
+        _assert_finite_attached_surfaces(
+            window, hud_frames=hud_frames, world_frames=world_frames, option_id=chosen.option_id
+        )
+
+        raw_view = deepcopy(session.view(viewer_player_id=_OWNER))
+        raw_decision = _object(raw_view["pending_decision"])
+        raw_options = cast(list[JsonObject], raw_decision["options"])
+        raw_option = next(row for row in raw_options if row["option_id"] == chosen.option_id)
+        damaged_payload = dict(_object(raw_option["payload"]))
+        damaged_payload.pop("is_attached_rules_unit")
+        damaged_payload.pop("component_unit_instance_ids")
+        raw_option["payload"] = damaged_payload
+        damaged_view = UiGameView.from_payload(raw_view)
+        assert damaged_view.pending_decision is not None
+        assert damaged_view.pending_decision.options != selection.options
+        next_state = window.finite_state.apply_view(damaged_view).highlight_option(chosen.option_id)
+        window._apply_refreshed_game_view(view=damaged_view, state=next_state)
+        window._set_finite_state(next_state)
+
+        assert window.finite_state.highlighted_option is not None
+        assert window.finite_state.highlighted_option.option_id == chosen.option_id
+        assert window.finite_state.diagnostics[0].violation_code == (
+            "attached_scout_membership_unavailable"
+        )
+        assert window.selection_state.selected_unit_id is None
+        assert window.selection_state.selected_model_id is None
+        window.on_draw()
+        _assert_no_physical_roster_focus(window, hud_frames)
+        assert not any(
+            isinstance(primitive, CirclePrimitive)
+            and primitive.layer in {"selected_unit_overlay", "selected_model_overlay"}
+            for primitive in world_frames[-1]
+        )
+        records_before = session.decision_record_count()
+        window.on_key_press(arcade.key.ENTER, 0)
+        assert session.decision_record_count() == records_before
+        assert client.get_view(_OWNER).pending_decision == selection
+        assert window.finite_state.diagnostics[0].violation_code == (
+            "attached_scout_membership_unavailable"
+        )
+    finally:
+        window.close()
+
+
+def test_physical_scout_missing_marker_keeps_physical_focus_and_submits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _scout_client(attached=False, transport=False)
+    selection = _decision(client.advance_until_decision_or_terminal(), "select_prebattle_action")
+    chosen = next(
+        option
+        for option in selection.options
+        if _object(option.payload).get("unit_instance_id") == _BODYGUARD
+        and _object(option.payload).get("scout_distance_inches") == 6.0
+    )
+    session = client.session
+    assert isinstance(session, LocalGameSession)
+    raw_view = deepcopy(session.view(viewer_player_id=_OWNER))
+    raw_decision = _object(raw_view["pending_decision"])
+    raw_options = cast(list[JsonObject], raw_decision["options"])
+    raw_option = next(row for row in raw_options if row["option_id"] == chosen.option_id)
+    damaged_payload = dict(_object(raw_option["payload"]))
+    damaged_payload.pop("is_attached_rules_unit")
+    damaged_payload.pop("component_unit_instance_ids")
+    raw_option["payload"] = damaged_payload
+    window = _window(client, UiGameView.from_payload(raw_view))
+    try:
+        hud_frames, world_frames = _capture_composed_surfaces(window, monkeypatch)
+        window.on_draw()
+        action = next(
+            region
+            for region in window.hud_button_hit_regions
+            if region.action_kind == "finite_option" and region.option_id == chosen.option_id
+        )
+        window.on_mouse_press(
+            round((action.bounds[0] + action.bounds[2]) / 2.0),
+            round((action.bounds[1] + action.bounds[3]) / 2.0),
+            arcade.MOUSE_BUTTON_LEFT,
+            0,
+        )
+        assert window.selection_state.selected_unit_id == _BODYGUARD
+        assert not window.finite_state.diagnostics
+        window.on_draw()
+        physical_row = next(
+            row for row in hud_frames[-1].player_unit_buttons if row.unit_id == _BODYGUARD
+        )
+        assert physical_row.selected
+        assert physical_row.focused
+        assert any(
+            isinstance(primitive, CirclePrimitive) and primitive.layer == "selected_unit_overlay"
+            for primitive in world_frames[-1]
+        )
+        records_before = session.decision_record_count()
+        window.on_key_press(arcade.key.ENTER, 0)
+        assert session.decision_record_count() == records_before + 1
+        assert window.pending_decision is not None
+        assert window.pending_decision.decision_type == "submit_scout_move"
+    finally:
+        window.close()
+
+
 def test_attached_scout_finite_membership_and_viewer_drift_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -828,6 +958,14 @@ def test_attached_scout_finite_membership_and_viewer_drift_fail_closed(
         model_ids = cast(list[str], original_payload["model_instance_ids"])
         malformed_payloads: tuple[JsonObject, ...] = (
             {**original_payload, "model_instance_ids": [*model_ids[:-1], foreign_model]},
+            {
+                key: value
+                for key, value in original_payload.items()
+                if key != "is_attached_rules_unit"
+            },
+            {**original_payload, "is_attached_rules_unit": False},
+            {**original_payload, "is_attached_rules_unit": "true"},
+            {**original_payload, "is_attached_rules_unit": None},
             {
                 key: value
                 for key, value in original_payload.items()

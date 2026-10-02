@@ -1583,7 +1583,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         highlighted = self._finite_state.highlighted_option
         if (
             highlighted is not None
-            and is_attached_scout_option(highlighted)
+            and is_attached_scout_option(highlighted, view=self._battlefield_view)
             and self._attached_scout_selection_for_option(highlighted) is None
         ):
             return None
@@ -1620,7 +1620,7 @@ class ArcadeWarhammerWindow(arcade.Window):
 
     def _highlighted_option_is_attached_scout(self) -> bool:
         option = self._finite_state.highlighted_option
-        return option is not None and is_attached_scout_option(option)
+        return option is not None and is_attached_scout_option(option, view=self._battlefield_view)
 
     def _selected_scout_component_unit_ids(
         self, finite_selection: AttachedScoutSelection | None
@@ -1708,7 +1708,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         )
         if (
             submitted_option is not None
-            and is_attached_scout_option(submitted_option)
+            and is_attached_scout_option(submitted_option, view=self._battlefield_view)
             and self._attached_scout_selection_for_option(submitted_option) is None
         ):
             self._set_finite_state(
@@ -2041,7 +2041,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         highlighted_option = self._finite_state.highlighted_option
         if highlighted_option is None:
             return None
-        if is_attached_scout_option(highlighted_option):
+        if is_attached_scout_option(highlighted_option, view=self._battlefield_view):
             membership = self._attached_scout_selection_for_option(highlighted_option)
             return None if membership is None else membership.canonical_unit_id
         return _option_hud_unit_id(

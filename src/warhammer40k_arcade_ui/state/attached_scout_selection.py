@@ -42,14 +42,21 @@ class AttachedScoutSelection:
         )
 
 
-def is_attached_scout_option(option: UiFiniteOption) -> bool:
-    """Identify the option shape that requires physical component membership."""
+def is_attached_scout_option(option: UiFiniteOption, *, view: BattlefieldView) -> bool:
+    """Require membership when a Scout actor has no physical unit to focus."""
 
     payload = option.payload
-    return (
-        type(payload) is dict
-        and payload.get("action_kind") == "scout_move"
-        and payload.get("is_attached_rules_unit") is True
+    if type(payload) is not dict:
+        return False
+    if (
+        payload.get("action_kind") not in ("scout_move", "dedicated_transport_scout_move")
+        and payload.get("proposal_kind") != "scout_move"
+    ):
+        return False
+    canonical_id = payload.get("unit_instance_id")
+    return payload.get("is_attached_rules_unit") is True or (
+        type(canonical_id) is not str
+        or not any(unit.unit_id == canonical_id for unit in view.units)
     )
 
 
@@ -70,16 +77,20 @@ def attached_scout_selection(
         or decision.is_parameterized
         or decision.actor_id != viewer_player_id
         or option not in decision.options
-        or not is_attached_scout_option(option)
+        or not is_attached_scout_option(option, view=view)
     ):
         return None
     payload = option.payload
-    assert type(payload) is dict
+    if type(payload) is not dict:
+        return None
     canonical_id = payload.get("unit_instance_id")
     component_ids = payload.get("component_unit_instance_ids")
     model_ids = payload.get("model_instance_ids")
     if (
-        payload.get("player_id") != decision.actor_id
+        payload.get("action_kind") != "scout_move"
+        or payload.get("is_attached_rules_unit") is not True
+        or payload.get("proposal_kind") != "scout_move"
+        or payload.get("player_id") != decision.actor_id
         or type(canonical_id) is not str
         or not canonical_id
         or any(unit.unit_id == canonical_id for unit in view.units)
