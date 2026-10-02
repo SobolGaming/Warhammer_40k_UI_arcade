@@ -145,6 +145,7 @@ def build_hud_ergonomics_view(
             view=view,
             viewer_player_id=viewer_player_id,
             selected_unit_id=selected_unit_id,
+            pending_decision=pending_decision,
             hovered_hud_button_id=hovered_hud_button_id,
             placement_draft_panel=placement_draft_panel,
             unit_display_by_id=unit_display_by_id,
@@ -413,12 +414,21 @@ def _player_unit_buttons(
     view: BattlefieldView,
     viewer_player_id: str | None,
     selected_unit_id: str | None,
+    pending_decision: UiDecision | None,
     hovered_hud_button_id: str | None,
     placement_draft_panel: PlacementDraftPanelView | None,
     unit_display_by_id: JsonObject | None,
 ) -> tuple[HudButtonView, ...]:
     buttons: list[HudButtonView] = []
     seen_unit_ids: set[str] = set()
+    scout = None if pending_decision is None else pending_decision.movement_proposal
+    selected_component_ids = (
+        scout.component_unit_instance_ids
+        if scout is not None
+        and scout.decision_type == "submit_scout_move"
+        and selected_unit_id == scout.unit_instance_id
+        else ()
+    )
     for unit in view.units:
         if viewer_player_id is not None and unit.player_id != viewer_player_id:
             continue
@@ -430,7 +440,9 @@ def _player_unit_buttons(
                 player_id=unit.player_id,
                 model_count=len(unit.models),
                 on_battlefield=True,
-                selected_unit_id=selected_unit_id,
+                selected_unit_id=(
+                    unit.unit_id if unit.unit_id in selected_component_ids else selected_unit_id
+                ),
                 hovered_hud_button_id=hovered_hud_button_id,
                 placement_draft_panel=placement_draft_panel,
             )
@@ -454,7 +466,9 @@ def _player_unit_buttons(
                 player_id=player_id,
                 model_count=model_count,
                 on_battlefield=False,
-                selected_unit_id=selected_unit_id,
+                selected_unit_id=(
+                    unit_id if unit_id in selected_component_ids else selected_unit_id
+                ),
                 hovered_hud_button_id=hovered_hud_button_id,
                 placement_draft_panel=placement_draft_panel,
             )

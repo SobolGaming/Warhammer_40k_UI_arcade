@@ -59,10 +59,22 @@ accepted/invalid/stale submissions, and same-owner nonmember rejection. Pinned C
 `engine/phases/movement_transports.py` Disembark builder emits the same current component/model
 inventories plus Transport context; a focused test checks the shared UI serializer and Core
 payload decoder. That test does not claim a live attached Disembark acceptance. The grouped draft
-obtains `army_id` from the viewer's unique public placed-army record for the owner. If that record
-is absent or ambiguous, the HUD reports a typed local placement diagnostic because the current
-request does not publish an army ID; it does not derive one from the attached or component ID
-spelling.
+obtains `army_id` from a unique public placed-army owner row or support-profile mustering row,
+with conflicts rejected. If both are absent, the HUD reports a typed local placement diagnostic;
+it does not derive an ID from the attached or component spelling. Deployment and prebattle
+placement requests instead publish component and model inventories at the request top level.
+The same physical-row editor now consumes them, and a real empty-battlefield attached deployment
+is accepted using the canonical fixture's public mustering row. A direct-ArmyDefinition game may
+lack both owner-army rows before first deployment, so that configuration still needs public Core
+authority for its first attached placement.
+
+Attached Scout finite options and `submit_scout_move` requests also publish component and model
+inventories. Current Action, physical roster rows, battlefield selection, and the movement draft
+now share the canonical actor through that explicit membership. The draft keeps the emitted Scout
+distance and model witness IDs. Pinned Core's Scout resolver still looks up the canonical Attached
+Unit as a physical placement and raises `PlacementError`; the real accepted-path regression remains
+failing. Attached Charge's movement request still lacks public component/model membership, so the
+UI does not transfer the Scout mapping or infer Charge membership.
 
 The additional first-failed-save Damage-to-zero regression in
 `tests/test_contract42_damage_zero.py` follows the public `select_modifier_ignores` request

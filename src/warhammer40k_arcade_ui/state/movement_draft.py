@@ -19,9 +19,11 @@ from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
 from warhammer40k_arcade_ui.state.assignment_workspace import is_assignment_parameterized_decision
 from warhammer40k_arcade_ui.state.entity_selection import (
     EntityRef,
+    EntitySelectionError,
     EntitySelectionState,
     build_entity_selection_profile,
-    entity_ref_for_model,
+    model_entity_ref,
+    movement_proposal_unit,
     unit_entity_ref,
 )
 from warhammer40k_arcade_ui.state.interaction_dispatch import (
@@ -270,6 +272,7 @@ class MovementDraft:
     projection_state_hash: str | None = None
     ready_payload: JsonObject | None = None
     next_assignment_group_index: int = 1
+    component_unit_instance_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -409,6 +412,19 @@ class MovementDraft:
             or self.next_assignment_group_index < 1
         ):
             raise MovementDraftError("next_assignment_group_index must be a positive integer.")
+        component_ids = self.component_unit_instance_ids
+        if type(component_ids) is not tuple:
+            raise MovementDraftError("component_unit_instance_ids must be unique IDs.")
+        normalized_component_ids = tuple(
+            _non_empty_string("component_unit_instance_id", value) for value in component_ids
+        )
+        if len(normalized_component_ids) != len(set(normalized_component_ids)):
+            raise MovementDraftError("component_unit_instance_ids must be unique IDs.")
+        object.__setattr__(
+            self,
+            "component_unit_instance_ids",
+            normalized_component_ids,
+        )
 
     @classmethod
     def start_for_pending(
@@ -426,10 +442,17 @@ class MovementDraft:
         proposal = _draftable_movement_proposal(pending_decision)
         if proposal is None:
             return None
-        unit = _unit_by_id(view, proposal.unit_instance_id)
+        try:
+            unit = movement_proposal_unit(view=view, proposal=proposal)
+        except EntitySelectionError as exc:
+            raise MovementDraftError(str(exc)) from exc
         if unit is None:
             return None
-        if selection.selected_unit_id != unit.unit_id:
+        selected_unit_id = selection.selected_unit_id
+        if selected_unit_id != unit.unit_id and not (
+            proposal.decision_type == SCOUT_MOVE_DECISION_TYPE
+            and selected_unit_id in (None, *proposal.component_unit_instance_ids)
+        ):
             return None
         editor_action = _proposal_editor_action(proposal)
         movement_mode = _proposal_movement_mode(proposal)
@@ -488,6 +511,7 @@ class MovementDraft:
             submission_variant_id=submission_variant_id,
             spatial_context_hash=proposal.spatial_context_hash,
             projection_state_hash=projection_state_hash,
+            component_unit_instance_ids=proposal.component_unit_instance_ids,
         )
         return draft.with_recomputed_hints(view=view)
 
@@ -637,6 +661,11 @@ class MovementDraft:
             and _proposal_movement_mode(proposal) == self.movement_mode
             and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
             and proposal.spatial_context_hash == self.spatial_context_hash
+            and proposal.component_unit_instance_ids == self.component_unit_instance_ids
+            and (
+                self.decision_type != SCOUT_MOVE_DECISION_TYPE
+                or proposal.required_model_ids == tuple(path.model_id for path in self.model_paths)
+            )
             and variant_id == self.submission_variant_id
             and (
                 self.projection_state_hash is None
@@ -1056,7 +1085,10 @@ def movement_proposal_for_selected_unit(
         return None
     if movement_proposal_context_diagnostic(proposal) is not None:
         return None
-    if proposal.unit_instance_id != selection.selected_unit_id:
+    if proposal.unit_instance_id != selection.selected_unit_id and not (
+        proposal.decision_type == SCOUT_MOVE_DECISION_TYPE
+        and selection.selected_unit_id in proposal.component_unit_instance_ids
+    ):
         return None
     return proposal
 
@@ -1271,13 +1303,6 @@ def _proposal_editor_action(proposal: UiMovementProposalRequest) -> str:
     return _non_empty_string("movement_phase_action", proposal.movement_phase_action)
 
 
-def _unit_by_id(view: BattlefieldView, unit_id: str) -> UnitView | None:
-    for unit in view.units:
-        if unit.unit_id == unit_id:
-            return unit
-    return None
-
-
 def unsupported_parameterized_tool_label(pending_decision: UiDecision | None) -> str | None:
     """Return a display label when a parameterized request is not movement-draftable."""
 
@@ -1310,14 +1335,13 @@ def _seed_entity_selection(
 ) -> EntitySelectionState:
     profile = build_entity_selection_profile(view=view, pending_decision=pending_decision)
     state = EntitySelectionState.initial(profile)
-    seed_ref = (
-        entity_ref_for_model(
-            view=view,
-            unit_id=unit.unit_id,
-            model_id=selection.selected_model_id,
-        )
-        if selection.selected_model_id is not None
-        else None
+    seed_ref = next(
+        (
+            model_entity_ref(unit=unit, model=model)
+            for model in unit.models
+            if model.model_id == selection.selected_model_id
+        ),
+        None,
     )
     if seed_ref is None:
         seed_ref = unit_entity_ref(unit)

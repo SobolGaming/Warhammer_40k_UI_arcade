@@ -156,7 +156,7 @@ def build_world_primitives(
     for previous_placement in placement_history:
         primitives.extend(_placement_draft_primitives(previous_placement, history=True))
     if selection_state is not None:
-        primitives.extend(_selection_primitives(view, selection_state))
+        primitives.extend(_selection_primitives(view, selection_state, movement_draft))
         if movement_draft is not None:
             primitives.extend(
                 _movement_draft_primitives(
@@ -449,9 +449,35 @@ def _unit_primitives(view: BattlefieldView) -> tuple[RenderPrimitive, ...]:
 def _selection_primitives(
     view: BattlefieldView,
     selection_state: SelectionState,
+    movement_draft: MovementDraft | None,
 ) -> tuple[RenderPrimitive, ...]:
     primitives: list[RenderPrimitive] = []
     unit = selected_unit(view, selection_state)
+    if (
+        unit is None
+        and movement_draft is not None
+        and movement_draft.decision_type == "submit_scout_move"
+        and selection_state.selected_unit_id == movement_draft.selected_unit_id
+    ):
+        model_ids = {path.model_id for path in movement_draft.model_paths}
+        components = tuple(
+            candidate
+            for candidate in view.units
+            if candidate.unit_id in movement_draft.component_unit_instance_ids
+        )
+        models = tuple(
+            model
+            for component in components
+            for model in component.models
+            if model.model_id in model_ids
+        )
+        if len(models) == len(model_ids):
+            unit = UnitView(
+                unit_id=movement_draft.selected_unit_id,
+                player_id=components[0].player_id,
+                label=movement_draft.selected_unit_id,
+                models=models,
+            )
     if unit is not None and "selected_unit" in selection_state.active_overlay_ids:
         center = _unit_center(unit)
         primitives.append(
@@ -465,6 +491,15 @@ def _selection_primitives(
             )
         )
     model = selected_model(view, selection_state)
+    if model is None and unit is not None and selection_state.selected_model_id is not None:
+        model = next(
+            (
+                candidate
+                for candidate in unit.models
+                if candidate.model_id == selection_state.selected_model_id
+            ),
+            None,
+        )
     if model is not None and "selected_model" in selection_state.active_overlay_ids:
         primitives.append(
             CirclePrimitive(

@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass, replace
 from typing import Literal, cast
 
-from warhammer40k_arcade_ui.core_client.protocol import UiDecision
+from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiMovementProposalRequest
 from warhammer40k_arcade_ui.render.camera import WorldPoint
 from warhammer40k_arcade_ui.render.view_models import (
     BattlefieldView,
@@ -712,7 +712,10 @@ def movement_entity_selection_profile(
             decision=decision,
             reason="Decision is not a movement-shaped proposal request.",
         )
-    unit = _unit_by_id(view, proposal.unit_instance_id)
+    try:
+        unit = movement_proposal_unit(view=view, proposal=proposal)
+    except EntitySelectionError as exc:
+        return unsupported_entity_selection_profile(decision=decision, reason=str(exc))
     if unit is None:
         diagnostic = _diagnostic(
             code="candidate_missing",
@@ -763,6 +766,37 @@ def movement_entity_selection_profile(
         subtractive_allowed=True,
         unsupported_reason=None,
         diagnostics=(),
+    )
+
+
+def movement_proposal_unit(
+    *, view: BattlefieldView, proposal: UiMovementProposalRequest
+) -> UnitView | None:
+    """Resolve a current movement actor from its public request and physical projection."""
+
+    if proposal.decision_type != SCOUT_MOVE_DECISION_TYPE:
+        return _unit_by_id(view, proposal.unit_instance_id)
+    component_ids = proposal.component_unit_instance_ids
+    model_ids = proposal.required_model_ids
+    if not component_ids or not model_ids or proposal.player_id is None:
+        raise EntitySelectionError("Scout Move is missing current component/model authority.")
+    physical = {unit.unit_id: unit for unit in view.units if unit.unit_id in component_ids}
+    if set(physical) != set(component_ids):
+        raise EntitySelectionError("Scout Move component is absent from the current projection.")
+    if any(unit.player_id != proposal.player_id for unit in physical.values()):
+        raise EntitySelectionError("Scout Move component owner differs from the current request.")
+    by_model_id = {
+        model.model_id: (unit.unit_id, model) for unit in physical.values() for model in unit.models
+    }
+    if not set(model_ids).issubset(by_model_id):
+        raise EntitySelectionError("Scout Move model is absent from its current component.")
+    if {by_model_id[model_id][0] for model_id in model_ids} != set(component_ids):
+        raise EntitySelectionError("Scout Move model inventory omits a current component.")
+    return UnitView(
+        unit_id=proposal.unit_instance_id,
+        player_id=proposal.player_id,
+        label=", ".join(physical[unit_id].label for unit_id in component_ids),
+        models=tuple(by_model_id[model_id][1] for model_id in model_ids),
     )
 
 

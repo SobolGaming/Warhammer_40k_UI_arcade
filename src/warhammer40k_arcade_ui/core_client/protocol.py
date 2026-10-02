@@ -695,6 +695,8 @@ class UiMovementProposalRequest:
     ruleset_descriptor_hash: str | None = None
     scout_distance_inches: float | None = None
     spatial_context_hash: str | None = None
+    component_unit_instance_ids: tuple[str, ...] = ()
+    required_model_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "request_id", _non_empty_string("request_id", self.request_id))
@@ -768,6 +770,22 @@ class UiMovementProposalRequest:
             "spatial_context_hash",
             _optional_string("spatial_context_hash", self.spatial_context_hash),
         )
+        for field_name in ("component_unit_instance_ids", "required_model_ids"):
+            values: tuple[str, ...] = (
+                self.component_unit_instance_ids
+                if field_name == "component_unit_instance_ids"
+                else self.required_model_ids
+            )
+            if type(values) is not tuple:
+                raise UiClientProtocolError(f"{field_name} must be a tuple of unique IDs.")
+            normalized = tuple(_non_empty_string(field_name, value) for value in values)
+            if len(normalized) != len(set(normalized)):
+                raise UiClientProtocolError(f"{field_name} must be a tuple of unique IDs.")
+            object.__setattr__(self, field_name, normalized)
+        if self.decision_type == "submit_scout_move" and (
+            not self.component_unit_instance_ids or not self.required_model_ids
+        ):
+            raise UiClientProtocolError("Scout Move requires component and model inventories.")
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -805,8 +823,8 @@ class UiMovementProposalRequest:
                 raise UiClientProtocolError(
                     "Scout Move proposal request placement_kind must be null."
                 )
-            _string_list(proposal, "component_unit_instance_ids")
-            _string_list(proposal, "model_instance_ids")
+            component_ids = tuple(_string_list(proposal, "component_unit_instance_ids"))
+            model_ids = tuple(_string_list(proposal, "model_instance_ids"))
             _string_list(proposal, "deployment_zone_ids")
             _json_list("legal_deployment_zones", proposal["legal_deployment_zones"])
             _json_object("mission_setup", proposal["mission_setup"])
@@ -837,6 +855,8 @@ class UiMovementProposalRequest:
                 ruleset_descriptor_hash=_required_string(proposal, "ruleset_descriptor_hash"),
                 scout_distance_inches=_required_number(proposal, "scout_distance_inches"),
                 spatial_context_hash=None,
+                component_unit_instance_ids=component_ids,
+                required_model_ids=model_ids,
             )
         _require_exact_keys(
             proposal,
@@ -911,6 +931,7 @@ class UiPlacementProposalRequest:
     spatial_context_hash: str | None = None
     army_id: str | None = None
     materialized_models: tuple[JsonObject, ...] = ()
+    component_unit_instance_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "request_id", _non_empty_string("request_id", self.request_id))
@@ -1007,6 +1028,25 @@ class UiPlacementProposalRequest:
                 "Only model materialization may carry request-created model authority."
             )
         object.__setattr__(self, "materialized_models", models)
+        component_ids = self.component_unit_instance_ids
+        if type(component_ids) is not tuple:
+            raise UiClientProtocolError("component_unit_instance_ids must be unique IDs.")
+        normalized_component_ids = tuple(
+            _non_empty_string("component_unit_instance_id", value) for value in component_ids
+        )
+        if len(normalized_component_ids) != len(set(normalized_component_ids)):
+            raise UiClientProtocolError("component_unit_instance_ids must be unique IDs.")
+        object.__setattr__(
+            self,
+            "component_unit_instance_ids",
+            normalized_component_ids,
+        )
+        if self.decision_type in {
+            "submit_deployment_placement",
+            "submit_redeploy_placement",
+            "submit_scout_reserve_setup",
+        } and (not component_ids or not self.required_model_ids):
+            raise UiClientProtocolError("Pre-battle placement requires component and model IDs.")
 
     @classmethod
     def from_payload(
@@ -1175,6 +1215,9 @@ class UiPlacementProposalRequest:
                 action_kind=None,
                 source_rule_id=None,
                 context=_json_object("proposal context", proposal["context"]),
+                component_unit_instance_ids=tuple(
+                    _string_list(proposal, "component_unit_instance_ids")
+                ),
             )
         if decision_type in {"submit_redeploy_placement", "submit_scout_reserve_setup"}:
             _require_exact_keys(
@@ -1216,6 +1259,9 @@ class UiPlacementProposalRequest:
                 action_kind=_required_string(proposal, "action_kind"),
                 source_rule_id=_required_string(proposal, "source_rule_id"),
                 context=_json_object("proposal context", proposal["context"]),
+                component_unit_instance_ids=tuple(
+                    _string_list(proposal, "component_unit_instance_ids")
+                ),
             )
         if decision_type == "submit_catalog_model_materialization_placement":
             _require_exact_keys(

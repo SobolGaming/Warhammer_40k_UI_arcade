@@ -13,8 +13,8 @@ actually checks. The approved acceptance criteria remain unchanged.
 | Viewer and physical display | `test_contract42_projection.py`, `test_contract42_retained.py`, `test_contract42_split_placement.py`, `test_core_projection.py`, and window tests cover alternating viewers, hidden rows/events, split ownership, rectangular advisory base radii, and retained zero-wound models until pose removal. | Viewer checks assert public projections, not Core's private decision queue. The rectangular preview is a containing circle; Core owns exact geometry. |
 | Finite decisions and source evidence | `test_contract42_finite_source.py` routes all nine new finite families using current engine-authored request/option IDs. Real sessions exercise duplicate Core ability privacy, mandatory Deadly Demise, Mission Action OC reenumeration, random values, source modifiers and dice evidence. | Canonical request examples prove UI routing; they do not claim nine independent gameplay scenarios. |
 | Dice assignment display | `test_contract42_finite_source.py` reads Core-authored component and aggregate override events through both viewer projections. `test_dice_tray_render.py` checks that identical physical faces and totals produce distinct component versus aggregate labels and headless pixels, keeps the Core total and source rule evidence, and reports malformed evidence visibly. | Domain seeding demonstrates presentation of existing results; it does not assert permission to create a dice assignment during play. |
-| Shooting, melee, Charge, placement | `test_contract42_shooting.py`, `test_contract42_shooting_hud.py`, `test_contract42_melee_sources.py`, `test_contract42_charge.py`, `test_contract42_split_placement.py`, `test_contract42_materialization_placement.py`, and `test_contract42_attached_placement.py` cover real accepted/invalid submissions, physical weapon/profile and duplicated ability-instance choices, explicit empty and nullable shooting declarations, committed Charge subset, current split successor origin/owner proof, request-created model placement, and grouped attached reserve placement. The related Disembark serializer and melee HUD choice are also exercised headlessly. | The attached Charge and general Firing Deck public-data gaps below remain open. Grouped placement needs one public placed-army record for the owner because its current request lacks an army ID; missing authority produces a typed HUD diagnostic. Live attached Disembark acceptance is not asserted by the shared serializer test. |
-| Movement path witnesses | `test_movement_draft.py` checks exact endpoint-only and entered multi-point serialization for Scout, dedicated Transport Scout, Pile In, and Consolidate, including explicit duplicate start/end for unchanged models. The real Transport Scout path in `test_contract42_charge_sources.py` checks a shifted start returns typed `witness_start_drift` without state change, then submits an exact two-pose UI witness for an accepted Core completion. | The UI preserves entered poses; Core alone validates path legality and samples segments. Attached-unit Scout and Charge still need the missing public component membership described below. |
+| Shooting, melee, Charge, placement | `test_contract42_shooting.py`, `test_contract42_shooting_hud.py`, `test_contract42_melee_sources.py`, `test_contract42_charge.py`, `test_contract42_split_placement.py`, `test_contract42_materialization_placement.py`, `test_contract42_attached_placement.py`, and `test_contract42_attached_prebattle.py` cover real accepted/invalid submissions, physical weapon/profile and duplicated ability-instance choices, explicit empty and nullable shooting declarations, committed Charge subset, current split successor origin/owner proof, request-created model placement, grouped attached reserve placement, and attached deployment from an empty battlefield. The related Disembark serializer and melee HUD choice are also exercised headlessly. | Attached Charge and general Firing Deck still lack public data. Grouped placement needs a unique public owner army from placed-army or support-profile mustering rows; valid direct-ArmyDefinition sessions can lack both at first attached deployment. Live attached Disembark acceptance is not asserted by the shared serializer test. |
+| Movement path witnesses | `test_movement_draft.py` checks exact endpoint-only and entered multi-point serialization for Scout, dedicated Transport Scout, Pile In, and Consolidate, including explicit duplicate start/end for unchanged models. The real Transport Scout path in `test_contract42_charge_sources.py` checks a shifted start returns typed `witness_start_drift` without state change, then submits an exact two-pose UI witness for an accepted Core completion. `test_contract42_attached_prebattle.py` checks current attached Scout component/model inventory, draft, stale/membership rejection, and headless Current Action, roster, and battlefield focus. | The UI preserves entered poses; Core alone validates path legality and samples segments. Pinned Core raises a `PlacementError` while resolving a complete attached Scout witness, so the accepted-path regression remains failing. Attached Charge still lacks public component membership. |
 | Setup and arrival | `test_contract42_setup_arrival.py` covers public nullable mission edges, oversized exception rejection and retry, loaded Transport ingress with Rapid Disembark restrictions and redaction, Shock's explicit empty engagement list, tactical setup history and subsequent Embark option suppression, Aircraft ingress/return options without Hover, and real revival with its source-linked phase-start witness. A separate real session keeps the affected player active after oversized ingress: the engine offers a support unit but excludes the arrived unit from Shooting, while ordinary ingress offers both. Round-one Strategic Reserve placement returns both typed source-policy violations and a fresh request without reserve or battlefield mutation. | The finite selector still offers round-one ingress; Core rejects it on placement and records its invalid-decision audit/retry events. The round-three public continuation remains blocked as described below. |
 | Source-specific continuations | `test_contract42_heroic_intervention.py`, `test_contract42_heroic_hud.py`, `test_contract42_overwatch.py`, `test_contract42_firing_deck.py`, and `test_contract42_public_contexts.py` exercise current actor/mode and phase-end shooter selection through the HUD, a first-shooter Firing Deck inventory, scoring attribution, nullable terrain capability, flight, Surge, and public contact redaction. | The Firing Deck fixture knows the initial shot history from its own setup. Contact redaction is seeded with typed Core event data and does not assert the engine generates that event in this fixture. |
 
@@ -41,6 +41,29 @@ evidence of a roster-start traversal. The exact build, generation route, and has
 `tests/fixtures/contract42_damage_zero_checkpoint.md`.
 
 ## Confirmed Core dependencies
+
+**Attached Scout acceptance.** The current `submit_scout_move` request publishes its canonical
+actor, physical component IDs, exact model IDs and Scout distance. The UI now builds the six-model
+draft from those fields and the public physical projection; no component is inferred from the
+actor's spelling. A complete, current-ID witness from a nonoverlapping formation reaches Core's
+`engine/prebattle.py:1808`, where `_resolve_scout_move` calls
+`unit_placement_by_id(request.unit_instance_id)` for the canonical Attached Unit ID. The
+battlefield has placements only for the two physical components, so Core raises
+`PlacementError: BattlefieldRuntimeState unit_instance_id is not placed.` before returning an
+accepted or typed invalid status. The ordinary `LocalSessionClient` wraps `DecisionError` and
+`GameLifecycleError`, not this `PlacementError`; an actual accepted Scout completion is therefore
+not claimed. `test_contract42_attached_prebattle.py` keeps this normal accepted-path regression
+failing at the public Core boundary.
+
+**First attached deployment without owner-army rows.** The attached deployment request supplies
+the canonical actor and physical component/model inventory, but no `army_id`. The UI uses the
+unique public `battlefield_state.placed_armies` owner row or support-profile
+`mustering_support_rows` and rejects conflicts. The canonical muster session has the latter even
+while the battlefield is genuinely empty, and the real attached deployment test submits its
+physical component rows successfully. A valid direct-ArmyDefinition session can have neither
+row before the first placement. The UI then reports a typed placement diagnostic; it cannot
+construct the required model-row `army_id` from public authority. This limit applies to first
+attached deployment in that configuration.
 
 **Attached Charge.** A real `submit_movement_proposal` Charge request names the canonical Attached
 Unit as `unit_instance_id`, but does not publish its component unit IDs or model IDs. The public
@@ -87,6 +110,12 @@ traversal, with actor, current request, viewer projection, event count, and mono
 public decision records. Independent mutable tests start fresh sessions. `charge` and `fight` fail
 argument validation because the canonical fixture reaches terminal without those requests after
 79 accepted decisions; separate real-session tests cover those editors.
+
+The smoke caller now checks each placement and Scout model against the current request's public
+component/model inventory and physical owner, and writes physical component IDs into deployment
+model rows. It resolves placement `army_id` from public placed-army and support-profile muster
+rows. Its focused movement-start traversal exercises that route. The timings below were captured
+before this repair and are historical comparisons, not measurements of the current smoke caller.
 
 The idle runner measured corrected baseline UI SHA
 `7b1b0339f1c39e35d1846543b997c915b28004d4` against the path-witness implementation

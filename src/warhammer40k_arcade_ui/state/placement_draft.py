@@ -11,6 +11,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     JsonValue,
     UiDecision,
     UiPlacementProposalRequest,
+    UiSupportProfile,
     validate_json_value,
 )
 from warhammer40k_arcade_ui.render.camera import WorldPoint
@@ -35,6 +36,9 @@ PLACEMENT_PROPOSAL_DECISION_TYPES = frozenset(
         "submit_healing_revival_placement",
         "submit_return_on_death_placement",
     )
+)
+_PREBATTLE_PLACEMENT_DECISION_TYPES = frozenset(
+    ("submit_deployment_placement", "submit_redeploy_placement", "submit_scout_reserve_setup")
 )
 SUPPORTED_PLACEMENT_PROPOSAL_KINDS = frozenset(
     (
@@ -273,22 +277,30 @@ class PlacementDraft:
         if (
             self.decision_type != "submit_catalog_model_materialization_placement"
             and not grouped
+            and self.decision_type not in _PREBATTLE_PLACEMENT_DECISION_TYPES
             and self.army_id is not None
         ):
             raise PlacementDraftError(
                 "Only grouped or materialized placement may carry an army_id."
             )
         if grouped:
-            if self.decision_type != "submit_placement_proposal" or self.army_id is None:
-                raise PlacementDraftError("Grouped placement requires a current army and proposal.")
-            if _context_component_ids(self.context or {}) != component_ids:
-                raise PlacementDraftError(
-                    "Grouped placement components differ from current request."
-                )
-            if _context_model_ids(self.context or {}) != tuple(
-                pose.model_id for pose in self.model_poses
+            if (
+                self.decision_type
+                not in {
+                    "submit_placement_proposal",
+                    *_PREBATTLE_PLACEMENT_DECISION_TYPES,
+                }
+                or self.army_id is None
             ):
-                raise PlacementDraftError("Grouped placement models differ from current request.")
+                raise PlacementDraftError("Grouped placement requires a current army and proposal.")
+            if self.decision_type == "submit_placement_proposal" and (
+                _context_component_ids(self.context or {}) != component_ids
+                or _context_model_ids(self.context or {})
+                != tuple(pose.model_id for pose in self.model_poses)
+            ):
+                raise PlacementDraftError(
+                    "Grouped placement inventory differs from current request."
+                )
             if any(
                 pose.unit_instance_id not in component_ids or pose.owner_player_id != self.player_id
                 for pose in self.model_poses
@@ -307,6 +319,7 @@ class PlacementDraft:
         model_display_by_id: JsonObject | None = None,
         authoritative_models_by_id: JsonObject | None = None,
         battlefield_state: JsonValue = None,
+        support_profile: UiSupportProfile | None = None,
         projection_state_hash: str | None = None,
     ) -> PlacementDraft | None:
         """Create a placement draft for the current placement proposal."""
@@ -328,17 +341,19 @@ class PlacementDraft:
         if route.editor_id != PLACEMENT_EDITOR or not route.supported:
             return None
         submission_variant_id = route.submission_variant_id
-        component_ids = _context_component_ids(proposal.context)
+        component_ids = _proposal_component_ids(proposal)
         grouped = bool(component_ids and proposal.unit_instance_id not in component_ids)
         if grouped and authoritative_models_by_id is None:
             raise PlacementDraftError("Grouped placement requires the physical model projection.")
         army_id = (
-            proposal.army_id
-            if not grouped
-            else _army_id_for_player(
+            _army_id_for_player(
                 battlefield_state=battlefield_state,
                 player_id=proposal.player_id,
+                support_profile=support_profile,
+                game_id=proposal.game_id,
             )
+            if grouped
+            else proposal.army_id
         )
         if grouped and proposal.army_id is not None and proposal.army_id != army_id:
             raise PlacementDraftError("Grouped placement army differs from public projection.")
@@ -471,16 +486,19 @@ class PlacementDraft:
             and proposal.source_decision_result_id == self.source_decision_result_id
             and proposal.spatial_context_hash == self.spatial_context_hash
             and (
-                (proposal.army_id is None or proposal.army_id == self.army_id)
-                if self.component_unit_instance_ids
-                and self.selected_unit_id not in self.component_unit_instance_ids
+                proposal.army_id is None or proposal.army_id == self.army_id
+                if self.decision_type in _PREBATTLE_PLACEMENT_DECISION_TYPES
+                or (
+                    self.component_unit_instance_ids
+                    and self.selected_unit_id not in self.component_unit_instance_ids
+                )
                 else proposal.army_id == self.army_id
             )
-            and _context_component_ids(proposal.context) == self.component_unit_instance_ids
+            and _proposal_component_ids(proposal) == self.component_unit_instance_ids
             and (
                 not self.component_unit_instance_ids
                 or self.selected_unit_id in self.component_unit_instance_ids
-                or _context_model_ids(proposal.context)
+                or (proposal.required_model_ids or _context_model_ids(proposal.context))
                 == tuple(pose.model_id for pose in self.model_poses)
             )
             and (
@@ -797,6 +815,14 @@ def _context_model_ids(context: JsonObject) -> tuple[str, ...]:
     return model_ids
 
 
+def _proposal_component_ids(proposal: UiPlacementProposalRequest) -> tuple[str, ...]:
+    context_ids = _context_component_ids(proposal.context)
+    request_ids = proposal.component_unit_instance_ids
+    if request_ids and context_ids and request_ids != context_ids:
+        raise PlacementDraftError("Placement component inventories differ across request fields.")
+    return request_ids or context_ids
+
+
 def _context_component_ids(context: JsonObject) -> tuple[str, ...]:
     raw = context.get("component_unit_instance_ids")
     if raw is None:
@@ -813,7 +839,13 @@ def _context_component_ids(context: JsonObject) -> tuple[str, ...]:
     return component_ids
 
 
-def _army_id_for_player(*, battlefield_state: JsonValue, player_id: str) -> str:
+def _army_id_for_player(
+    *,
+    battlefield_state: JsonValue,
+    player_id: str,
+    support_profile: UiSupportProfile | None = None,
+    game_id: str | None = None,
+) -> str:
     if battlefield_state is None:
         raise PlacementDraftError("Grouped placement requires public placed-army authority.")
     placed_armies = _json_object("battlefield_state", battlefield_state).get("placed_armies")
@@ -824,9 +856,28 @@ def _army_id_for_player(*, battlefield_state: JsonValue, player_id: str) -> str:
         for value in placed_armies
         if (army := _json_object("placed army", value)).get("player_id") == player_id
     )
-    if len(army_ids) != 1:
+    if len(army_ids) > 1:
         raise PlacementDraftError("Grouped placement requires one public army for its owner.")
-    return army_ids[0]
+    mustered_army_ids: tuple[str, ...] = ()
+    if support_profile is not None:
+        if game_id is None or support_profile.game_id != game_id:
+            raise PlacementDraftError("Placement support profile game differs from the request.")
+        rows = support_profile.payload.get("mustering_support_rows")
+        if type(rows) is not list:
+            raise PlacementDraftError("Placement support profile has no mustering rows.")
+        mustered_army_ids = tuple(
+            _non_empty_string("mustered army_id", row.get("army_id"))
+            for value in rows
+            if (row := _json_object("mustering row", value)).get("player_id") == player_id
+        )
+        if len(mustered_army_ids) > 1:
+            raise PlacementDraftError("Grouped placement has multiple public owner armies.")
+    if army_ids and mustered_army_ids and army_ids != mustered_army_ids:
+        raise PlacementDraftError("Placed and mustered owner armies differ.")
+    resolved = army_ids or mustered_army_ids
+    if not resolved:
+        raise PlacementDraftError("Grouped placement requires one public army for its owner.")
+    return resolved[0]
 
 
 def _placement_pose_from_projection(

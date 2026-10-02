@@ -601,7 +601,7 @@ def _scout_client(*, attached: bool, transport: bool) -> LocalSessionClient:
             origin = (
                 Pose.at(5.0, 53.0)
                 if unit_id == "army-alpha:scout-redeploy-unit"
-                else Pose.at(7.0, 54.5)
+                else Pose.at(8.6, 54.8)
                 if unit_id == "army-alpha:leader"
                 else Pose.at(20.0, 55.0)
                 if unit_id == "army-alpha:transport"

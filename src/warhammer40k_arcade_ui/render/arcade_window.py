@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from itertools import pairwise
 from pathlib import Path
 from textwrap import wrap
+from typing import TypeGuard
 
 import arcade
 
@@ -101,7 +102,7 @@ from warhammer40k_arcade_ui.state.finite_decision import (
     FiniteDecisionUiState,
     submit_finite_option,
 )
-from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
+from warhammer40k_arcade_ui.state.movement_draft import MovementDraft, MovementDraftError
 from warhammer40k_arcade_ui.state.movement_submission import (
     MovementSubmissionError,
     submit_movement_draft,
@@ -1189,6 +1190,43 @@ class ArcadeWarhammerWindow(arcade.Window):
     def _select_unit_from_hud(self, unit_id: str) -> None:
         if self._focus_finite_unit_option_from_hud(unit_id):
             return
+        draft = self._movement_draft
+        if (
+            draft is not None
+            and draft.decision_type == "submit_scout_move"
+            and unit_id in draft.component_unit_instance_ids
+        ):
+            focused = next(
+                (
+                    (path.model_id, ref)
+                    for path in draft.model_paths
+                    if (
+                        ref := entity_ref_for_model(
+                            view=self._battlefield_view,
+                            unit_id=unit_id,
+                            model_id=path.model_id,
+                        )
+                    )
+                    is not None
+                ),
+                None,
+            )
+            if focused is not None:
+                model_id, ref = focused
+                self._movement_draft = draft.replace_model_selection(
+                    view=self._battlefield_view, ref=ref
+                )
+                self._selection_state = self._selection_state.select_model_id(
+                    unit_id=draft.selected_unit_id,
+                    model_id=model_id,
+                    preferences=self._preferences,
+                )
+                self._trace_event(
+                    category="ui",
+                    event_name="ui.roster_unit_selected",
+                    summary={"unit_id": unit_id, "model_id": model_id},
+                )
+                return
         if not _view_has_unit(self._battlefield_view, unit_id):
             self._set_finite_state(
                 self._finite_state.with_local_invalid(
@@ -1485,10 +1523,15 @@ class ArcadeWarhammerWindow(arcade.Window):
 
     def _focus_finite_unit_option_from_hud(self, unit_id: str) -> bool:
         next_state = self._finite_state.highlight_option_for_unit(unit_id)
+        focused_unit_id = unit_id
         if not _highlighted_option_targets_unit(next_state, unit_id):
-            return False
+            attached_scout = self._attached_scout_option_for_component(unit_id)
+            if attached_scout is None:
+                return False
+            option_id, focused_unit_id = attached_scout
+            next_state = self._finite_state.highlight_option(option_id)
         self._selection_state = self._selection_state.select_model_id(
-            unit_id=unit_id,
+            unit_id=focused_unit_id,
             model_id=None,
             preferences=self._preferences,
         )
@@ -1504,6 +1547,52 @@ class ArcadeWarhammerWindow(arcade.Window):
             },
         )
         return True
+
+    def _attached_scout_option_for_component(self, unit_id: str) -> tuple[str, str] | None:
+        """Resolve a physical roster row through current public Scout option membership."""
+
+        pending = self._finite_state.pending_decision
+        if pending is None or pending.decision_type != "select_prebattle_action":
+            return None
+        physical = next(
+            (unit for unit in self._battlefield_view.units if unit.unit_id == unit_id), None
+        )
+        if physical is None or physical.player_id != pending.actor_id:
+            return None
+        matches: list[tuple[str, str]] = []
+        for option in self._finite_state.finite_options:
+            payload = option.payload
+            if type(payload) is not dict or payload.get("action_kind") != "scout_move":
+                continue
+            if payload.get("is_attached_rules_unit") is not True:
+                continue
+            if payload.get("player_id") != pending.actor_id:
+                continue
+            canonical_id = payload.get("unit_instance_id")
+            components = payload.get("component_unit_instance_ids")
+            model_ids = payload.get("model_instance_ids")
+            if type(canonical_id) is not str or not canonical_id:
+                continue
+            if not _unique_nonempty_strings(components) or unit_id not in components:
+                continue
+            if not _unique_nonempty_strings(model_ids):
+                continue
+            members = tuple(
+                unit for unit in self._battlefield_view.units if unit.unit_id in components
+            )
+            if len(members) != len(components):
+                continue
+            if any(unit.player_id != pending.actor_id for unit in members):
+                continue
+            if {model.model_id for unit in members for model in unit.models} != set(model_ids):
+                continue
+            matches.append((option.option_id, canonical_id))
+        highlighted = self._finite_state.highlighted_option
+        if highlighted is not None:
+            focused = next((match for match in matches if match[0] == highlighted.option_id), None)
+            if focused is not None:
+                return focused
+        return matches[0] if len(matches) == 1 else None
 
     def _focus_entity_for_highlighted_option(
         self,
@@ -1931,12 +2020,27 @@ class ArcadeWarhammerWindow(arcade.Window):
         ):
             self._movement_draft = current.with_recomputed_hints(view=self._battlefield_view)
             return
-        next_draft = MovementDraft.start_for_pending(
-            view=self._battlefield_view,
-            selection=self._selection_state,
-            pending_decision=self._pending_decision,
-            projection_state_hash=self._current_projection_state_hash(),
-        )
+        try:
+            next_draft = MovementDraft.start_for_pending(
+                view=self._battlefield_view,
+                selection=self._selection_state,
+                pending_decision=self._pending_decision,
+                projection_state_hash=self._current_projection_state_hash(),
+            )
+        except MovementDraftError as exc:
+            self._movement_draft = None
+            self._clear_stale_movement_draft_selection(current)
+            self._finite_state = self._finite_state.with_local_invalid(
+                violation_code="movement_draft_unavailable",
+                message=str(exc),
+                field="pending_decision",
+            )
+            self._trace_event(
+                category="ui",
+                event_name="ui.movement_draft_unavailable",
+                summary={"reason": str(exc)},
+            )
+            return
         if next_draft is not None:
             self._movement_draft = next_draft
             self._placement_draft = None
@@ -1959,14 +2063,24 @@ class ArcadeWarhammerWindow(arcade.Window):
             return
         if current is not None:
             self._movement_draft = None
-            self._selection_state = self._selection_state.without_movement_draft_overlays(
-                self._preferences
-            )
+            self._clear_stale_movement_draft_selection(current)
             self._trace_event(
                 category="ui",
                 event_name="ui.movement_draft_cleared",
                 summary={"reason": "context_mismatch"},
             )
+
+    def _clear_stale_movement_draft_selection(self, draft: MovementDraft | None) -> None:
+        self._selection_state = self._selection_state.without_movement_draft_overlays(
+            self._preferences
+        )
+        if (
+            draft is not None
+            and draft.decision_type == "submit_scout_move"
+            and self._selection_state.selected_unit_id == draft.selected_unit_id
+            and not _view_has_unit(self._battlefield_view, draft.selected_unit_id)
+        ):
+            self._selection_state = self._selection_state.clear_selection(self._preferences)
 
     def _sync_placement_draft(self) -> None:
         current = self._placement_draft
@@ -1994,6 +2108,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 battlefield_state=(
                     None if self._last_game_view is None else self._last_game_view.battlefield_state
                 ),
+                support_profile=self.support_profile,
                 projection_state_hash=self._current_projection_state_hash(),
             )
         except PlacementDraftError as exc:
@@ -2182,7 +2297,10 @@ class ArcadeWarhammerWindow(arcade.Window):
         if self._movement_draft is None:
             return False
         for hit in model_hits_at(view=self._battlefield_view, world_point=world_point):
-            if hit.unit_id != self._movement_draft.selected_unit_id:
+            if hit.unit_id not in {
+                self._movement_draft.selected_unit_id,
+                *self._movement_draft.component_unit_instance_ids,
+            }:
                 continue
             ref = entity_ref_for_model(
                 view=self._battlefield_view,
@@ -2206,6 +2324,11 @@ class ArcadeWarhammerWindow(arcade.Window):
                     view=self._battlefield_view,
                     ref=ref,
                 )
+            self._selection_state = self._selection_state.select_model_id(
+                unit_id=self._movement_draft.selected_unit_id,
+                model_id=hit.model_id,
+                preferences=self._preferences,
+            ).with_movement_draft_overlays(self._preferences)
             self._trace_movement_draft_event(
                 "ui.movement_draft_entity_selection",
                 extra_summary={"model_id": hit.model_id, "unit_id": hit.unit_id},
@@ -2623,6 +2746,15 @@ def _finite_option_targets_unit(
         return True
     payload_unit_id = _first_unique_payload_string(payload, OPTION_FOCUS_UNIT_ID_KEYS)
     return payload_unit_id == unit_id
+
+
+def _unique_nonempty_strings(value: JsonValue) -> TypeGuard[list[str]]:
+    return (
+        type(value) is list
+        and bool(value)
+        and all(type(item) is str and bool(item) for item in value)
+        and len(value) == len(set(value))
+    )
 
 
 def _option_hud_unit_id(

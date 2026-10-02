@@ -149,7 +149,7 @@ def _drive_to_checkpoint(
             return current
         result_id = f"ui-live-smoke-{result_index:06d}"
         if decision.is_parameterized:
-            payload = _automated_parameterized_payload(decision=decision, view=view)
+            payload = _automated_parameterized_payload(decision=decision, view=view, client=client)
             current = client.submit_parameterized_payload(
                 request_id=decision.request_id,
                 payload=payload,
@@ -268,6 +268,7 @@ def _automated_parameterized_payload(
     *,
     decision: UiDecision,
     view: UiGameView,
+    client: LocalSessionClient,
 ) -> JsonObject:
     interaction = decision.interaction
     proposal = decision.parameterized_proposal
@@ -284,7 +285,13 @@ def _automated_parameterized_payload(
         raise LiveCoreSmokeError("Smoke Stratagem proposal does not declare a decline option.")
     kind = interaction.interaction_kind
     if kind in {"model_pose_placement", "multi_model_placement"}:
-        return _placement_payload(proposal.payload, view=view)
+        return _placement_payload(
+            proposal.payload,
+            view=view,
+            support_profile=client.get_support_profile(
+                _required_string(proposal.payload, "player_id")
+            ),
+        )
     if kind == "path_editor" and proposal.proposal_kind == "scout_move":
         return _scout_move_payload(proposal.payload, view=view)
     raise LiveCoreSmokeError(
@@ -293,18 +300,44 @@ def _automated_parameterized_payload(
     )
 
 
-def _placement_payload(request: JsonObject, *, view: UiGameView) -> JsonObject:
+def _placement_payload(
+    request: JsonObject, *, view: UiGameView, support_profile: UiSupportProfile
+) -> JsonObject:
     decision_type = _required_string(request, "decision_type")
     unit_id = _required_string(request, "unit_instance_id")
     player_id = _optional_string(request, "player_id") or _required_string(request, "actor_id")
     model_ids = tuple(_string_list(request, "model_instance_ids"))
     if not model_ids:
         raise LiveCoreSmokeError("Smoke placement request has no model_instance_ids.")
+    component_ids = tuple(_string_list(request, "component_unit_instance_ids"))
+    if not component_ids or len(component_ids) != len(set(component_ids)):
+        raise LiveCoreSmokeError("Smoke placement request has no unique component inventory.")
+    army_id = _public_smoke_army_id(
+        view=view,
+        support_profile=support_profile,
+        player_id=player_id,
+    )
+    physical_component_ids: set[str] = set()
+    for model_id in model_ids:
+        model = _projected_model(view, model_id)
+        if model is None:
+            raise LiveCoreSmokeError(f"Smoke model {model_id!r} is absent from the projection.")
+        component_id = _required_string(model, "unit_instance_id")
+        if (
+            component_id not in component_ids
+            or _required_string(model, "owner_player_id") != player_id
+        ):
+            raise LiveCoreSmokeError(f"Smoke model {model_id!r} differs from request ownership.")
+        physical_component_ids.add(component_id)
+    if physical_component_ids != set(component_ids):
+        raise LiveCoreSmokeError("Smoke placement inventory omits a current component.")
     model_placements: list[JsonValue] = [
         {
-            "army_id": unit_id.split(":", maxsplit=1)[0],
+            "army_id": army_id,
             "player_id": player_id,
-            "unit_instance_id": unit_id,
+            "unit_instance_id": _required_string(
+                _required_projected_model(view, model_id), "unit_instance_id"
+            ),
             "model_instance_id": model_id,
             "pose": _placement_pose_payload(
                 index=index,
@@ -375,12 +408,22 @@ def _scout_move_payload(request: JsonObject, *, view: UiGameView) -> JsonObject:
     unit_id = _required_string(request, "unit_instance_id")
     model_ids = tuple(_string_list(request, "model_instance_ids"))
     if not model_ids:
-        model_ids = _placed_model_ids_for_unit(view, unit_id)
+        raise LiveCoreSmokeError("Smoke Scout request has no model_instance_ids.")
+    component_ids = tuple(_string_list(request, "component_unit_instance_ids"))
+    if not component_ids or len(component_ids) != len(set(component_ids)):
+        raise LiveCoreSmokeError("Smoke Scout request has no unique component inventory.")
     model_paths: list[JsonValue] = []
+    physical_component_ids: set[str] = set()
     for model_id in model_ids:
         model = _projected_model(view, model_id)
         if model is None or model.get("pose") is None:
             raise LiveCoreSmokeError(f"Scout model {model_id!r} has no projected pose.")
+        component_id = _required_string(model, "unit_instance_id")
+        if component_id not in component_ids or _required_string(
+            model, "owner_player_id"
+        ) != _required_string(request, "player_id"):
+            raise LiveCoreSmokeError(f"Scout model {model_id!r} differs from request ownership.")
+        physical_component_ids.add(component_id)
         start = _proposal_pose_from_projected(_required_object(model, "pose"))
         position = _required_object(start, "position")
         x = _required_number(position, "x")
@@ -397,6 +440,8 @@ def _scout_move_payload(request: JsonObject, *, view: UiGameView) -> JsonObject:
                 ],
             }
         )
+    if physical_component_ids != set(component_ids):
+        raise LiveCoreSmokeError("Smoke Scout inventory omits a current component.")
     payload: JsonObject = {
         "proposal_request_id": _required_string(request, "request_id"),
         "proposal_kind": _required_string(request, "proposal_kind"),
@@ -425,17 +470,47 @@ def _projected_model(view: UiGameView, model_id: str) -> JsonObject | None:
     return None if value is None else _required_object(models, model_id)
 
 
-def _placed_model_ids_for_unit(view: UiGameView, unit_id: str) -> tuple[str, ...]:
-    battlefield = view.battlefield_view
-    if battlefield is None:
-        raise LiveCoreSmokeError("Smoke proposal requires canonical battlefield_view.")
-    models = _required_object(battlefield.authoritative, "models_by_id")
-    return tuple(
-        model_id
-        for model_id in sorted(models)
-        if _required_string(_required_object(models, model_id), "unit_instance_id") == unit_id
-        and _required_object(models, model_id).get("pose") is not None
+def _required_projected_model(view: UiGameView, model_id: str) -> JsonObject:
+    model = _projected_model(view, model_id)
+    if model is None:
+        raise LiveCoreSmokeError(f"Smoke model {model_id!r} is absent from the projection.")
+    return model
+
+
+def _public_smoke_army_id(
+    *, view: UiGameView, support_profile: UiSupportProfile, player_id: str
+) -> str:
+    if support_profile.game_id != view.game_id:
+        raise LiveCoreSmokeError("Smoke support profile differs from the current game.")
+    battlefield_state = view.battlefield_state
+    placed_armies = (
+        [] if battlefield_state is None else _json_object(battlefield_state).get("placed_armies")
     )
+    if type(placed_armies) is not list:
+        raise LiveCoreSmokeError("Smoke battlefield has no public placed-army rows.")
+    placed_army_ids = tuple(
+        _required_string(row, "army_id")
+        for value in placed_armies
+        if (row := _json_object(value)).get("player_id") == player_id
+    )
+    if len(placed_army_ids) > 1:
+        raise LiveCoreSmokeError("Smoke placement has multiple placed owner armies.")
+    rows = support_profile.payload.get("mustering_support_rows")
+    if type(rows) is not list:
+        raise LiveCoreSmokeError("Smoke support profile has no mustering rows.")
+    mustered_army_ids = tuple(
+        _required_string(row, "army_id")
+        for value in rows
+        if (row := _json_object(value)).get("player_id") == player_id
+    )
+    if len(mustered_army_ids) > 1 or (
+        placed_army_ids and mustered_army_ids and placed_army_ids != mustered_army_ids
+    ):
+        raise LiveCoreSmokeError("Smoke placement has conflicting public owner armies.")
+    army_ids = placed_army_ids or mustered_army_ids
+    if not army_ids:
+        raise LiveCoreSmokeError("Smoke placement requires one public owner army.")
+    return army_ids[0]
 
 
 def _proposal_pose_from_projected(pose: JsonObject) -> JsonObject:
