@@ -52,6 +52,7 @@ from tests.support.contract42_battle_fixture import shooting_client
 from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
+    JsonValue,
     UiClientStatus,
     UiClientSubmissionError,
     UiDecision,
@@ -717,15 +718,21 @@ def _aircraft_return_client() -> LocalSessionClient:
     )
 
 
-def _movement_placement(client: LocalSessionClient, unit_id: str, action: str) -> UiDecision:
+def _movement_placement(
+    client: LocalSessionClient,
+    unit_id: str,
+    action: str,
+    *,
+    result_suffix: str = "",
+) -> UiDecision:
     unit = _current(client)
     assert unit.decision_type == "select_movement_unit"
     assert unit.actor_id == _OWNER
-    selected = _choose(client, unit, unit_id, f"unit-{action}")
+    selected = _choose(client, unit, unit_id, f"unit-{action}{result_suffix}")
     decision = selected.decision
     assert decision is not None
     assert decision.decision_type == "select_movement_action"
-    placed = _choose(client, decision, action, f"action-{action}")
+    placed = _choose(client, decision, action, f"action-{action}{result_suffix}")
     assert placed.status_kind == "waiting_for_decision", placed
     proposal = placed.decision
     assert proposal is not None
@@ -760,20 +767,19 @@ def test_public_nullable_edges_corner_and_oversized_setup_retry() -> None:
     # submitted as intent; the engine proves whether the exception is legal.
     source_model_id = first.model_poses[0].model_id
     assert first.context is not None
+    large_model_exceptions: list[JsonValue] = [
+        {"model_instance_id": source_model_id, "battlefield_edge": "south"}
+    ]
     first = replace(
         first,
         context={
             **first.context,
-            "large_model_exceptions": [
-                {"model_instance_id": source_model_id, "battlefield_edge": "south"}
-            ],
+            "large_model_exceptions": large_model_exceptions,
         },
     )
     invalid_draft = _placed(first, ((15.0, 8.0),))
     assert invalid_draft.payload_preview is not None
-    assert invalid_draft.payload_preview["large_model_exceptions"] == [
-        {"model_instance_id": source_model_id, "battlefield_edge": "south"}
-    ]
+    assert invalid_draft.payload_preview["large_model_exceptions"] == large_model_exceptions
     before = _state_snapshot(client)
     invalid = _submit(client, invalid_draft, "oversized-no-contact")
     assert invalid.status_kind == "invalid"
@@ -786,14 +792,29 @@ def test_public_nullable_edges_corner_and_oversized_setup_retry() -> None:
         for violation in violations
     )
     assert _state_snapshot(client) == before
-    retry = _current(client)
+    retry_selection = _current(client)
+    assert retry_selection.decision_type == "select_movement_unit"
+    assert retry_selection.request_id != request.request_id
+    assert _PASSENGER in {option.option_id for option in retry_selection.options}
+    retry = _movement_placement(client, _PASSENGER, "ingress", result_suffix="-oversized-retry")
     assert retry.request_id != request.request_id
     assert retry.placement_proposal is not None
-    assert retry.placement_proposal.source_decision_request_id == (
+    assert retry.placement_proposal.source_decision_request_id != (
         proposal.source_decision_request_id
     )
+    assert (
+        retry.placement_proposal.context["model_instance_ids"]
+        == (proposal.context["model_instance_ids"])
+    )
     next_draft = _draft(client)
-    next_draft = replace(next_draft, context=first.context)
+    assert next_draft.context is not None
+    next_draft = replace(
+        next_draft,
+        context={
+            **next_draft.context,
+            "large_model_exceptions": large_model_exceptions,
+        },
+    )
     accepted_draft = _placed(next_draft, ((15.0, 200.0 / 25.4 / 2.0),))
     accepted = _submit(client, accepted_draft, "oversized-contact")
     assert accepted.status_kind != "invalid", accepted
@@ -918,24 +939,32 @@ def test_round_one_reserve_placement_reports_source_deadline_with_retry() -> Non
     assert tuple(event["event_type"] for event in after_events[len(events_before) :]) == (
         "decision_recorded",
         "reinforcement_placement_invalid",
+        "movement_setup_failed",
         "decision_requested",
-        "placement_proposal_requested",
     )
     assert not any(event["event_type"] == "reinforcement_unit_arrived" for event in after_events)
     retry = client.get_view(_OWNER).pending_decision
     assert retry is not None
     assert retry.actor_id == _OWNER
-    assert retry.decision_type == "submit_placement_proposal"
+    assert retry.decision_type == "select_movement_unit"
     assert retry.request_id != proposal.request_id
-    assert retry.placement_proposal is not None
-    assert proposal.placement_proposal is not None
-    assert retry.placement_proposal.source_decision_request_id == (
-        proposal.placement_proposal.source_decision_request_id
-    )
+    assert _PASSENGER in {option.option_id for option in retry.options}
     for viewer in (_OWNER, _OPPONENT):
         projected = client.get_view(viewer).pending_decision
         assert projected is not None
         assert projected.request_id == retry.request_id
+    selected = _choose(client, retry, _PASSENGER, "round-one-reselect")
+    action = selected.decision
+    assert action is not None
+    assert action.decision_type == "select_movement_action"
+    assert "remain_stationary" in {option.option_id for option in action.options}
+    stationary = _choose(client, action, "remain_stationary", "round-one-stationary")
+    assert stationary.status_kind != "invalid"
+    assert _state_snapshot(client) == before
+    assert not any(
+        event["event_type"] == "reinforcement_unit_arrived"
+        for event in client.get_events_since(0, _OWNER).events
+    )
 
 
 def test_round_three_unarrived_reserve_deadline_continues_through_public_session() -> None:
@@ -1116,10 +1145,15 @@ def test_loaded_transport_ingress_rapid_disembark_retry_and_private_redaction() 
         for violation in violations
     )
     assert _state_snapshot(client) == before
-    retry = _current(client)
-    assert retry.request_id != passenger.request_id
+    retry_selection = _current(client)
+    assert retry_selection.decision_type == "select_movement_unit"
+    assert retry_selection.request_id != passenger.request_id
+    assert _PASSENGER in {option.option_id for option in retry_selection.options}
+    retry = _movement_placement(client, _PASSENGER, "disembark", result_suffix="-rapid-retry")
     assert retry.placement_proposal is not None
-    assert retry.placement_proposal.source_decision_request_id == context.source_decision_request_id
+    assert retry.placement_proposal.source_decision_request_id != context.source_decision_request_id
+    assert retry.placement_proposal.context["disembark_mode"] == "rapid_disembark"
+    assert retry.placement_proposal.context["transport_unit_instance_id"] == _TRANSPORT
     valid = _placed(_draft(client), ((12.0, 5.0),))
     assert valid.proposal_request_id == retry.request_id
     accepted = _submit(client, valid, "rapid-valid")

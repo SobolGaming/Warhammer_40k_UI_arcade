@@ -88,16 +88,23 @@ def _attached_reserve_client() -> LocalSessionClient:
     )
 
 
-def _reach_placement(client: LocalSessionClient) -> UiDecision:
-    status = client.advance_until_decision_or_terminal()
-    request = status.decision
+def _reach_placement(
+    client: LocalSessionClient,
+    *,
+    selection: UiDecision | None = None,
+    result_prefix: str = "attached-reserve",
+) -> UiDecision:
+    request = selection
+    if request is None:
+        status = client.advance_until_decision_or_terminal()
+        request = status.decision
     assert request is not None
     assert request.decision_type == "select_movement_unit"
     assert ATTACHED in {option.option_id for option in request.options}
     selected = client.submit_finite(
         request_id=request.request_id,
         selected_option_id=ATTACHED,
-        result_id="attached-reserve-select",
+        result_id=f"{result_prefix}-select",
     )
     action = selected.decision
     assert action is not None
@@ -106,7 +113,7 @@ def _reach_placement(client: LocalSessionClient) -> UiDecision:
     requested = client.submit_finite(
         request_id=action.request_id,
         selected_option_id="ingress",
-        result_id="attached-reserve-ingress",
+        result_id=f"{result_prefix}-ingress",
     )
     placement = requested.decision
     assert placement is not None
@@ -200,11 +207,24 @@ def test_attached_reserve_headless_editor_grouped_retry_and_current_ids() -> Non
     assert invalid.status_kind == "invalid"
     assert invalid.invalid_diagnostics
     assert client.session.decision_record_count() == before + 1
-    retry = client.advance_until_decision_or_terminal().decision
-    assert retry is not None
-    assert retry.request_id != request.request_id
-    assert retry.placement_proposal is not None
-    assert retry.placement_proposal.context["component_unit_instance_ids"] == [LEADER, SOURCE]
+    retry_selection = client.advance_until_decision_or_terminal().decision
+    assert retry_selection is not None
+    assert retry_selection.decision_type == "select_movement_unit"
+    assert retry_selection.actor_id == _OWNER
+    assert retry_selection.request_id != request.request_id
+    assert ATTACHED in {option.option_id for option in retry_selection.options}
+    for viewer in (_OWNER, _OPPONENT):
+        projected = client.get_view(viewer).pending_decision
+        assert projected is not None
+        assert projected.request_id == retry_selection.request_id
+    assert (
+        PlacementDraft.start_for_pending(
+            view=battlefield_view_from_game_view(client.get_view(_OWNER)),
+            selection=SelectionState.initial(default_preferences()),
+            pending_decision=retry_selection,
+        )
+        is None
+    )
     with pytest.raises(UiClientSubmissionError):
         client.submit_parameterized_payload(
             request_id=request.request_id,
@@ -212,6 +232,16 @@ def test_attached_reserve_headless_editor_grouped_retry_and_current_ids() -> Non
             result_id="attached-reserve-stale",
         )
     assert client.session.decision_record_count() == before + 1
+    retry = _reach_placement(
+        client,
+        selection=retry_selection,
+        result_prefix="attached-reserve-retry",
+    )
+    assert retry.request_id != request.request_id
+    assert retry.placement_proposal is not None
+    assert retry.placement_proposal.context["component_unit_instance_ids"] == [LEADER, SOURCE]
+    assert retry.placement_proposal.context["model_instance_ids"] == expected_models
+    assert client.session.decision_record_count() == before + 3
     accepted = _ready(_draft(client.get_view(_OWNER)), _VALID_POINTS)
     payload = accepted.payload_preview
     assert payload is not None
@@ -221,7 +251,7 @@ def test_attached_reserve_headless_editor_grouped_retry_and_current_ids() -> Non
         result_id="attached-reserve-accepted",
     )
     assert result.status_kind != "invalid", result.invalid_diagnostics
-    assert client.session.decision_record_count() == before + 2
+    assert client.session.decision_record_count() == before + 4
     for viewer in (_OWNER, _OPPONENT):
         view = client.get_view(viewer)
         assert view.battlefield_view is not None
