@@ -21,9 +21,12 @@ from typing import Any
 
 from warhammer40k_core.engine.lifecycle import GameLifecycle
 
-from warhammer40k_arcade_ui.core_client.compatibility import require_supported_core_contract
+from warhammer40k_arcade_ui.core_client.compatibility import (
+    SUPPORTED_CORE_REVISION,
+    require_supported_core_contract,
+)
 
-CORE_SHA = "6e86f44b87c4559a9297596d5d18dc4247b8cbc3"
+CORE_SHA = SUPPORTED_CORE_REVISION
 UI_ROOT = Path(__file__).resolve().parents[1]
 CORE_ROOT = UI_ROOT.parent / "Warhammer_40k_AI"
 TARGET = UI_ROOT / "tests/fixtures/contract42_materialization_checkpoint.json.gz"

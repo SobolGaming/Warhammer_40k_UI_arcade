@@ -410,6 +410,15 @@ class UiBattlefieldProjection:
         )
         for key in authoritative:
             _json_object(key, authoritative[key])
+        for model_id, raw_model in _json_object(
+            "models_by_id", authoritative["models_by_id"]
+        ).items():
+            model = _json_object(f"models_by_id.{model_id}", raw_model)
+            _required_matching_string(model, "model_instance_id", model_id, "battlefield model key")
+            _required_string(model, "unit_instance_id")
+            rules_unit_id = _required_value(model, "rules_unit_instance_id")
+            if rules_unit_id is not None:
+                _non_empty_string("rules_unit_instance_id", rules_unit_id)
         interaction = _json_object("battlefield interaction", value["interaction"])
         _require_exact_keys(
             interaction,

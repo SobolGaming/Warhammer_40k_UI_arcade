@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from warhammer40k_core.core.army_catalog import ArmyCatalog
 
 from tests.support.contract_fixtures import decision_from_fixture
@@ -499,6 +500,8 @@ def test_shooting_firing_deck_choice_preserves_source_and_selection_evidence() -
     profile: JsonObject = cast(JsonObject, bolt_rifle.weapon_profiles[0].to_payload())
     profile_id = cast(str, profile["profile_id"])
     decision = _shooting_declaration_decision(
+        firing_deck_value=1,
+        firing_deck_history=[],
         available_weapons=[
             {
                 "model_instance_id": "embarked_model",
@@ -522,10 +525,8 @@ def test_shooting_firing_deck_choice_preserves_source_and_selection_evidence() -
     )
     workspace = AssignmentWorkspace.start_for_pending(decision)
     assert workspace is not None
-    assert not workspace.is_ready
-    assert workspace.diagnostic_lines == (
-        "Firing Deck needs public already-shot-unit and weapon selection evidence.",
-    )
+    assert workspace.is_ready
+    assert workspace.diagnostic_lines == ()
     assert workspace.shooting_choices
     assert all(
         choice.selection.firing_deck_source_unit_instance_id == "embarked_unit"
@@ -561,7 +562,6 @@ def test_shooting_firing_deck_choice_preserves_source_and_selection_evidence() -
                 firing_deck_source_model_instance_id="embarked_model",
             ),
         ),
-        firing_deck_selection=evidence,
     )
 
     assert selected.is_ready
@@ -573,6 +573,71 @@ def test_shooting_firing_deck_choice_preserves_source_and_selection_evidence() -
     assert declarations[0]["firing_deck_source_unit_instance_id"] == "embarked_unit"
     assert declarations[0]["firing_deck_source_model_instance_id"] == "embarked_model"
     assert selected.payload_preview["firing_deck_selection"] == evidence
+
+
+@pytest.mark.parametrize("stale_authority", ["null_history", "missing_cargo", "stale_history"])
+def test_shooting_borrowed_copy_requires_current_public_authority(
+    stale_authority: str,
+) -> None:
+    decision = _shooting_declaration_decision(
+        firing_deck_value=1,
+        firing_deck_history=None if stale_authority == "null_history" else ["prior-unit"],
+        firing_deck_cargo=[] if stale_authority == "missing_cargo" else ["embarked_unit"],
+        available_weapons=[
+            {
+                "model_instance_id": "transport_model",
+                "weapon_instance_id": "borrowed-copy",
+                "wargear_id": "borrowed-wargear",
+                "weapon_profile_id": "borrowed-profile",
+                "weapon_profile": {"profile_id": "borrowed-profile"},
+                "firing_deck_source_unit_instance_id": "embarked_unit",
+                "firing_deck_source_model_instance_id": "embarked_model",
+            }
+        ],
+        target_candidates=[
+            {
+                "is_legal": True,
+                "weapon_instance_id": "borrowed-copy",
+                "weapon_profile_id": "borrowed-profile",
+                "target_unit_instance_id": "guardian_squad",
+                "shooting_types": ["normal"],
+                "visibility_cache_key": "visibility-cache-1",
+            }
+        ],
+    )
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    choice = next(
+        row
+        for row in workspace.shooting_choices
+        if row.selection.target_unit_instance_id == "guardian_squad"
+    )
+    explicit_selection: JsonObject | None = None
+    if stale_authority == "stale_history":
+        explicit_selection = {
+            "player_id": "player_1",
+            "battle_round": 1,
+            "transport_unit_instance_id": "intercessor_squad",
+            "firing_deck_value": 1,
+            "weapon_selections": [
+                {
+                    "weapon_instance_id": "borrowed-copy",
+                    "embarked_unit_instance_id": "embarked_unit",
+                    "model_instance_id": "embarked_model",
+                    "wargear_id": "borrowed-wargear",
+                    "weapon_profile": {"profile_id": "borrowed-profile"},
+                }
+            ],
+            "already_shot_unit_instance_ids": [],
+        }
+    selected = workspace.with_shooting_selections(
+        decision,
+        (choice.selection,),
+        firing_deck_selection=explicit_selection,
+    )
+    assert not selected.is_ready
+    assert selected.payload_preview is None
+    assert any("Firing Deck" in line for line in selected.diagnostic_lines)
 
 
 def test_shooting_missing_physical_id_fails_visibly() -> None:
@@ -1021,6 +1086,9 @@ def _shooting_declaration_decision(
     target_candidates: list[dict[str, object]] | None = None,
     targetless_weapon_candidates: list[dict[str, object]] | None = None,
     selection_limits: list[dict[str, object]] | None = None,
+    firing_deck_value: int | None = None,
+    firing_deck_history: list[str] | None = None,
+    firing_deck_cargo: list[str] | None = None,
 ) -> UiDecision:
     if available_weapons is None:
         available_weapons = [
@@ -1065,6 +1133,12 @@ def _shooting_declaration_decision(
     }
     if targetless_weapon_candidates is not None:
         proposal_request["targetless_weapon_candidates"] = targetless_weapon_candidates
+    if firing_deck_value is not None:
+        proposal_request["firing_deck_value"] = firing_deck_value
+        proposal_request["firing_deck_already_shot_unit_instance_ids"] = firing_deck_history
+        proposal_request["firing_deck_embarked_unit_instance_ids"] = (
+            ["embarked_unit"] if firing_deck_cargo is None else firing_deck_cargo
+        )
     return decision_from_fixture(
         {
             "request_id": request_id,

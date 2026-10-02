@@ -971,22 +971,42 @@ def test_round_three_unarrived_reserve_deadline_continues_through_public_session
         if unit.unit_instance_id == _TRANSPORT
         for model in unit.own_models
     )
+    passenger_model = next(
+        model.model_instance_id
+        for unit in state.army_definitions[0].units
+        if unit.unit_instance_id == _PASSENGER
+        for model in unit.own_models
+    )
     before_model = before.battlefield_view.models_by_id[transport_model]
     assert type(before_model) is dict
     assert before_model["state"] == "reserves"
+    before_passenger = before.battlefield_view.models_by_id[passenger_model]
+    assert type(before_passenger) is dict
+    assert before_passenger["state"] == "embarked"
 
     advanced = client.advance_until_decision_or_terminal()
     assert advanced.status_kind == "waiting_for_decision"
+    assert advanced.decision is not None
+    assert advanced.decision.decision_type == "select_movement_unit"
+    assert advanced.decision.actor_id == _OPPONENT
     for viewer in (_OWNER, _OPPONENT):
         after = client.get_view(viewer)
         assert after.battle_round == 4
-        assert after.active_player_id == _OWNER
+        assert after.active_player_id == _OPPONENT
+        assert after.current_battle_phase == "movement"
         assert after.battlefield_view is not None
         after_model = after.battlefield_view.models_by_id[transport_model]
         assert type(after_model) is dict
         assert after_model["state"] == "destroyed"
+        assert after_model["pose"] is None
+        after_passenger = after.battlefield_view.models_by_id[passenger_model]
+        assert type(after_passenger) is dict
+        assert after_passenger["state"] == "destroyed"
+        assert after_passenger["pose"] is None
         if after.pending_decision is not None:
-            assert _TRANSPORT not in {option.option_id for option in after.pending_decision.options}
+            assert {_TRANSPORT, _PASSENGER}.isdisjoint(
+                option.option_id for option in after.pending_decision.options
+            )
 
 
 def test_aircraft_reserve_only_offers_current_ingress_and_no_hover_action() -> None:

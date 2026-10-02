@@ -43,15 +43,15 @@ from warhammer40k_core.engine.interaction_metadata import (
     INTERACTION_DESCRIPTOR_SCHEMA_VERSION as INSTALLED_INTERACTION_DESCRIPTOR_SCHEMA_VERSION,
 )
 
-SUPPORTED_CORE_REVISION = "6e86f44b87c4559a9297596d5d18dc4247b8cbc3"
-SUPPORTED_EXTERNAL_CONTRACT_VERSION = "42.0.0"
+SUPPORTED_CORE_REVISION = "fc12fa214642f1b1f2a31b56be7323b7d76dbebc"
+SUPPORTED_EXTERNAL_CONTRACT_VERSION = "44.1.0"
 SUPPORTED_CORE_BUILD_ID = (
     "warhammer40k-core-v2:runtime-tree-sha256-v1:"
-    "03db16dacfdb6152c4f6b841cab170561348f4ee29d60b581ce3215c6ab15765"
+    "7e6f1a71a4ae347f98fa512cbcee8f8c9c03b409cf65c8464b55831daa6c6d54"
 )
 
 GAME_VIEW_SCHEMA_VERSION = "game-view-v13-random-profiles"
-BATTLEFIELD_VIEW_SCHEMA_VERSION = "battlefield-view-v4-phase17n-step3"
+BATTLEFIELD_VIEW_SCHEMA_VERSION = "battlefield-view-v5-rules-unit-membership"
 DECISION_REQUEST_SCHEMA_VERSION = "decision-request-view-v5-phase17n-step4"
 ANNOTATED_DECISION_REQUEST_SCHEMA_VERSION = "annotated-decision-request-v2-primary-assignments"
 INTERACTION_DESCRIPTOR_SCHEMA_VERSION = "interaction-descriptor-v2-variants"

@@ -58,7 +58,7 @@ _DECISION_TYPE = "submit_catalog_model_materialization_placement"
 _REQUEST_ID = "materialization-request-001"
 _OWNER = "player-a"
 _OPPONENT = "player-b"
-_CORE_SHA = "6e86f44b87c4559a9297596d5d18dc4247b8cbc3"
+_CORE_SHA = "fc12fa214642f1b1f2a31b56be7323b7d76dbebc"
 
 
 def test_materialization_editor_opens_edits_and_submits_request_created_models() -> None:

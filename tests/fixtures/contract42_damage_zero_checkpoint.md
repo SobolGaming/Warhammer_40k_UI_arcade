@@ -1,9 +1,9 @@
-# Contract 42 Damage-to-zero checkpoint
+# Current Core 44.1 Damage-to-zero checkpoint
 
 `contract42_damage_zero_checkpoint.json.gz` is a deterministic, exact-build Core
 checkpoint for `test_contract42_damage_zero.py`. It was generated with installed Core
-revision `6e86f44b87c4559a9297596d5d18dc4247b8cbc3` and build ID
-`warhammer40k-core-v2:runtime-tree-sha256-v1:03db16dacfdb6152c4f6b841cab170561348f4ee29d60b581ce3215c6ab15765`.
+revision `fc12fa214642f1b1f2a31b56be7323b7d76dbebc` and build ID
+`warhammer40k-core-v2:runtime-tree-sha256-v1:7e6f1a71a4ae347f98fa512cbcee8f8c9c03b409cf65c8464b55831daa6c6d54`.
 
 The explicit generator imports pinned Core's
 `tests/order93_save_damage_helpers.py`. It calls
@@ -29,6 +29,6 @@ UV_CACHE_DIR=/tmp/phase35-uv-cache uv run python scripts/generate_contract42_dam
 The generator verifies the installed Core revision and build identity and the
 sibling checkout SHA. It writes sorted compact JSON in gzip with `mtime=0`.
 For the committed fixture, the uncompressed SHA256 is
-`726bc609895cceae914c18069838ecd4b79b018c97a3cd97435accdc57d07ebf`;
+`53f5f65a98c3d36fd8e9ace2b1698c9d9a8cee2d3d08a51fae79eb2b6b3cf8b4`;
 the gzip SHA256 is
-`b124fbe7d59fb9103f574cb41a87c9df81082dc52d46093b16d58a2af162a2cb`.
+`7b4156c4943817c9635fb911ded547e661e28b099c4296107faf427994b66d3b`.

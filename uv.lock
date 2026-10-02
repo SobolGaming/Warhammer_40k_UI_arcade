@@ -849,7 +849,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typing-extensions", specifier = ">=4.14" },
-    { name = "warhammer40k-core-v2", git = "https://github.com/SobolGaming/Warhammer_40k_AI?rev=6e86f44b87c4559a9297596d5d18dc4247b8cbc3" },
+    { name = "warhammer40k-core-v2", git = "https://github.com/SobolGaming/Warhammer_40k_AI?rev=fc12fa214642f1b1f2a31b56be7323b7d76dbebc" },
 ]
 
 [package.metadata.requires-dev]
@@ -868,7 +868,7 @@ dev = [
 [[package]]
 name = "warhammer40k-core-v2"
 version = "0.1.0"
-source = { git = "https://github.com/SobolGaming/Warhammer_40k_AI?rev=6e86f44b87c4559a9297596d5d18dc4247b8cbc3#6e86f44b87c4559a9297596d5d18dc4247b8cbc3" }
+source = { git = "https://github.com/SobolGaming/Warhammer_40k_AI?rev=fc12fa214642f1b1f2a31b56be7323b7d76dbebc#fc12fa214642f1b1f2a31b56be7323b7d76dbebc" }
 dependencies = [
     { name = "jsonschema" },
     { name = "msgspec" },

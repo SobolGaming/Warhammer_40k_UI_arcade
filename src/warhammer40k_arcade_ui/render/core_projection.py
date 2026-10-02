@@ -368,6 +368,7 @@ def _canonical_units(
     for model_id, raw_model in sorted(models_by_id.items()):
         model = _json_object("battlefield model", raw_model)
         state = _required_string(model, "state")
+        rules_unit_id = _optional_string_field(model, "rules_unit_instance_id")
         if model.get("pose") is None:
             continue
         if state not in {"placed", "destroyed"}:
@@ -379,6 +380,8 @@ def _canonical_units(
                 model_id=model_id,
                 model=model,
                 model_display_by_id=model_display_by_id,
+                state=state,
+                rules_unit_id=rules_unit_id,
             )
         )
     units: list[UnitView] = []
@@ -403,6 +406,8 @@ def _canonical_model(
     model_id: str,
     model: JsonObject,
     model_display_by_id: JsonObject,
+    state: str,
+    rules_unit_id: str | None,
 ) -> ModelBaseView:
     pose = _json_object("model pose", model.get("pose"))
     position = _json_object("model position", pose.get("position"))
@@ -437,6 +442,8 @@ def _canonical_model(
             )
             for shape in measurement_shapes
         ),
+        rules_unit_instance_id=rules_unit_id,
+        state=state,
     )
 
 

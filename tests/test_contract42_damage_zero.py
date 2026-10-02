@@ -39,7 +39,7 @@ def _checkpoint_client() -> tuple[LocalSessionClient, str, str]:
     require_supported_core_contract()
     path = Path(__file__).parent / "fixtures/contract42_damage_zero_checkpoint.json.gz"
     fixture = cast(JsonObject, json.loads(gzip.decompress(path.read_bytes())))
-    assert fixture["schema_version"] == "contract42-damage-zero-checkpoint-v1"
+    assert fixture["schema_version"] == "core44-damage-zero-checkpoint-v1"
     assert fixture["core_sha"] == SUPPORTED_CORE_REVISION
     assert fixture["core_build_id"] == SUPPORTED_CORE_BUILD_ID
     assert fixture["source_row_id"] == "000002532:4"

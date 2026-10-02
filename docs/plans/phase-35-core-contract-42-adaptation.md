@@ -2,9 +2,22 @@
 
 Status: Proposed (reviewed 2026-09-30)
 
-Implementation note: this is the reviewed baseline plan. The Phase 35 branch now pins the exact
-Contract 42 revision; [M2 evidence and limits](phase-35-contract-42-m2-evidence.md) records the
-observed runtime behavior and remaining acceptance gaps. The baseline descriptions below are
+## Authorized Core 44.1 continuation (2026-10-02)
+
+The original Contract 42 review below remains the approved planning baseline. The user authorized
+continuing this same milestone against Core
+`fc12fa214642f1b1f2a31b56be7323b7d76dbebc` / external contract `44.1.0` after the recorded
+Core findings were addressed. The original acceptance criteria remain mandatory. The intervening
+commits and current manifest are inventoried in
+[the migration inventory](phase-35-contract-42-migration-inventory.md). Current implementation
+evidence belongs in [the Core 44.1 M2 record](phase-35-contract-44-1-m2-evidence.md); the older
+[Contract 42 record](phase-35-contract-42-m2-evidence.md) preserves historical findings and
+measurements only. Old saves and replay artifacts require their original exact runtime.
+
+Implementation note: this is the reviewed baseline plan. At its original review, the Phase 35
+branch pinned the exact Contract 42 revision.
+[M2 evidence and limits](phase-35-contract-42-m2-evidence.md) records the observed runtime
+behavior and acceptance gaps at that time. The baseline descriptions below are
 historical and do not describe the current branch state.
 
 ## Purpose and baseline

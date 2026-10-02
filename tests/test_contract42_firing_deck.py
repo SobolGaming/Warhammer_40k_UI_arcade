@@ -1,9 +1,4 @@
-"""Bounded Contract 42 Firing Deck evidence through the public session facade.
-
-The fixture starts with the Transport's first Shooting declaration of the turn.
-Its empty shot history is known from test setup; the declaration request does not
-publish the shot snapshot required for a general FiringDeckSelection editor.
-"""
+"""Firing Deck authority from current public Shooting requests through the session facade."""
 
 from __future__ import annotations
 
@@ -46,8 +41,13 @@ from warhammer40k_core.rules.mission_pack_import import (
     warhammer_event_companion_2026_07_mission_pack,
 )
 
+from tests.support.gui_driver import GuiTestDriver
+from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
 from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
+from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
+from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_game_view
 from warhammer40k_arcade_ui.state.assignment_workspace import (
     AssignmentWorkspace,
     ShootingAssignmentSelection,
@@ -57,7 +57,9 @@ pytestmark = pytest.mark.integration
 
 _CARGO = ("army-alpha:passenger-1", "army-alpha:passenger-2")
 _TRANSPORT = "army-alpha:transport-1"
+_PRIOR = "army-alpha:prior"
 _TARGET = "army-beta:enemy"
+_DECOY = "army-beta:decoy"
 
 
 def _mission_setup() -> MissionSetup:
@@ -133,7 +135,7 @@ def _muster_request(
 
 
 @cache
-def _seeded_lifecycle_payload() -> GameLifecyclePayload:
+def _seeded_lifecycle_payload(*, with_prior: bool = False) -> GameLifecyclePayload:
     """Seed real domain objects, then hand all decisions to the adapter session."""
 
     base_catalog = ArmyCatalog.phase9a_canonical_content_pack()
@@ -191,12 +193,22 @@ def _seeded_lifecycle_payload() -> GameLifecyclePayload:
                         5,
                     ),
                     ("transport-1", "core-transport", "core-transport", 1),
+                )
+                + (
+                    (("prior", "core-vehicle-monster", "core-vehicle-monster", 1),)
+                    if with_prior
+                    else ()
                 ),
             ),
             _muster_request(
                 catalog,
                 player_id="player-b",
-                units=(("enemy", "core-intercessor-like-infantry", "core-intercessor-like", 5),),
+                units=(("enemy", "core-intercessor-like-infantry", "core-intercessor-like", 5),)
+                + (
+                    (("decoy", "core-vehicle-monster", "core-vehicle-monster", 1),)
+                    if with_prior
+                    else ()
+                ),
             ),
         ),
         player_ids=("player-a", "player-b"),
@@ -219,7 +231,13 @@ def _seeded_lifecycle_payload() -> GameLifecyclePayload:
             if unit.unit_instance_id in _CARGO:
                 battlefield = battlefield.without_unit_placement(unit.unit_instance_id)
                 continue
-            x = 10.0 if unit.unit_instance_id == _TRANSPORT else 30.0
+            x = (
+                10.0
+                if unit.unit_instance_id == _TRANSPORT
+                else 18.0
+                if unit.unit_instance_id == _PRIOR
+                else 30.0
+            )
             battlefield = battlefield.with_unit_placement(
                 UnitPlacement(
                     army_id=army.army_id,
@@ -231,7 +249,11 @@ def _seeded_lifecycle_payload() -> GameLifecyclePayload:
                             player_id=army.player_id,
                             unit_instance_id=unit.unit_instance_id,
                             model_instance_id=model.model_instance_id,
-                            pose=Pose.at(x + index * 1.4, 35.0, facing_degrees=0.0),
+                            pose=Pose.at(
+                                x + index * 1.4,
+                                15.0 if unit.unit_instance_id in {_PRIOR, _DECOY} else 35.0,
+                                facing_degrees=0.0,
+                            ),
                         )
                         for index, model in enumerate(unit.own_models)
                     ),
@@ -287,20 +309,67 @@ def _seeded_lifecycle_payload() -> GameLifecyclePayload:
     return lifecycle.to_payload()
 
 
-def _client() -> LocalSessionClient:
+def _client(*, with_prior: bool = False) -> LocalSessionClient:
     return LocalSessionClient(
         session=LocalGameSession(
-            lifecycle=GameLifecycle.from_payload(deepcopy(_seeded_lifecycle_payload()))
+            lifecycle=GameLifecycle.from_payload(
+                deepcopy(_seeded_lifecycle_payload(with_prior=with_prior))
+            )
         )
     )
 
 
-def _declaration_request(client: LocalSessionClient) -> UiDecision:
+def _declaration_request(client: LocalSessionClient, *, prior_shot: bool = False) -> UiDecision:
     status = client.advance_until_decision_or_terminal()
     assert status.status_kind == "waiting_for_decision", status
     unit = status.decision
     assert unit is not None
     assert unit.decision_type == "select_shooting_unit"
+    if prior_shot:
+        assert _PRIOR in {option.option_id for option in unit.options}
+        prior_type = client.submit_finite(
+            request_id=unit.request_id,
+            selected_option_id=_PRIOR,
+            result_id="contract44:prior:unit",
+        ).decision
+        assert prior_type is not None
+        prior_declaration = client.submit_finite(
+            request_id=prior_type.request_id,
+            selected_option_id="normal",
+            result_id="contract44:prior:type",
+        ).decision
+        assert prior_declaration is not None
+        prior_workspace = AssignmentWorkspace.start_for_pending(prior_declaration)
+        assert prior_workspace is not None
+        prior_choice = next(
+            choice.selection
+            for choice in prior_workspace.shooting_choices
+            if choice.selection.target_unit_instance_id == _DECOY
+        )
+        prior_workspace = prior_workspace.with_shooting_selections(
+            prior_declaration, (prior_choice,)
+        )
+        assert prior_workspace.payload_preview is not None
+        status = client.submit_parameterized_payload(
+            request_id=prior_declaration.request_id,
+            payload=prior_workspace.payload_preview,
+            result_id="contract44:prior:shot",
+        )
+        for index in range(64):
+            request = status.decision
+            assert request is not None, status
+            if request.decision_type == "select_shooting_unit":
+                unit = request
+                break
+            assert request.options
+            status = client.submit_finite(
+                request_id=request.request_id,
+                selected_option_id=request.options[0].option_id,
+                result_id=f"contract44:prior:drain:{index}",
+            )
+            assert status.status_kind != "invalid", status.invalid_diagnostics
+        else:
+            raise AssertionError("Prior public Shooting did not return to unit selection.")
     assert _TRANSPORT in {option.option_id for option in unit.options}
     selected = client.submit_finite(
         request_id=unit.request_id,
@@ -333,7 +402,8 @@ def _inventory(decision: UiDecision) -> JsonObject:
     inventory = proposal.payload
     assert inventory["firing_deck_embarked_unit_instance_ids"] == list(_CARGO)
     assert type(inventory["firing_deck_value"]) is int
-    assert "already_shot_unit_instance_ids" not in inventory
+    history = inventory["firing_deck_already_shot_unit_instance_ids"]
+    assert type(history) is list
     return inventory
 
 
@@ -387,8 +457,7 @@ def _firing_deck_evidence(
                 "weapon_profile": weapon["weapon_profile"],
             }
         ],
-        # Fixture-only fact: this Transport is the first selected shooter this turn.
-        "already_shot_unit_instance_ids": [],
+        "already_shot_unit_instance_ids": inventory["firing_deck_already_shot_unit_instance_ids"],
     }
 
 
@@ -400,7 +469,9 @@ def _accepted_payloads(client: LocalSessionClient) -> tuple[JsonObject, JsonObje
             for event in client.get_events_since(0, viewer).events
             if event["event_type"] == "shooting_declaration_accepted"
         )
-        (accepted,) = tuple(events)
+        accepted_rows = tuple(events)
+        assert accepted_rows
+        accepted = accepted_rows[-1]
         payload = accepted["payload"]
         assert type(payload) is dict
         payloads.append(payload)
@@ -410,12 +481,11 @@ def _accepted_payloads(client: LocalSessionClient) -> tuple[JsonObject, JsonObje
 def test_real_transport_declaration_preserves_borrowed_copy_and_all_cargo() -> None:
     client = _client()
     decision = _declaration_request(client)
+    assert _inventory(decision)["firing_deck_already_shot_unit_instance_ids"] == []
     workspace, choice = _workspace_for_choice(decision, source_unit_id=_CARGO[0])
     assert choice.selected_weapon_ability_ids
     evidence = _firing_deck_evidence(decision, choice)
-    selected = workspace.with_shooting_selections(
-        decision, (choice,), firing_deck_selection=evidence
-    )
+    selected = workspace.with_shooting_selections(decision, (choice,))
     assert selected.is_ready, selected.diagnostic_lines
     payload = selected.payload_preview
     assert payload is not None
@@ -455,15 +525,108 @@ def test_real_transport_declaration_preserves_borrowed_copy_and_all_cargo() -> N
         assert pool["selected_weapon_ability_ids"] == list(choice.selected_weapon_ability_ids)
 
 
-@pytest.mark.parametrize("drift", ["source", "physical_copy"])
-def test_source_and_copy_drift_reject_without_state_or_event_mutation(drift: str) -> None:
+def test_later_transport_copies_current_public_shot_history() -> None:
+    client = _client(with_prior=True)
+    decision = _declaration_request(client, prior_shot=True)
+    inventory = _inventory(decision)
+    assert inventory["firing_deck_already_shot_unit_instance_ids"] == [_PRIOR]
+    for viewer in ("player-a", "player-b"):
+        projected = client.get_view(viewer).pending_decision
+        assert projected is not None
+        assert projected.request_id == decision.request_id
+        assert projected.parameterized_proposal is not None
+        assert projected.parameterized_proposal.payload[
+            "firing_deck_already_shot_unit_instance_ids"
+        ] == [_PRIOR]
+    workspace, choice = _workspace_for_choice(decision, source_unit_id=_CARGO[0])
+    selected = workspace.with_shooting_selections(decision, (choice,))
+    assert selected.is_ready, selected.diagnostic_lines
+    payload = selected.payload_preview
+    assert payload is not None
+    deck = payload["firing_deck_selection"]
+    assert type(deck) is dict
+    assert deck["already_shot_unit_instance_ids"] == [_PRIOR]
+    status = client.submit_parameterized_payload(
+        request_id=decision.request_id,
+        payload=payload,
+        result_id="contract44:later:accepted",
+    )
+    assert status.status_kind != "invalid", status.invalid_diagnostics
+
+
+def test_later_firing_deck_borrowed_copy_is_selected_and_submitted_from_hud() -> None:
+    client = _client(with_prior=True)
+    decision = _declaration_request(client, prior_shot=True)
+    view = client.get_view("player-a")
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=battlefield_view_from_game_view(view),
+        preferences=default_preferences(),
+        pending_decision=decision,
+        initial_game_view=view,
+        initial_support_profile=client.get_support_profile("player-a"),
+        core_client=client,
+        viewer_player_id="player-a",
+    )
+    driver = GuiTestDriver(window=window, core_client=client, viewer_player_id="player-a")
+
+    def click_action(action_kind: str) -> str | None:
+        window.on_draw()
+        region = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == action_kind and region.enabled
+        )
+        x = round((region.bounds[0] + region.bounds[2]) / 2)
+        y = round((region.bounds[1] + region.bounds[3]) / 2)
+        driver.click_screen(x, y)
+        return region.option_id
+
+    try:
+        workspace = window.assignment_workspace
+        assert workspace is not None
+        target = next(
+            choice
+            for choice in workspace.shooting_choices
+            if choice.selection.firing_deck_source_unit_instance_id == _CARGO[0]
+            and choice.selection.target_unit_instance_id == _TARGET
+        )
+        click_action("assignment_clear")
+        for _ in range(len(workspace.shooting_choices)):
+            window.on_draw()
+            visible = next(
+                region
+                for region in driver.hud_button_hit_regions
+                if region.action_kind == "assignment_select" and region.enabled
+            )
+            if visible.option_id == target.choice_id:
+                break
+            click_action("assignment_next_choice")
+        else:
+            raise AssertionError("Borrowed Firing Deck copy was not reachable from the HUD.")
+        assert click_action("assignment_select") == target.choice_id
+        selected = window.assignment_workspace
+        assert selected is not None
+        assert selected.payload_preview is not None
+        deck = selected.payload_preview["firing_deck_selection"]
+        assert type(deck) is dict
+        assert deck["already_shot_unit_instance_ids"] == [_PRIOR]
+        click_action("assignment_submit")
+        assert driver.finite_status_kind != "invalid"
+        owner, opponent = _accepted_payloads(client)
+        assert owner == opponent
+        assert owner["request_id"] == decision.request_id
+        assert owner["ineligible_unit_instance_ids"] == list(_CARGO)
+    finally:
+        driver.close()
+
+
+@pytest.mark.parametrize("drift", ["source", "physical_copy", "stale_history", "stale_cargo"])
+def test_firing_deck_drift_rejects_without_state_or_event_mutation(drift: str) -> None:
     client = _client()
     decision = _declaration_request(client)
     workspace, choice = _workspace_for_choice(decision, source_unit_id=_CARGO[0])
-    evidence = _firing_deck_evidence(decision, choice)
-    selected = workspace.with_shooting_selections(
-        decision, (choice,), firing_deck_selection=evidence
-    )
+    selected = workspace.with_shooting_selections(decision, (choice,))
     assert selected.is_ready
     assert selected.payload_preview is not None
     forged = deepcopy(selected.payload_preview)
@@ -474,6 +637,10 @@ def test_source_and_copy_drift_reject_without_state_or_event_mutation(drift: str
     assert type(weapon_selections[0]) is dict
     if drift == "source":
         weapon_selections[0]["embarked_unit_instance_id"] = _CARGO[1]
+    elif drift == "stale_cargo":
+        weapon_selections[0]["embarked_unit_instance_id"] = "army-alpha:stale-cargo"
+    elif drift == "stale_history":
+        deck["already_shot_unit_instance_ids"] = ["army-alpha:stale-shooter"]
     else:
         other_weapons = _inventory(decision)["available_weapons"]
         assert type(other_weapons) is list
@@ -496,7 +663,8 @@ def test_source_and_copy_drift_reject_without_state_or_event_mutation(drift: str
     )
     assert status.status_kind == "invalid"
     assert status.invalid_diagnostics
-    assert status.invalid_diagnostics[0].violation_code == "firing_deck_weapon_selection_drift"
+    if drift in {"source", "physical_copy"}:
+        assert status.invalid_diagnostics[0].violation_code == "firing_deck_weapon_selection_drift"
     assert client.session.to_persistence_payload() == before_state
     for index, viewer in enumerate(("player-a", "player-b")):
         assert client.get_events_since(0, viewer).events == before_events[index]

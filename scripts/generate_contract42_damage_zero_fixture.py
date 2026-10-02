@@ -71,7 +71,7 @@ def main() -> None:
         raise RuntimeError("Core Damage checkpoint did not round-trip exactly.")
 
     fixture = {
-        "schema_version": "contract42-damage-zero-checkpoint-v1",
+        "schema_version": "core44-damage-zero-checkpoint-v1",
         "core_sha": SUPPORTED_CORE_REVISION,
         "core_build_id": SUPPORTED_CORE_BUILD_ID,
         "source_row_id": SOURCE_ROW_ID,

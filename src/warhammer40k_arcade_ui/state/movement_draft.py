@@ -23,7 +23,9 @@ from warhammer40k_arcade_ui.state.entity_selection import (
     EntitySelectionState,
     build_entity_selection_profile,
     model_entity_ref,
+    movement_proposal_component_unit_ids,
     movement_proposal_unit,
+    movement_selection_matches_actor,
     unit_entity_ref,
 )
 from warhammer40k_arcade_ui.state.interaction_dispatch import (
@@ -444,14 +446,21 @@ class MovementDraft:
             return None
         try:
             unit = movement_proposal_unit(view=view, proposal=proposal)
+            component_ids = movement_proposal_component_unit_ids(view=view, proposal=proposal)
         except EntitySelectionError as exc:
             raise MovementDraftError(str(exc)) from exc
         if unit is None:
             return None
         selected_unit_id = selection.selected_unit_id
-        if selected_unit_id != unit.unit_id and not (
-            proposal.decision_type == SCOUT_MOVE_DECISION_TYPE
-            and selected_unit_id in (None, *proposal.component_unit_instance_ids)
+        if selected_unit_id not in (unit.unit_id, *component_ids) and not (
+            proposal.decision_type == SCOUT_MOVE_DECISION_TYPE and selected_unit_id is None
+        ):
+            return None
+        if not movement_selection_matches_actor(
+            view=view,
+            actor=unit,
+            selected_unit_id=selected_unit_id,
+            selected_model_id=selection.selected_model_id,
         ):
             return None
         editor_action = _proposal_editor_action(proposal)
@@ -511,7 +520,7 @@ class MovementDraft:
             submission_variant_id=submission_variant_id,
             spatial_context_hash=proposal.spatial_context_hash,
             projection_state_hash=projection_state_hash,
-            component_unit_instance_ids=proposal.component_unit_instance_ids,
+            component_unit_instance_ids=component_ids,
         )
         return draft.with_recomputed_hints(view=view)
 
@@ -661,7 +670,10 @@ class MovementDraft:
             and _proposal_movement_mode(proposal) == self.movement_mode
             and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
             and proposal.spatial_context_hash == self.spatial_context_hash
-            and proposal.component_unit_instance_ids == self.component_unit_instance_ids
+            and (
+                self.decision_type != SCOUT_MOVE_DECISION_TYPE
+                or proposal.component_unit_instance_ids == self.component_unit_instance_ids
+            )
             and (
                 self.decision_type != SCOUT_MOVE_DECISION_TYPE
                 or proposal.required_model_ids == tuple(path.model_id for path in self.model_paths)
@@ -1070,7 +1082,6 @@ def movement_proposal_for_selected_unit(
 ) -> UiMovementProposalRequest | None:
     """Return the movement proposal that can activate drafting for the selected unit."""
 
-    del view
     if selection.selected_unit_id is None or pending_decision is None:
         return None
     route = interaction_route_for_decision(pending_decision)
@@ -1085,9 +1096,18 @@ def movement_proposal_for_selected_unit(
         return None
     if movement_proposal_context_diagnostic(proposal) is not None:
         return None
-    if proposal.unit_instance_id != selection.selected_unit_id and not (
-        proposal.decision_type == SCOUT_MOVE_DECISION_TYPE
-        and selection.selected_unit_id in proposal.component_unit_instance_ids
+    try:
+        component_ids = movement_proposal_component_unit_ids(view=view, proposal=proposal)
+        unit = movement_proposal_unit(view=view, proposal=proposal)
+    except EntitySelectionError:
+        return None
+    if selection.selected_unit_id not in (proposal.unit_instance_id, *component_ids):
+        return None
+    if unit is None or not movement_selection_matches_actor(
+        view=view,
+        actor=unit,
+        selected_unit_id=selection.selected_unit_id,
+        selected_model_id=selection.selected_model_id,
     ):
         return None
     return proposal

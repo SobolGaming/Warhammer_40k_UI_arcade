@@ -590,6 +590,24 @@ def test_start_for_pending_does_not_use_proposal_unit_when_selection_drifted() -
     assert draft is None
 
 
+def test_movement_draft_rejects_foreign_model_in_actor_focus() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    stale = SelectionState.initial(preferences).select_model_id(
+        unit_id="intercessor_squad",
+        model_id="guardian_1",
+        preferences=preferences,
+    )
+    assert (
+        MovementDraft.start_for_pending(
+            view=view,
+            selection=stale,
+            pending_decision=_movement_proposal_decision(),
+        )
+        is None
+    )
+
+
 def test_assignment_views_expose_summary_friendly_model_states() -> None:
     view = default_battlefield_view()
     model_2 = _model_ref("intercessor_2")

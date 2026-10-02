@@ -1294,24 +1294,103 @@ def _firing_deck_selection_preview(
     diagnostics: list[str],
     explicit_selection: JsonObject | None,
 ) -> JsonValue | None:
-    if explicit_selection is not None:
-        return validate_json_value(explicit_selection)
-    request_selection = request_payload.get("firing_deck_selection")
-    if request_selection is not None:
-        return validate_json_value(request_selection)
-    uses_firing_deck = any(
-        type(declaration) is dict
+    borrowed = tuple(
+        declaration
+        for declaration in declarations
+        if type(declaration) is dict
         and (
             declaration.get("firing_deck_source_unit_instance_id") is not None
             or declaration.get("firing_deck_source_model_instance_id") is not None
         )
-        for declaration in declarations
     )
-    if uses_firing_deck:
+    if not borrowed:
+        if explicit_selection is not None:
+            diagnostics.append("Firing Deck selection has no borrowed weapon declaration.")
+        return None
+    history = request_payload.get("firing_deck_already_shot_unit_instance_ids")
+    if type(history) is not list or any(
+        type(unit_id) is not str or not unit_id.strip() for unit_id in history
+    ):
+        diagnostics.append("Firing Deck request lacks current ordinary Shooting history authority.")
+        return None
+    if len(history) != len(set(history)):
+        diagnostics.append("Firing Deck request has duplicate shot-unit IDs.")
+        return None
+    value = request_payload.get("firing_deck_value")
+    round_number = request_payload.get("battle_round")
+    player_id = _text(request_payload.get("active_player_id"))
+    transport_id = _text(request_payload.get("unit_instance_id"))
+    if (
+        type(value) is not int
+        or value <= 0
+        or type(round_number) is not int
+        or round_number <= 0
+        or not player_id
+        or not transport_id
+    ):
         diagnostics.append(
-            "Firing Deck needs public already-shot-unit and weapon selection evidence."
+            "Firing Deck request is missing current actor, round or source authority."
         )
-    return None
+        return None
+    available = request_payload.get("available_weapons")
+    if type(available) is not list or any(type(row) is not dict for row in available):
+        diagnostics.append("Firing Deck request has malformed weapon inventory.")
+        return None
+    cargo = request_payload.get("firing_deck_embarked_unit_instance_ids")
+    if type(cargo) is not list or any(
+        type(unit_id) is not str or not unit_id.strip() for unit_id in cargo
+    ):
+        diagnostics.append("Firing Deck request lacks its current cargo snapshot.")
+        return None
+    selections: list[JsonValue] = []
+    for declaration in borrowed:
+        assert type(declaration) is dict
+        source_unit_id = _text(declaration.get("firing_deck_source_unit_instance_id"))
+        source_model_id = _text(declaration.get("firing_deck_source_model_instance_id"))
+        if not source_unit_id or not source_model_id:
+            diagnostics.append("Firing Deck declaration has incomplete physical source identity.")
+            return None
+        if source_unit_id not in cargo:
+            diagnostics.append("Firing Deck source is absent from the current cargo snapshot.")
+            return None
+        matching = [
+            row
+            for row in available
+            if type(row) is dict
+            and row.get("weapon_instance_id") == declaration.get("weapon_instance_id")
+            and row.get("model_instance_id") == declaration.get("attacker_model_instance_id")
+            and row.get("firing_deck_source_unit_instance_id") == source_unit_id
+            and row.get("firing_deck_source_model_instance_id") == source_model_id
+            and row.get("wargear_id") == declaration.get("wargear_id")
+            and row.get("weapon_profile_id") == declaration.get("weapon_profile_id")
+        ]
+        if len(matching) != 1 or type(matching[0].get("weapon_profile")) is not dict:
+            diagnostics.append("Firing Deck weapon is absent from the current request inventory.")
+            return None
+        row = matching[0]
+        selections.append(
+            {
+                "weapon_instance_id": row["weapon_instance_id"],
+                "embarked_unit_instance_id": source_unit_id,
+                "model_instance_id": source_model_id,
+                "wargear_id": row["wargear_id"],
+                "weapon_profile": row["weapon_profile"],
+            }
+        )
+    evidence = validate_json_value(
+        {
+            "player_id": player_id,
+            "battle_round": round_number,
+            "transport_unit_instance_id": transport_id,
+            "firing_deck_value": value,
+            "weapon_selections": selections,
+            "already_shot_unit_instance_ids": history,
+        }
+    )
+    if explicit_selection is not None and validate_json_value(explicit_selection) != evidence:
+        diagnostics.append("Firing Deck selection differs from current public request authority.")
+        return None
+    return evidence
 
 
 def _selected_weapon_ability_ids(

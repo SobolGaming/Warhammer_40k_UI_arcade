@@ -1,8 +1,9 @@
-# Contract 42 materialization checkpoint
+# Current Core 44.1 materialization checkpoint
 
 `contract42_materialization_checkpoint.json.gz` is a deterministic, exact-build Core
 checkpoint for the UI's real-session model-materialization regression. It was generated at
-Core `6e86f44b87c4559a9297596d5d18dc4247b8cbc3` from
+Core `fc12fa214642f1b1f2a31b56be7323b7d76dbebc` / build ID
+`warhammer40k-core-v2:runtime-tree-sha256-v1:7e6f1a71a4ae347f98fa512cbcee8f8c9c03b409cf65c8464b55831daa6c6d54` from
 `tests/integration/test_horror_split_materialization.py`'s `_split_scenario` and
 `_game_config`, followed by `tests/horror_destruction_helpers.py`'s
 `resolve_horror_completion`. It contains a pending two-model Horror placement with source
@@ -16,8 +17,8 @@ uv run python scripts/generate_contract42_materialization_fixture.py
 
 The generator checks the sibling Core checkout SHA. Its gzip output uses sorted compact JSON
 and `mtime=0`. For the committed fixture, the uncompressed SHA256 is
-`98b4dfe36babfe8bf5c01323656c8ff39bcac0cc864a668ed9ac6b90562e45ff`; the gzip
-SHA256 is `93123130cced05ddfd5dc6179e6445e8b626d77b813796415fa9ec88bed2bbdf`.
+`9cde26c843832883b4636bf1fdf4d24d4aa8df2751e15aaacff34380138ac0cc`; the gzip
+SHA256 is `5b13a5b88fbcc1dfb7808e4478f0f29c930c27ba279dd57a54a7bbc9b7b525e6`.
 
 The Core helper builds an in-progress domain scenario rather than a roster-start game. Its
 checkpoint stores `config: null` so Core's exact-build restore authenticates the pending

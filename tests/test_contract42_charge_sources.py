@@ -7,6 +7,7 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import cast
 
+import arcade
 import pytest
 from warhammer40k_core.adapters.local_session import LocalGameSession
 from warhammer40k_core.adapters.setup_smoke import canonical_setup_prebattle_smoke_config
@@ -58,6 +59,7 @@ from tests.support.contract42_charge_fixture import (
     SOURCE,
     seeded_charge_client,
 )
+from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
@@ -67,8 +69,12 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 )
 from warhammer40k_arcade_ui.hud.view_models import build_finite_decision_panel
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_game_view
-from warhammer40k_arcade_ui.state.entity_selection import entity_ref_for_model
+from warhammer40k_arcade_ui.state.entity_selection import (
+    entity_ref_for_model,
+    movement_proposal_unit,
+)
 from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
@@ -292,11 +298,16 @@ def _ready_attached_draft(client: LocalSessionClient, decision: UiDecision) -> M
     view = client.get_view("player-a")
     assert view.pending_decision == decision
     battlefield = battlefield_view_from_game_view(view)
-    matching = tuple(unit for unit in battlefield.units if unit.unit_id == ATTACHED)
-    assert len(matching) == 1, (
-        "Canonical attached rules unit is absent from UI battlefield projection"
-    )
-    unit = matching[0]
+    proposal = decision.movement_proposal
+    assert proposal is not None
+    unit = movement_proposal_unit(view=battlefield, proposal=proposal)
+    assert unit is not None
+    assert unit.unit_id == ATTACHED
+    assert {
+        physical.unit_id
+        for physical in battlefield.units
+        if any(model.rules_unit_instance_id == ATTACHED for model in physical.models)
+    } == {SOURCE, LEADER}
     assert len(unit.models) == 6
     selection = SelectionState.initial(default_preferences()).select_model_id(
         unit_id=ATTACHED, model_id=None, preferences=default_preferences()
@@ -315,7 +326,7 @@ def _ready_attached_draft(client: LocalSessionClient, decision: UiDecision) -> M
     draft = draft.add_waypoint(view=battlefield, world_point=(anchor_x, 22.0))
     draft = draft.add_waypoint(view=battlefield, world_point=(anchor_x, 24.0))
     leader_model = next(path for path in draft.model_paths if path.model_id.startswith(LEADER))
-    ref = entity_ref_for_model(view=battlefield, unit_id=ATTACHED, model_id=leader_model.model_id)
+    ref = entity_ref_for_model(view=battlefield, unit_id=LEADER, model_id=leader_model.model_id)
     assert ref is not None
     draft = draft.replace_model_selection(view=battlefield, ref=ref)
     draft = draft.add_waypoint(view=battlefield, world_point=(17.0, 25.0))
@@ -420,6 +431,58 @@ def test_attached_charge_draft_preserves_components_commitment_and_witness() -> 
     rows = cast(list[JsonObject], _object(completed_payload["endpoint_witness"])["model_endpoints"])
     assert len(rows) == 6
     assert {cast(str, row["component_unit_instance_id"]) for row in rows} == {SOURCE, LEADER}
+
+
+def test_attached_charge_window_selects_physical_components_for_canonical_draft() -> None:
+    client = _attached_charge_client(natural_reroll=False)
+    target = _finish_optional_command_window(client, _select_attached(client))
+    movement = _select_committed_target(client, target)
+    view = client.get_view("player-a")
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=battlefield_view_from_game_view(view),
+        preferences=default_preferences(),
+        pending_decision=movement,
+        initial_game_view=view,
+        initial_support_profile=client.get_support_profile("player-a"),
+        core_client=client,
+        viewer_player_id="player-a",
+    )
+    try:
+        physical = next(unit for unit in window.battlefield_view.units if unit.unit_id == SOURCE)
+        point = window.camera.world_to_screen(physical.models[0].position)
+        window.on_mouse_press(round(point[0]), round(point[1]), arcade.MOUSE_BUTTON_LEFT, 0)
+        draft = window.movement_draft
+        assert draft is not None
+        assert draft.selected_unit_id == ATTACHED
+        assert set(draft.component_unit_instance_ids) == {SOURCE, LEADER}
+        assert len(draft.model_paths) == 6
+        assert window.selection_state.selected_unit_id == ATTACHED
+        window.on_draw()
+        assert set(window._selected_movement_component_unit_ids(None)) == {  # pyright: ignore[reportPrivateUsage]
+            SOURCE,
+            LEADER,
+        }
+        roster = next(
+            region
+            for region in window.hud_button_hit_regions
+            if region.action_kind == "select_unit" and region.unit_id == LEADER
+        )
+        window.on_mouse_press(
+            round((roster.bounds[0] + roster.bounds[2]) / 2),
+            round((roster.bounds[1] + roster.bounds[3]) / 2),
+            arcade.MOUSE_BUTTON_LEFT,
+            0,
+        )
+        assert window.selection_state.selected_unit_id == ATTACHED
+        leader = next(unit for unit in window.battlefield_view.units if unit.unit_id == LEADER)
+        point = window.camera.world_to_screen(leader.models[0].position)
+        window.on_mouse_press(round(point[0]), round(point[1]), arcade.MOUSE_BUTTON_LEFT, 0)
+        assert window.movement_draft is not None
+        assert window.movement_draft.selected_model_ids == (leader.models[0].model_id,)
+        assert window.selection_state.selected_unit_id == ATTACHED
+    finally:
+        window.close()
 
 
 def test_attached_natural_whole_charge_reroll_uses_current_source_and_continues() -> None:

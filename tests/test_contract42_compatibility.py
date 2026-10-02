@@ -40,4 +40,4 @@ def test_declared_revision_mismatch_fails_before_play(monkeypatch: pytest.Monkey
         compatibility.require_supported_core_contract()
 
     assert "0" * 40 in str(error.value)
-    assert "6e86f44b87c4559a9297596d5d18dc4247b8cbc3" in str(error.value)
+    assert "fc12fa214642f1b1f2a31b56be7323b7d76dbebc" in str(error.value)

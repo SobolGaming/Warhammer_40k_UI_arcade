@@ -87,6 +87,38 @@ def test_destroyed_model_remains_rendered_while_projected_pose_exists() -> None:
     assert all(model.model_id != model_id for unit in removed.units for model in unit.models)
 
 
+def test_canonical_membership_is_required_nullable_and_separate_from_physical_owner() -> None:
+    raw = _post_deployment_payload()
+    battlefield = cast(JsonObject, raw["battlefield_view"])
+    models = cast(JsonObject, cast(JsonObject, battlefield["authoritative"])["models_by_id"])
+    model_id = next(iter(models))
+    model = cast(JsonObject, models[model_id])
+    physical_owner = model["unit_instance_id"]
+    assert type(model["rules_unit_instance_id"]) is str
+    parsed = UiGameView.from_payload(raw)
+    rendered = next(
+        member
+        for unit in battlefield_view_from_game_view(parsed).units
+        for member in unit.models
+        if member.model_id == model_id
+    )
+    assert rendered.rules_unit_instance_id == model["rules_unit_instance_id"]
+    assert model["unit_instance_id"] == physical_owner
+
+    model["rules_unit_instance_id"] = None
+    redacted = UiGameView.from_payload(raw)
+    assert redacted.battlefield_view is not None
+    assert (
+        cast(JsonObject, redacted.battlefield_view.models_by_id[model_id])["rules_unit_instance_id"]
+        is None
+    )
+    assert model["unit_instance_id"] == physical_owner
+
+    del model["rules_unit_instance_id"]
+    with pytest.raises(UiClientProtocolError, match="rules_unit_instance_id"):
+        UiGameView.from_payload(raw)
+
+
 def test_retained_model_appears_in_headless_frame_until_pose_is_removed() -> None:
     raw = _post_deployment_payload()
     battlefield = cast(JsonObject, raw["battlefield_view"])

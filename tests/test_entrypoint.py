@@ -217,7 +217,7 @@ def test_main_prints_copyable_core_compatibility_error(
 ) -> None:
     def incompatible_run_app(**kwargs: object) -> None:
         del kwargs
-        raise CoreCompatibilityError("expected 42.0.0, installed 10.2.0")
+        raise CoreCompatibilityError("expected 44.1.0, installed 42.0.0")
 
     monkeypatch.setattr(main, "run_app", incompatible_run_app)
 
@@ -226,5 +226,5 @@ def test_main_prints_copyable_core_compatibility_error(
 
     assert exc_info.value.code == 2
     assert capsys.readouterr().err == (
-        "Fatal core compatibility error: expected 42.0.0, installed 10.2.0\n"
+        "Fatal core compatibility error: expected 44.1.0, installed 42.0.0\n"
     )

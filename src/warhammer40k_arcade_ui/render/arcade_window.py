@@ -550,7 +550,7 @@ class ArcadeWarhammerWindow(arcade.Window):
             pending_decision=self._pending_decision,
             hovered_hud_button_id=self._hovered_hud_button_id,
             selected_unit_id=self._hud_selected_unit_id(),
-            selected_component_unit_ids=self._selected_scout_component_unit_ids(scout_selection),
+            selected_component_unit_ids=self._selected_movement_component_unit_ids(scout_selection),
             viewer_player_id=self._viewer_player_id,
             unit_display_by_id=self._known_unit_display_by_id,
             model_display_by_id=self._known_model_display_by_id,
@@ -1218,11 +1218,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         if self._focus_finite_unit_option_from_hud(unit_id):
             return
         draft = self._movement_draft
-        if (
-            draft is not None
-            and draft.decision_type == "submit_scout_move"
-            and unit_id in draft.component_unit_instance_ids
-        ):
+        if draft is not None and unit_id in draft.component_unit_instance_ids:
             focused = next(
                 (
                     (path.model_id, ref)
@@ -1622,7 +1618,7 @@ class ArcadeWarhammerWindow(arcade.Window):
         option = self._finite_state.highlighted_option
         return option is not None and is_attached_scout_option(option, view=self._battlefield_view)
 
-    def _selected_scout_component_unit_ids(
+    def _selected_movement_component_unit_ids(
         self, finite_selection: AttachedScoutSelection | None
     ) -> tuple[str, ...]:
         selected_id = self._selection_state.selected_unit_id
@@ -1631,7 +1627,6 @@ class ArcadeWarhammerWindow(arcade.Window):
         draft = self._movement_draft
         if (
             draft is not None
-            and draft.decision_type == "submit_scout_move"
             and selected_id == draft.selected_unit_id
             and draft.is_for(
                 selection=self._selection_state,

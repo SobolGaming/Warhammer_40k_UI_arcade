@@ -775,7 +775,23 @@ def movement_proposal_unit(
     """Resolve a current movement actor from its public request and physical projection."""
 
     if proposal.decision_type != SCOUT_MOVE_DECISION_TYPE:
-        return _unit_by_id(view, proposal.unit_instance_id)
+        members = tuple(
+            (unit, model)
+            for unit in view.units
+            for model in unit.models
+            if model.rules_unit_instance_id == proposal.unit_instance_id and model.state == "placed"
+        )
+        if not members:
+            return None
+        if any(unit.player_id != proposal.actor_id for unit, _ in members):
+            raise EntitySelectionError("Movement actor owner differs from the current request.")
+        component_ids = tuple(dict.fromkeys(unit.unit_id for unit, _ in members))
+        return UnitView(
+            unit_id=proposal.unit_instance_id,
+            player_id=proposal.actor_id,
+            label=", ".join(unit.label for unit in view.units if unit.unit_id in component_ids),
+            models=tuple(model for _, model in members),
+        )
     component_ids = proposal.component_unit_instance_ids
     model_ids = proposal.required_model_ids
     if not component_ids or not model_ids or proposal.player_id is None:
@@ -797,6 +813,46 @@ def movement_proposal_unit(
         player_id=proposal.player_id,
         label=", ".join(physical[unit_id].label for unit_id in component_ids),
         models=tuple(by_model_id[model_id][1] for model_id in model_ids),
+    )
+
+
+def movement_proposal_component_unit_ids(
+    *, view: BattlefieldView, proposal: UiMovementProposalRequest
+) -> tuple[str, ...]:
+    """Return physical components of the current canonical actor, after ownership checks."""
+
+    if proposal.decision_type == SCOUT_MOVE_DECISION_TYPE:
+        movement_proposal_unit(view=view, proposal=proposal)
+        return proposal.component_unit_instance_ids
+    resolved = movement_proposal_unit(view=view, proposal=proposal)
+    if resolved is None:
+        return ()
+    model_ids = {model.model_id for model in resolved.models}
+    return tuple(
+        unit.unit_id
+        for unit in view.units
+        if any(model.model_id in model_ids for model in unit.models)
+    )
+
+
+def movement_selection_matches_actor(
+    *,
+    view: BattlefieldView,
+    actor: UnitView,
+    selected_unit_id: str | None,
+    selected_model_id: str | None,
+) -> bool:
+    """Reject a stale physical focus that is not a current member of the actor."""
+
+    if selected_model_id is None:
+        return True
+    if not any(model.model_id == selected_model_id for model in actor.models):
+        return False
+    if selected_unit_id == actor.unit_id:
+        return True
+    physical = None if selected_unit_id is None else _unit_by_id(view, selected_unit_id)
+    return physical is not None and any(
+        model.model_id == selected_model_id for model in physical.models
     )
 
 

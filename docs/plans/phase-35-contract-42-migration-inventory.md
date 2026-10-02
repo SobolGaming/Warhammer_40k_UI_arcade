@@ -204,3 +204,34 @@ die and aggregate-override patterns absent from the canonical conformance exampl
 The target pin must remain on an implementation branch until strict examples, real public-session
 submission and invalid-diagnostic tests, viewer-scope/render tests, the simplified smoke path,
 and all repository gates pass. No core source file is edited for this inventory.
+
+## Authorized continuation: Contract 42.0 to 44.1.0
+
+The table above records the original 10.2-to-42 review. The current implementation target is
+Core `fc12fa214642f1b1f2a31b56be7323b7d76dbebc`, external contract `44.1.0`.
+The fourteen commits after the original `6e86f44b87c4559a9297596d5d18dc4247b8cbc3` target
+were reviewed against `contracts/migrations/42-to-43.md`, `43-to-44.md`, the current manifest,
+`docs/ADAPTER_DECISION_CONTRACT.md`, and the changed public producers and consumers.
+
+| Change | Current public authority | UI consumer |
+| --- | --- | --- |
+| Order 101 setup retry | A well-formed rule-invalid Disembark or reserve attempt can return fresh movement selection; malformed or stale input retains the proposal. | Follow current request/option IDs; no cached selection retry. |
+| Contract 42.1 Shock Disembark | Start/completion engagement lists are empty and no forced Fight selection is queued. | Keep the engine event and current decision ordering. |
+| Contract 42.2 Fight completion | `fight_selection_completed` records consumed selection; `unit_has_fought` requires an actual melee attack. | Display emitted events without equating an empty selection to combat. |
+| Contract 43 Precision grouping | Every `GatheredAttackGroup` requires Boolean `target_has_character`; deterministic group IDs change. | Preserve current Core group/option IDs and recorded context; discard older cached IDs. |
+| Contract 44 membership | Every authoritative battlefield model requires nullable `rules_unit_instance_id`; battlefield schema is `battlefield-view-v5-rules-unit-membership`. | Join current `placed` models across physical owners to the canonical movement actor; preserve null redaction and physical owner separately. |
+| Contract 44.1 Firing Deck | A non-null Firing Deck proposal publishes `firing_deck_already_shot_unit_instance_ids`; `[]` is authentic empty history, `null` is no ordinary Shooting authority. | Copy the request history and current weapon/cargo identities into the declaration; reject missing or null authority for borrowed weapons. |
+
+Session metadata, command result and outcome tags are `v44-contract`. Persistence is
+`session-persistence-v35-target-aware-attack-groups` with external persistence pin `44.0.0`;
+the current runtime contract is `44.1.0`. Replay is
+`replay-artifact-v36-target-aware-attack-groups`. Old saves, replay data, pending requests and
+attack-group IDs stay on their original exact runtime. Neither migration file authorizes an
+inferred missing membership or target context.
+
+The intervening Core issue fixes also repair attached Scout physical ownership and accepted
+history, reserve-deadline continuation, attached Charge membership projection, and public Firing
+Deck history. They require real UI submission checks before an M2 acceptance claim. Catalog reuse
+in the same range affects selected test construction and offline immutable geometry generation;
+it does not establish a current UI startup speedup. The separate M2 evidence record reports
+the exact current checks and limits.
