@@ -24,7 +24,14 @@ from warhammer40k_arcade_ui.render.core_projection import (
     battlefield_view_from_game_view,
 )
 from warhammer40k_arcade_ui.render.primitives import PLAYER_1_COLOR
+from warhammer40k_arcade_ui.state.entity_selection import (
+    EntitySelectionError,
+    movement_entity_selection_profile,
+    movement_proposal_unit,
+)
 from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
+from warhammer40k_arcade_ui.state.movement_draft import MovementDraft, MovementDraftError
+from warhammer40k_arcade_ui.state.selection import SelectionState
 
 
 def test_random_characteristic_keeps_source_expression_and_nullable_values() -> None:
@@ -127,6 +134,77 @@ def test_canonical_model_pose_requires_finite_elevation_and_facing(
         battlefield_view_from_game_view(UiGameView.from_payload(raw))
 
 
+@pytest.mark.parametrize("pose_value", ["absent", "null"])
+def test_placed_attached_actor_requires_whole_canonical_pose(pose_value: str) -> None:
+    raw = _attached_charge_payload()
+    view = UiGameView.from_payload(raw)
+    assert view.pending_decision is not None
+    proposal = view.pending_decision.movement_proposal
+    assert proposal is not None
+    battlefield = battlefield_view_from_game_view(view)
+    actor = movement_proposal_unit(view=battlefield, proposal=proposal)
+    assert actor is not None
+    assert len(actor.models) == 6
+    selection = SelectionState.initial(default_preferences()).select_model_id(
+        unit_id=proposal.unit_instance_id,
+        model_id=None,
+        preferences=default_preferences(),
+    )
+    draft = MovementDraft.start_for_pending(
+        view=battlefield,
+        selection=selection,
+        pending_decision=view.pending_decision,
+    )
+    assert draft is not None
+    assert {path.model_id for path in draft.model_paths} == {
+        model.model_id for model in actor.models
+    }
+
+    model_id = actor.models[0].model_id
+    invalid_raw = copy.deepcopy(raw)
+    models = cast(
+        JsonObject,
+        cast(JsonObject, cast(JsonObject, invalid_raw["battlefield_view"])["authoritative"])[
+            "models_by_id"
+        ],
+    )
+    model = cast(JsonObject, models[model_id])
+    if pose_value == "absent":
+        del model["pose"]
+    else:
+        model["pose"] = None
+    with pytest.raises(UiClientProtocolError, match=rf"{model_id}\.pose is required"):
+        UiGameView.from_payload(invalid_raw)
+
+    assert view.battlefield_view is not None
+    authoritative_models = cast(JsonObject, view.battlefield_view.authoritative["models_by_id"])
+    parsed_model = cast(JsonObject, authoritative_models[model_id])
+    if pose_value == "absent":
+        del parsed_model["pose"]
+    else:
+        parsed_model["pose"] = None
+    with pytest.raises(CoreProjectionRenderError, match=rf"{model_id} is missing pose"):
+        battlefield_view_from_game_view(view)
+
+
+@pytest.mark.parametrize("state", ["undeployed", "reserves", "embarked", "removed", "destroyed"])
+def test_unplaced_or_removed_model_keeps_explicit_null_pose(state: str) -> None:
+    raw = _post_deployment_payload()
+    models = cast(
+        JsonObject,
+        cast(JsonObject, cast(JsonObject, raw["battlefield_view"])["authoritative"])[
+            "models_by_id"
+        ],
+    )
+    model_id = next(iter(models))
+    model = cast(JsonObject, models[model_id])
+    model["state"] = state
+    model["pose"] = None
+
+    battlefield = battlefield_view_from_game_view(UiGameView.from_payload(raw))
+    assert all(member.model_id != model_id for unit in battlefield.units for member in unit.models)
+
+
 def test_canonical_membership_is_required_nullable_and_separate_from_physical_owner() -> None:
     raw = _post_deployment_payload()
     battlefield = cast(JsonObject, raw["battlefield_view"])
@@ -157,6 +235,103 @@ def test_canonical_membership_is_required_nullable_and_separate_from_physical_ow
     del model["rules_unit_instance_id"]
     with pytest.raises(UiClientProtocolError, match="rules_unit_instance_id"):
         UiGameView.from_payload(raw)
+
+
+def test_owned_placed_member_with_null_membership_fails_before_movement_witness() -> None:
+    raw = _attached_charge_payload()
+    view = UiGameView.from_payload(raw)
+    assert view.pending_decision is not None
+    proposal = view.pending_decision.movement_proposal
+    assert proposal is not None
+    battlefield = battlefield_view_from_game_view(view)
+    actor = movement_proposal_unit(view=battlefield, proposal=proposal)
+    assert actor is not None
+    assert len(actor.models) == 6
+    model_id = actor.models[0].model_id
+
+    models = cast(
+        JsonObject,
+        cast(JsonObject, cast(JsonObject, raw["battlefield_view"])["authoritative"])[
+            "models_by_id"
+        ],
+    )
+    cast(JsonObject, models[model_id])["rules_unit_instance_id"] = None
+    malformed = UiGameView.from_payload(raw)
+    with pytest.raises(CoreProjectionRenderError, match="missing rules_unit_instance_id"):
+        battlefield_view_from_game_view(malformed)
+
+    malformed_battlefield = replace(
+        battlefield,
+        units=tuple(
+            replace(
+                unit,
+                models=tuple(
+                    replace(member, rules_unit_instance_id=None)
+                    if member.model_id == model_id
+                    else member
+                    for member in unit.models
+                ),
+            )
+            for unit in battlefield.units
+        ),
+    )
+    with pytest.raises(EntitySelectionError, match="missing current rules_unit_instance_id"):
+        movement_proposal_unit(view=malformed_battlefield, proposal=proposal)
+    profile = movement_entity_selection_profile(
+        view=malformed_battlefield,
+        decision=view.pending_decision,
+    )
+    assert profile.candidate_refs == ()
+    assert profile.unsupported_reason is not None
+    assert "missing current rules_unit_instance_id" in profile.unsupported_reason
+    selection = SelectionState.initial(default_preferences()).select_model_id(
+        unit_id=proposal.unit_instance_id,
+        model_id=None,
+        preferences=default_preferences(),
+    )
+    with pytest.raises(MovementDraftError, match="missing current rules_unit_instance_id"):
+        MovementDraft.start_for_pending(
+            view=malformed_battlefield,
+            selection=selection,
+            pending_decision=view.pending_decision,
+        )
+
+
+def test_owned_ordinary_placed_member_with_null_membership_fails_projection() -> None:
+    raw = _post_deployment_payload()
+    models = cast(
+        JsonObject,
+        cast(JsonObject, cast(JsonObject, raw["battlefield_view"])["authoritative"])[
+            "models_by_id"
+        ],
+    )
+    model_id = next(iter(models))
+    model = cast(JsonObject, models[model_id])
+    assert model["state"] == "placed"
+    assert model["owner_player_id"] == raw["viewer_player_id"]
+    model["rules_unit_instance_id"] = None
+
+    with pytest.raises(CoreProjectionRenderError, match="missing rules_unit_instance_id"):
+        battlefield_view_from_game_view(UiGameView.from_payload(raw))
+
+
+def test_hidden_opponent_unplaced_membership_and_pose_may_be_null() -> None:
+    raw = _core_projection_payload("initial_setup_view_player1.json")
+    view = UiGameView.from_payload(raw)
+    assert view.battlefield_view is not None
+    opponent_rows = tuple(
+        cast(JsonObject, model)
+        for model in view.battlefield_view.models_by_id.values()
+        if cast(JsonObject, model)["owner_player_id"] != view.viewer_player_id
+    )
+    assert opponent_rows
+    assert all(
+        model["state"] == "undeployed"
+        and model["pose"] is None
+        and model["rules_unit_instance_id"] is None
+        for model in opponent_rows
+    )
+    assert battlefield_view_from_game_view(view).units == ()
 
 
 def test_retained_model_appears_in_headless_frame_until_pose_is_removed() -> None:
@@ -233,7 +408,15 @@ def test_alternating_viewer_refresh_drops_hidden_display_rows_and_event_lines() 
 
 
 def _post_deployment_payload() -> JsonObject:
-    path = required_core_example_path("projections", "post_deployment_view.json")
+    return _core_projection_payload("post_deployment_view.json")
+
+
+def _attached_charge_payload() -> JsonObject:
+    return _core_projection_payload("attached_charge_view.json")
+
+
+def _core_projection_payload(name: str) -> JsonObject:
+    path = required_core_example_path("projections", name)
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert type(payload) is dict
     return cast(JsonObject, payload)

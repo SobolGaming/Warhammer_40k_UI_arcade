@@ -774,6 +774,15 @@ def movement_proposal_unit(
 ) -> UnitView | None:
     """Resolve a current movement actor from its public request and physical projection."""
 
+    if any(
+        model.state == "placed" and model.rules_unit_instance_id is None
+        for unit in view.units
+        if unit.player_id == proposal.actor_id
+        for model in unit.models
+    ):
+        raise EntitySelectionError(
+            "Placed actor model is missing current rules_unit_instance_id membership."
+        )
     if proposal.decision_type != SCOUT_MOVE_DECISION_TYPE:
         members = tuple(
             (unit, model)

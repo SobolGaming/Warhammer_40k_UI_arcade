@@ -416,6 +416,13 @@ class UiBattlefieldProjection:
             model = _json_object(f"models_by_id.{model_id}", raw_model)
             _required_matching_string(model, "model_instance_id", model_id, "battlefield model key")
             _required_string(model, "unit_instance_id")
+            state = _required_string(model, "state")
+            if "pose" not in model:
+                raise UiClientProtocolError(f"models_by_id.{model_id}.pose is required.")
+            if state == "placed" and model["pose"] is None:
+                raise UiClientProtocolError(
+                    f"models_by_id.{model_id}.pose is required for a placed model."
+                )
             rules_unit_id = _required_value(model, "rules_unit_instance_id")
             if rules_unit_id is not None:
                 _non_empty_string("rules_unit_instance_id", rules_unit_id)

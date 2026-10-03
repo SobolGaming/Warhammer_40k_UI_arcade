@@ -70,6 +70,7 @@ def battlefield_view_from_game_view(view: UiGameView) -> BattlefieldView:
         terrain=_canonical_terrain(authoritative),
         units=_canonical_units(
             authoritative=authoritative,
+            viewer_player_id=view.viewer_player_id,
             unit_display_by_id=view.unit_display_by_id,
             model_display_by_id=view.model_display_by_id,
         ),
@@ -359,6 +360,7 @@ def _canonical_hit_regions(render: JsonObject) -> tuple[HitRegionView, ...]:
 def _canonical_units(
     *,
     authoritative: JsonObject,
+    viewer_player_id: str,
     unit_display_by_id: JsonObject,
     model_display_by_id: JsonObject,
 ) -> tuple[UnitView, ...]:
@@ -369,7 +371,19 @@ def _canonical_units(
         model = _json_object("battlefield model", raw_model)
         state = _required_string(model, "state")
         rules_unit_id = _optional_string_field(model, "rules_unit_instance_id")
-        if model.get("pose") is None:
+        if "pose" not in model:
+            raise CoreProjectionRenderError(f"battlefield model {model_id} is missing pose.")
+        if state == "placed" and model["pose"] is None:
+            raise CoreProjectionRenderError(f"placed battlefield model {model_id} is missing pose.")
+        if (
+            state == "placed"
+            and _required_string(model, "owner_player_id") == viewer_player_id
+            and rules_unit_id is None
+        ):
+            raise CoreProjectionRenderError(
+                f"placed owner model {model_id} is missing rules_unit_instance_id."
+            )
+        if model["pose"] is None:
             continue
         if state not in {"placed", "destroyed"}:
             raise CoreProjectionRenderError(f"Unsupported canonical model state: {state}.")
