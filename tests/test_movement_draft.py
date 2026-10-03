@@ -6,12 +6,22 @@ from dataclasses import replace
 
 import pytest
 
-from tests.support.contract_fixtures import decision_from_fixture
-from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
+from tests.support.contract_fixtures import current_decision_payload, decision_from_fixture
+from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
+    UiClientProtocolError,
+    UiDecision,
+)
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView
-from warhammer40k_arcade_ui.state.entity_selection import EntityRef, entity_ref_for_model
+from warhammer40k_arcade_ui.state.entity_selection import (
+    EntityRef,
+    EntitySelectionError,
+    entity_ref_for_model,
+    movement_entity_selection_profile,
+    movement_proposal_unit,
+)
 from warhammer40k_arcade_ui.state.movement_draft import (
     MovementDraft,
     MovementDraftError,
@@ -74,6 +84,55 @@ def test_movement_draft_seed_from_unit_selection_expands_to_all_models() -> None
         "intercessor_1",
         "intercessor_2",
         "intercessor_3",
+    )
+
+
+def test_parsed_scout_actor_must_own_public_player_component_before_draft() -> None:
+    view = default_battlefield_view()
+    valid = _scout_move_proposal_decision(action_kind="scout_move")
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=valid,
+    )
+    assert draft is not None
+    assert draft.player_id == "player_1"
+    assert len(draft.model_paths) == 3
+
+    malformed = _scout_move_proposal_payload(action_kind="scout_move", actor_id="player_2")
+    with pytest.raises(UiClientProtocolError, match="Scout Move player_id must match actor_id"):
+        UiDecision.from_payload(malformed)
+
+
+def test_scout_actor_drift_fails_shared_selection_and_draft() -> None:
+    decision = _scout_move_proposal_decision(action_kind="scout_move")
+    proposal = decision.movement_proposal
+    assert proposal is not None
+    # Simulate an incompatible post-parse object so the shared guards are exercised directly.
+    object.__setattr__(proposal, "actor_id", "player_2")
+    object.__setattr__(decision, "actor_id", "player_2")
+    view = default_battlefield_view()
+    selection = _selected_intercessors()
+
+    with pytest.raises(EntitySelectionError, match="player_id differs from the current actor"):
+        movement_proposal_unit(view=view, proposal=proposal)
+    profile = movement_entity_selection_profile(view=view, decision=decision)
+    assert profile.candidate_refs == ()
+    assert profile.unsupported_reason is not None
+    assert "player_id differs" in profile.unsupported_reason
+    with pytest.raises(MovementDraftError, match="player_id differs from the current actor"):
+        MovementDraft.start_for_pending(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+        )
+    assert (
+        movement_proposal_for_selected_unit(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+        )
+        is None
     )
 
 
@@ -823,17 +882,21 @@ def _movement_proposal_decision(
 
 
 def _scout_move_proposal_decision(*, action_kind: str) -> UiDecision:
+    return UiDecision.from_payload(_scout_move_proposal_payload(action_kind=action_kind))
+
+
+def _scout_move_proposal_payload(*, action_kind: str, actor_id: str = "player_1") -> JsonObject:
     request_id = "decision-request-scout-endpoints"
-    return decision_from_fixture(
+    return current_decision_payload(
         {
             "request_id": request_id,
             "decision_type": "submit_scout_move",
-            "actor_id": "player_1",
+            "actor_id": actor_id,
             "payload": {
                 "proposal_request": {
                     "request_id": request_id,
                     "decision_type": "submit_scout_move",
-                    "actor_id": "player_1",
+                    "actor_id": actor_id,
                     "game_id": "scout-endpoint-fixture",
                     "setup_step": "resolve_prebattle_actions",
                     "player_id": "player_1",

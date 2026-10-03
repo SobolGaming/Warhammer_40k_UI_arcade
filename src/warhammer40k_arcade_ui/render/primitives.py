@@ -467,31 +467,9 @@ def _selection_primitives(
     if (
         unit is None
         and movement_draft is not None
-        and movement_draft.decision_type == "submit_scout_move"
         and selection_state.selected_unit_id == movement_draft.selected_unit_id
     ):
-        model_ids = {path.model_id for path in movement_draft.model_paths}
-        components = tuple(
-            candidate
-            for candidate in view.units
-            if candidate.unit_id in movement_draft.component_unit_instance_ids
-        )
-        models = tuple(model for component in components for model in component.models)
-        if (
-            len(components) == len(movement_draft.component_unit_instance_ids)
-            and {component.unit_id for component in components}
-            == set(movement_draft.component_unit_instance_ids)
-            and len(models) == len(model_ids)
-            and {model.model_id for model in models} == model_ids
-            and components
-            and all(component.player_id == movement_draft.player_id for component in components)
-        ):
-            unit = UnitView(
-                unit_id=movement_draft.selected_unit_id,
-                player_id=components[0].player_id,
-                label=movement_draft.selected_unit_id,
-                models=models,
-            )
+        unit = _canonical_movement_selection_unit(view=view, draft=movement_draft)
     if unit is not None and "selected_unit" in selection_state.active_overlay_ids:
         center = _unit_center(unit)
         primitives.append(
@@ -526,6 +504,57 @@ def _selection_primitives(
             )
         )
     return tuple(primitives)
+
+
+def _canonical_movement_selection_unit(
+    *, view: BattlefieldView, draft: MovementDraft
+) -> UnitView | None:
+    """Resolve a selected canonical actor from the current public physical models."""
+
+    profile = draft.entity_selection.profile
+    actor_id = profile.actor_id
+    component_ids = draft.component_unit_instance_ids
+    if (
+        actor_id is None
+        or not component_ids
+        or profile.request_id != draft.proposal_request_id
+        or profile.decision_type != draft.decision_type
+    ):
+        return None
+    components = tuple(unit for unit in view.units if unit.unit_id in component_ids)
+    if (
+        len(components) != len(component_ids)
+        or {unit.unit_id for unit in components} != set(component_ids)
+        or any(unit.player_id != actor_id for unit in components)
+    ):
+        return None
+    if draft.decision_type == "submit_scout_move":
+        if draft.player_id != actor_id:
+            return None
+        models = tuple(model for unit in components for model in unit.models)
+    else:
+        members = tuple(
+            (unit, model)
+            for unit in view.units
+            for model in unit.models
+            if model.state == "placed" and model.rules_unit_instance_id == draft.selected_unit_id
+        )
+        if (
+            not members
+            or any(unit.player_id != actor_id for unit, _ in members)
+            or {unit.unit_id for unit, _ in members} != set(component_ids)
+        ):
+            return None
+        models = tuple(model for _, model in members)
+    model_ids = {path.model_id for path in draft.model_paths}
+    if len(models) != len(model_ids) or {model.model_id for model in models} != model_ids:
+        return None
+    return UnitView(
+        unit_id=draft.selected_unit_id,
+        player_id=actor_id,
+        label=draft.selected_unit_id,
+        models=models,
+    )
 
 
 def _assignment_target_highlight_primitives(

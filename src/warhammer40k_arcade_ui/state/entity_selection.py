@@ -801,6 +801,8 @@ def movement_proposal_unit(
             label=", ".join(unit.label for unit in view.units if unit.unit_id in component_ids),
             models=tuple(model for _, model in members),
         )
+    if proposal.player_id != proposal.actor_id:
+        raise EntitySelectionError("Scout Move player_id differs from the current actor.")
     component_ids = proposal.component_unit_instance_ids
     model_ids = proposal.required_model_ids
     if not component_ids or not model_ids or proposal.player_id is None:

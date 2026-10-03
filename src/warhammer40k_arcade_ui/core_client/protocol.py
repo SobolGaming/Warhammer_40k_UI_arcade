@@ -798,10 +798,11 @@ class UiMovementProposalRequest:
             if len(normalized) != len(set(normalized)):
                 raise UiClientProtocolError(f"{field_name} must be a tuple of unique IDs.")
             object.__setattr__(self, field_name, normalized)
-        if self.decision_type == "submit_scout_move" and (
-            not self.component_unit_instance_ids or not self.required_model_ids
-        ):
-            raise UiClientProtocolError("Scout Move requires component and model inventories.")
+        if self.decision_type == "submit_scout_move":
+            if self.player_id != self.actor_id:
+                raise UiClientProtocolError("Scout Move player_id must match actor_id.")
+            if not self.component_unit_instance_ids or not self.required_model_ids:
+                raise UiClientProtocolError("Scout Move requires component and model inventories.")
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:

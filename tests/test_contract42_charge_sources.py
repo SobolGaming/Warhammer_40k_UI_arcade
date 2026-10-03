@@ -67,10 +67,15 @@ from warhammer40k_arcade_ui.core_client.protocol import (
     UiClientSubmissionError,
     UiDecision,
 )
+from warhammer40k_arcade_ui.hud.ergonomics import HudErgonomicsView
+from warhammer40k_arcade_ui.hud.layouts import HudLayoutView
 from warhammer40k_arcade_ui.hud.view_models import build_finite_decision_panel
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.render import arcade_window as window_module
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
+from warhammer40k_arcade_ui.render.camera import WorldCamera
 from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_game_view
+from warhammer40k_arcade_ui.render.primitives import CirclePrimitive, RenderPrimitive
 from warhammer40k_arcade_ui.state.entity_selection import (
     entity_ref_for_model,
     movement_proposal_unit,
@@ -433,7 +438,9 @@ def test_attached_charge_draft_preserves_components_commitment_and_witness() -> 
     assert {cast(str, row["component_unit_instance_id"]) for row in rows} == {SOURCE, LEADER}
 
 
-def test_attached_charge_window_selects_physical_components_for_canonical_draft() -> None:
+def test_attached_charge_window_selects_physical_components_for_canonical_draft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = _attached_charge_client(natural_reroll=False)
     target = _finish_optional_command_window(client, _select_attached(client))
     movement = _select_committed_target(client, target)
@@ -448,6 +455,60 @@ def test_attached_charge_window_selects_physical_components_for_canonical_draft(
         core_client=client,
         viewer_player_id="player-a",
     )
+    hud_frames: list[HudErgonomicsView] = []
+    world_frames: list[tuple[RenderPrimitive, ...]] = []
+    render_hud = window._hud_composition_primitives  # pyright: ignore[reportPrivateUsage]
+    draw_primitives = window_module._draw_world_primitives  # pyright: ignore[reportPrivateUsage]
+
+    def capture_hud(
+        *, ergonomic_hud: HudErgonomicsView, hud_layout: HudLayoutView
+    ) -> tuple[RenderPrimitive, ...]:
+        hud_frames.append(ergonomic_hud)
+        return render_hud(ergonomic_hud=ergonomic_hud, hud_layout=hud_layout)
+
+    def capture_world(primitives: tuple[RenderPrimitive, ...], camera: WorldCamera) -> None:
+        if any(primitive.layer == "table_bounds" for primitive in primitives):
+            world_frames.append(primitives)
+        draw_primitives(primitives, camera)
+
+    monkeypatch.setattr(window, "_hud_composition_primitives", capture_hud)
+    monkeypatch.setattr(window_module, "_draw_world_primitives", capture_world)
+
+    def assert_selected_surfaces(model_id: str) -> None:
+        window.on_draw()
+        rows = {
+            row.unit_id: row
+            for row in hud_frames[-1].player_unit_buttons
+            if row.unit_id in {SOURCE, LEADER}
+        }
+        assert set(rows) == {SOURCE, LEADER}
+        assert rows[SOURCE].selected
+        assert rows[LEADER].selected
+        members = tuple(
+            member
+            for unit in window.battlefield_view.units
+            for member in unit.models
+            if member.rules_unit_instance_id == ATTACHED and member.state == "placed"
+        )
+        assert len(members) == 6
+        circles = tuple(
+            primitive for primitive in world_frames[-1] if isinstance(primitive, CirclePrimitive)
+        )
+        selected_unit = tuple(
+            circle for circle in circles if circle.layer == "selected_unit_overlay"
+        )
+        selected_model = tuple(
+            circle for circle in circles if circle.layer == "selected_model_overlay"
+        )
+        assert len(selected_unit) == len(selected_model) == 1
+        assert selected_unit[0].center == (
+            sum(member.position[0] for member in members) / len(members),
+            sum(member.position[1] for member in members) / len(members),
+        )
+        assert selected_model[0].center == next(
+            member.position for member in members if member.model_id == model_id
+        )
+
     try:
         physical = next(unit for unit in window.battlefield_view.units if unit.unit_id == SOURCE)
         point = window.camera.world_to_screen(physical.models[0].position)
@@ -458,7 +519,8 @@ def test_attached_charge_window_selects_physical_components_for_canonical_draft(
         assert set(draft.component_unit_instance_ids) == {SOURCE, LEADER}
         assert len(draft.model_paths) == 6
         assert window.selection_state.selected_unit_id == ATTACHED
-        window.on_draw()
+        assert window.selection_state.selected_model_id == physical.models[0].model_id
+        assert_selected_surfaces(physical.models[0].model_id)
         assert set(window._selected_movement_component_unit_ids(None)) == {  # pyright: ignore[reportPrivateUsage]
             SOURCE,
             LEADER,
@@ -481,6 +543,24 @@ def test_attached_charge_window_selects_physical_components_for_canonical_draft(
         assert window.movement_draft is not None
         assert window.movement_draft.selected_model_ids == (leader.models[0].model_id,)
         assert window.selection_state.selected_unit_id == ATTACHED
+        assert_selected_surfaces(leader.models[0].model_id)
+
+        opponent = client.get_view("player-b")
+        window._apply_refreshed_game_view(  # pyright: ignore[reportPrivateUsage]
+            view=opponent,
+            state=window.finite_state.apply_view(opponent),
+        )
+        assert window.viewer_player_id == "player-b"
+        refreshed_window = window
+        assert refreshed_window.movement_draft is None
+        assert refreshed_window.selection_state == SelectionState.initial(default_preferences())
+        window.on_draw()
+        assert not any(row.selected for row in hud_frames[-1].player_unit_buttons)
+        assert not {
+            primitive.layer
+            for primitive in world_frames[-1]
+            if isinstance(primitive, CirclePrimitive)
+        } & {"selected_unit_overlay", "selected_model_overlay"}
     finally:
         window.close()
 
