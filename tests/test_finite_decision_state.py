@@ -152,7 +152,7 @@ def test_submit_finite_option_refreshes_next_actor_view_for_hidden_options() -> 
         event_delta_by_player_id={
             "player-b": UiEventDelta(
                 viewer_player_id="player-b",
-                cursor=3,
+                cursor=0,
                 next_cursor=4,
                 events=(
                     {
@@ -177,11 +177,12 @@ def test_submit_finite_option_refreshes_next_actor_view_for_hidden_options() -> 
 
     assert result.viewer_player_id == "player-b"
     assert fake.view_requests == ["player-b"]
-    assert fake.event_delta_requests == [(3, "player-b")]
+    assert fake.event_delta_requests == [(0, "player-b")]
     assert result.finite_state.pending_decision == next_decision
     assert result.finite_state.highlighted_option is not None
     assert result.finite_state.highlighted_option.option_id == "assassination"
     assert result.finite_state.event_log_lines[-1] == "decision_requested: player-b"
+    assert "ready" not in result.finite_state.event_log_lines
 
 
 def test_submit_finite_option_does_not_call_client_for_parameterized_request() -> None:

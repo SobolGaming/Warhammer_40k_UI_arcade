@@ -3,26 +3,109 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass, replace
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
+from warhammer40k_core.adapters.setup_smoke import canonical_setup_prebattle_smoke_config
 
 from warhammer40k_arcade_ui.core_client import live_smoke
 from warhammer40k_arcade_ui.core_client.live_smoke import (
     LIVE_CORE_SMOKE_STOP_PHASES,
     LiveCoreSmokeError,
     LiveCoreSmokeStartup,
+    LiveCoreSmokeStopPhase,
     build_live_core_smoke_startup,
 )
-from warhammer40k_arcade_ui.core_client.protocol import JsonObject, JsonValue, UiDecision
+from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
+from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
+    JsonValue,
+    UiClientStatus,
+    UiDecision,
+    UiFiniteOption,
+    UiGameView,
+)
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
-from warhammer40k_arcade_ui.render.core_projection import CoreProjectionRenderError
+from warhammer40k_arcade_ui.render.core_projection import (
+    CoreProjectionRenderError,
+    battlefield_view_from_game_view,
+)
 from warhammer40k_arcade_ui.state.movement_draft import MovementDraft
 from warhammer40k_arcade_ui.state.selection import SelectionState
 
+pytestmark = pytest.mark.integration
 
-def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
-    startup = build_live_core_smoke_startup()
+
+@dataclass(frozen=True, slots=True)
+class _CheckpointObservation:
+    decision: UiDecision
+    game_view: UiGameView
+    visible_event_count: int
+    decision_record_count: int
+
+
+type _SmokeTrace = tuple[LiveCoreSmokeStartup, dict[str, _CheckpointObservation]]
+
+
+@pytest.fixture(scope="module")
+def movement_startup() -> LiveCoreSmokeStartup:
+    return build_live_core_smoke_startup()
+
+
+@pytest.fixture
+def fresh_movement_startup() -> LiveCoreSmokeStartup:
+    return build_live_core_smoke_startup()
+
+
+@pytest.fixture(scope="module")
+def shooting_trace() -> _SmokeTrace:
+    """Observe each advertised checkpoint during one public-decision traversal."""
+
+    observed: dict[str, _CheckpointObservation] = {}
+    clients: list[LocalSessionClient] = []
+    original_checkpoint = live_smoke._is_requested_checkpoint  # pyright: ignore[reportPrivateUsage]
+
+    def make_client() -> LocalSessionClient:
+        client = LocalSessionClient()
+        clients.append(client)
+        return client
+
+    def observe_checkpoint(
+        *, stop_phase: LiveCoreSmokeStopPhase, decision: UiDecision, view: UiGameView
+    ) -> bool:
+        assert clients
+        client = clients[0]
+        for phase in LIVE_CORE_SMOKE_STOP_PHASES:
+            if phase in observed or not original_checkpoint(
+                stop_phase=phase, decision=decision, view=view
+            ):
+                continue
+            viewer = decision.actor_id
+            assert viewer is not None
+            events = client.get_events_since(0, viewer)
+            observed[phase] = _CheckpointObservation(
+                decision=decision,
+                game_view=view,
+                visible_event_count=len(events.events),
+                decision_record_count=client.session.decision_record_count(),
+            )
+        return original_checkpoint(stop_phase=stop_phase, decision=decision, view=view)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(live_smoke, "LocalSessionClient", make_client)
+        patch.setattr(live_smoke, "_is_requested_checkpoint", observe_checkpoint)
+        startup = build_live_core_smoke_startup(stop_at_phase="shooting")
+    assert len(clients) == 1
+    assert clients[0] is startup.core_client
+    return startup, observed
+
+
+def test_live_core_smoke_startup_reaches_real_movement_unit_selection(
+    movement_startup: LiveCoreSmokeStartup,
+) -> None:
+    startup = movement_startup
     decision = startup.status.decision
 
     assert decision is not None
@@ -63,9 +146,14 @@ def test_live_core_smoke_startup_reaches_real_movement_unit_selection() -> None:
     assert monster.models[0].position == (18.0, 51.0)
 
 
-def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
-    startup = build_live_core_smoke_startup(stop_at_phase="deployment")
-    decision = startup.status.decision
+def test_live_core_smoke_observes_deployment_unit_selection(
+    shooting_trace: _SmokeTrace,
+) -> None:
+    _, observed = shooting_trace
+    checkpoint = observed["deployment"]
+    decision = checkpoint.decision
+    game_view = checkpoint.game_view
+    battlefield_view = battlefield_view_from_game_view(game_view)
 
     assert decision is not None
     assert decision.decision_type == "select_deployment_unit"
@@ -79,20 +167,22 @@ def test_live_core_smoke_can_stop_at_deployment_unit_selection() -> None:
     ] == [
         "army-beta:scout-redeploy-unit",
     ]
-    assert startup.viewer_player_id == "player-b"
+    assert game_view.viewer_player_id == "player-b"
     assert {
         unit_id
-        for unit_id, unit_display in startup.game_view.unit_display_by_id.items()
+        for unit_id, unit_display in game_view.unit_display_by_id.items()
         if _required_object_value(unit_display).get("owner_player_id") == "player-b"
     } == {"army-beta:scout-redeploy-unit"}
-    assert startup.event_cursor > 0
-    assert startup.battlefield_view.table.width == 44.0
-    assert startup.battlefield_view.table.height == 60.0
-    assert len(startup.battlefield_view.terrain) == 46
+    assert checkpoint.visible_event_count > 0
+    assert battlefield_view.table.width == 44.0
+    assert battlefield_view.table.height == 60.0
+    assert len(battlefield_view.terrain) == 46
 
 
-@pytest.mark.integration
-def test_live_core_smoke_supports_reachable_setup_prebattle_stop_points() -> None:
+def test_live_core_smoke_supports_reachable_setup_prebattle_stop_points(
+    shooting_trace: _SmokeTrace,
+) -> None:
+    _, observed = shooting_trace
     expected_decisions = {
         "setup": ("player-a", "select_secondary_missions"),
         "secondary-missions": ("player-a", "select_secondary_missions"),
@@ -102,32 +192,128 @@ def test_live_core_smoke_supports_reachable_setup_prebattle_stop_points() -> Non
         "prebattle": ("player-a", "select_prebattle_action"),
         "scout-move": ("player-a", "submit_scout_move"),
         "movement": ("player-a", "select_movement_unit"),
+        "shooting": ("player-a", "select_shooting_unit"),
     }
 
-    assert set(expected_decisions).issubset(LIVE_CORE_SMOKE_STOP_PHASES)
+    assert set(expected_decisions) == set(LIVE_CORE_SMOKE_STOP_PHASES)
+    assert set(observed) == set(expected_decisions)
     for stop_phase, (expected_actor, expected_decision_type) in expected_decisions.items():
-        startup = build_live_core_smoke_startup(stop_at_phase=stop_phase)
-        decision = startup.status.decision
-
-        assert decision is not None
+        checkpoint = observed[stop_phase]
+        decision = checkpoint.decision
         assert decision.actor_id == expected_actor
         assert decision.decision_type == expected_decision_type
-        assert startup.viewer_player_id == expected_actor
+        assert checkpoint.game_view.viewer_player_id == expected_actor
+        assert checkpoint.game_view.pending_decision is not None
+        assert checkpoint.game_view.pending_decision.request_id == decision.request_id
+        assert checkpoint.game_view.projection_state_hash
+        assert checkpoint.visible_event_count > 0 or stop_phase in {
+            "setup",
+            "secondary-missions",
+        }
+    unique_request_ids = tuple(
+        observed[phase].decision.request_id
+        for phase in LIVE_CORE_SMOKE_STOP_PHASES
+        if phase != "secondary-missions"
+    )
+    assert len(unique_request_ids) == len(set(unique_request_ids))
+    record_counts = tuple(
+        observed[phase].decision_record_count
+        for phase in LIVE_CORE_SMOKE_STOP_PHASES
+        if phase != "secondary-missions"
+    )
+    assert record_counts[0] == 0
+    assert all(next_count > count for count, next_count in pairwise(record_counts))
 
 
-@pytest.mark.integration
-def test_live_core_smoke_reports_unreachable_late_checkpoint() -> None:
-    assert {"shooting", "charge", "fight"}.issubset(LIVE_CORE_SMOKE_STOP_PHASES)
+def test_live_core_smoke_reaches_shooting_after_declining_overwatch(
+    shooting_trace: _SmokeTrace,
+) -> None:
+    startup, _ = shooting_trace
+    decision = startup.status.decision
+    assert decision is not None
+    assert decision.decision_type == "select_shooting_unit"
+    assert decision.actor_id == "player-a"
+    assert startup.game_view.current_battle_phase == "shooting"
+    assert startup.viewer_player_id == "player-a"
 
+
+@pytest.mark.parametrize("phase", ["charge", "fight", "unknown-phase"])
+def test_live_core_smoke_rejects_unadvertised_phase_before_session_creation(
+    phase: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected_client() -> None:
+        raise AssertionError("Invalid stop phase started a Core session.")
+
+    monkeypatch.setattr(live_smoke, "LocalSessionClient", unexpected_client)
+    with pytest.raises(LiveCoreSmokeError, match="Unsupported live-core smoke stop phase"):
+        build_live_core_smoke_startup(stop_at_phase=phase)
+
+
+def test_live_core_smoke_stops_at_first_transition_budget_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_config = canonical_setup_prebattle_smoke_config()
+    monkeypatch.setattr(
+        live_smoke,
+        "canonical_setup_prebattle_smoke_config",
+        lambda: replace(real_config, max_lifecycle_transitions=1),
+    )
+    advance_count = 0
+
+    class CountingClient(LocalSessionClient):
+        def advance_until_decision_or_terminal(self) -> UiClientStatus:
+            nonlocal advance_count
+            advance_count += 1
+            return super().advance_until_decision_or_terminal()
+
+    monkeypatch.setattr(live_smoke, "LocalSessionClient", CountingClient)
+
+    with pytest.raises(LiveCoreSmokeError, match="transition_budget_exhausted"):
+        build_live_core_smoke_startup()
+    assert advance_count == 1
+
+
+def test_live_core_smoke_honors_unsupported_start_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UnsupportedStartClient:
+        def start_game(self, config: object) -> UiClientStatus:
+            return UiClientStatus(
+                stage="setup",
+                status_kind="unsupported",
+                message="Safe startup failure.",
+            )
+
+        def advance_until_decision_or_terminal(self) -> UiClientStatus:
+            raise AssertionError("Smoke advanced after an unsupported start status.")
+
+    monkeypatch.setattr(live_smoke, "LocalSessionClient", UnsupportedStartClient)
+    with pytest.raises(LiveCoreSmokeError, match="Safe startup failure"):
+        build_live_core_smoke_startup()
+
+
+def test_live_core_smoke_reports_unknown_finite_family_without_guessing() -> None:
+    decision = UiDecision(
+        request_id="smoke-unknown-decision",
+        decision_type="select_new_setup_action",
+        actor_id="player-a",
+        payload={},
+        options=(UiFiniteOption(option_id="complete_new_action", label="Complete"),),
+        is_parameterized=False,
+    )
     with pytest.raises(
         LiveCoreSmokeError,
-        match="Game became terminal before smoke checkpoint 'shooting'",
+        match="no option policy for 'select_new_setup_action'",
     ):
-        build_live_core_smoke_startup(stop_at_phase="shooting")
+        live_smoke._automated_option_id(decision)  # pyright: ignore[reportPrivateUsage]
 
 
-def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> None:
-    startup, proposal_decision, payload_preview = _ready_live_core_normal_move_payload()
+def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path(
+    fresh_movement_startup: LiveCoreSmokeStartup,
+) -> None:
+    startup, proposal_decision, payload_preview = _ready_live_core_normal_move_payload(
+        fresh_movement_startup
+    )
     witness = _required_object(payload_preview, "witness")
     model_paths = _required_list(witness, "model_paths")
     assert all(
@@ -149,14 +335,15 @@ def test_live_core_smoke_uses_real_finite_and_parameterized_movement_path() -> N
     assert accepted_status.decision is not None
     assert accepted_status.decision.decision_type in {
         "select_movement_unit",
-        "select_reinforcement_unit",
         "start_mission_action",
     }
     assert "movement_activation_completed" in _event_types(event_delta.events)
 
 
-def test_live_core_smoke_preserves_canonical_monster_and_surfaces_invalid_advance() -> None:
-    startup = build_live_core_smoke_startup(stop_at_phase="movement")
+def test_live_core_smoke_preserves_canonical_monster_and_surfaces_invalid_advance(
+    fresh_movement_startup: LiveCoreSmokeStartup,
+) -> None:
+    startup = fresh_movement_startup
     unit_decision = startup.status.decision
     assert unit_decision is not None
 
@@ -224,8 +411,12 @@ def test_live_core_smoke_preserves_canonical_monster_and_surfaces_invalid_advanc
     assert "movement_activation_completed" not in _event_types(event_delta.events)
 
 
-def test_live_core_smoke_handles_endpoint_only_moved_paths() -> None:
-    startup, proposal_decision, payload_preview = _ready_live_core_normal_move_payload()
+def test_live_core_smoke_handles_endpoint_only_moved_paths(
+    fresh_movement_startup: LiveCoreSmokeStartup,
+) -> None:
+    startup, proposal_decision, payload_preview = _ready_live_core_normal_move_payload(
+        fresh_movement_startup
+    )
     endpoint_only_payload = _endpoint_only_payload(payload_preview)
 
     submitted_status = startup.core_client.submit_movement_payload(
@@ -252,7 +443,6 @@ def test_live_core_smoke_handles_endpoint_only_moved_paths() -> None:
     assert submitted_status.decision is not None
     assert submitted_status.decision.decision_type in {
         "select_movement_unit",
-        "select_reinforcement_unit",
         "start_mission_action",
     }
     assert "movement_activation_completed" in _event_types(event_delta.events)
@@ -300,8 +490,9 @@ def _required_list(payload: JsonObject, key: str) -> list[JsonValue]:
     return value
 
 
-def _ready_live_core_normal_move_payload() -> tuple[LiveCoreSmokeStartup, UiDecision, JsonObject]:
-    startup = build_live_core_smoke_startup()
+def _ready_live_core_normal_move_payload(
+    startup: LiveCoreSmokeStartup,
+) -> tuple[LiveCoreSmokeStartup, UiDecision, JsonObject]:
     unit_decision = startup.status.decision
     assert unit_decision is not None
 

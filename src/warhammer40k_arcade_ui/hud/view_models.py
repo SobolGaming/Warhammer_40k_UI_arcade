@@ -103,8 +103,6 @@ class MovementDraftPanelView:
     current_segment_inches: float | None
     total_path_inches: float | None
     remaining_budget_inches: float | None
-    synthetic_witness_model_ids: tuple[str, ...]
-    synthetic_witness_point_count: int
     payload_witness_lines: tuple[str, ...]
     ready: bool
     hint_lines: tuple[str, ...]
@@ -165,6 +163,8 @@ class AssignmentHudPanelView:
     preference_source_label: str | None
     decline_available: bool = False
     editable: bool = True
+    choice_count: int = 0
+    choice_index: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,8 +344,6 @@ def build_movement_draft_panel(
             current_segment_inches=movement_draft.current_segment_length,
             total_path_inches=movement_draft.total_path_length,
             remaining_budget_inches=movement_draft.remaining_budget_inches,
-            synthetic_witness_model_ids=movement_draft.synthetic_witness_model_ids,
-            synthetic_witness_point_count=movement_draft.synthetic_witness_point_count,
             payload_witness_lines=movement_draft.payload_witness_summary_lines,
             ready=movement_draft.is_ready,
             hint_lines=movement_draft.local_hint_lines,
@@ -369,8 +367,6 @@ def build_movement_draft_panel(
             current_segment_inches=None,
             total_path_inches=None,
             remaining_budget_inches=None,
-            synthetic_witness_model_ids=(),
-            synthetic_witness_point_count=0,
             payload_witness_lines=(),
             ready=False,
             hint_lines=("Proposal visible; movement draft tool is not applicable.",),
@@ -396,8 +392,6 @@ def build_movement_draft_panel(
             current_segment_inches=None,
             total_path_inches=None,
             remaining_budget_inches=None,
-            synthetic_witness_model_ids=(),
-            synthetic_witness_point_count=0,
             payload_witness_lines=(),
             ready=False,
             hint_lines=(),
@@ -426,8 +420,6 @@ def build_movement_draft_panel(
             current_segment_inches=None,
             total_path_inches=None,
             remaining_budget_inches=None,
-            synthetic_witness_model_ids=(),
-            synthetic_witness_point_count=0,
             payload_witness_lines=(),
             ready=False,
             hint_lines=(
@@ -460,8 +452,6 @@ def build_movement_draft_panel(
             current_segment_inches=None,
             total_path_inches=None,
             remaining_budget_inches=None,
-            synthetic_witness_model_ids=(),
-            synthetic_witness_point_count=0,
             payload_witness_lines=(),
             ready=False,
             hint_lines=(
@@ -489,8 +479,6 @@ def build_movement_draft_panel(
         current_segment_inches=None,
         total_path_inches=None,
         remaining_budget_inches=None,
-        synthetic_witness_model_ids=(),
-        synthetic_witness_point_count=0,
         payload_witness_lines=(),
         ready=False,
         hint_lines=("Requested unit is not selected.",),
@@ -560,6 +548,7 @@ def build_assignment_hud_panel(
     event_log_lines: tuple[str, ...] = (),
     placement_draft: PlacementDraft | None = None,
     assignment_workspace: AssignmentWorkspace | None = None,
+    assignment_choice_index: int = 0,
 ) -> AssignmentHudPanelView | None:
     """Build the generic request-scoped assignment HUD without adding rules semantics."""
 
@@ -592,6 +581,7 @@ def build_assignment_hud_panel(
             preferences=preferences,
             preference_source_label=preference_source_label,
             chain_lines=_chain_lines(preferences, event_log_lines),
+            choice_index=assignment_choice_index,
         )
     unsupported_label = unsupported_parameterized_tool_label(pending_decision)
     if unsupported_label is not None:
@@ -708,11 +698,32 @@ def _generic_assignment_hud_panel(
     preferences: UiPreferences,
     preference_source_label: str | None,
     chain_lines: tuple[str, ...],
+    choice_index: int,
 ) -> AssignmentHudPanelView:
     combined_diagnostics = _append_unique_lines(
         diagnostic_lines,
         assignment_workspace.diagnostic_lines,
     )
+    choices = assignment_workspace.shooting_choices or assignment_workspace.melee_choices
+    resolved_choice_index = choice_index % len(choices) if choices else 0
+    choice_group: tuple[AssignmentHudGroupView, ...] = ()
+    if choices:
+        choice = choices[resolved_choice_index]
+        selected = (
+            choice.selection in assignment_workspace.shooting_selections
+            if assignment_workspace.shooting_choices
+            else choice.selection in assignment_workspace.melee_selections
+        )
+        choice_group = (
+            AssignmentHudGroupView(
+                group_id=choice.choice_id,
+                label=f"{'[x]' if selected else '[ ]'} {choice.label}",
+                state="assigned" if selected else "unassigned",
+                source_ref_keys=choice.source_ref_keys,
+                target_ref_keys=choice.target_ref_keys,
+                summary_lines=choice.summary_lines,
+            ),
+        )
     return AssignmentHudPanelView(
         request_id=assignment_workspace.request_id,
         decision_type=None if pending_decision is None else pending_decision.decision_type,
@@ -727,7 +738,8 @@ def _generic_assignment_hud_panel(
             assignment_workspace,
             combined_diagnostics,
         ),
-        groups=tuple(
+        groups=choice_group
+        or tuple(
             AssignmentHudGroupView(
                 group_id=row.row_id,
                 label=row.label,
@@ -757,6 +769,8 @@ def _generic_assignment_hud_panel(
         preference_source_label=preference_source_label,
         decline_available=assignment_workspace.declinable,
         editable=assignment_workspace.editable,
+        choice_count=len(choices),
+        choice_index=resolved_choice_index,
     )
 
 

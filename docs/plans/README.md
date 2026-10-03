@@ -22,8 +22,8 @@ projection data, collects intent, submits engine requests, and displays diagnost
 10. [Phase 34: Core Contract 10.2 Adapter And Projection Adaptation](finished/phase-34-core-contract-10-adaptation.md)
 11. [Phase 35: Core Contract 42 Adaptation And Live Smoke Simplification](phase-35-core-contract-42-adaptation.md)
 
-Phase 34 completed the compatibility gate for the pinned core Contract 10.2. Phase 35 plans the
-next pin update to Contract 42.0.0. Further Phase 32 work should use Phase 35's version-matched
+Phase 34 completed the compatibility gate for the pinned core Contract 10.2. Phase 35 now adapts
+to the authorized Core Contract 44.1.0 revision. Further Phase 32 work should use Phase 35's version-matched
 projection and decision path rather than build against the older payload assumptions.
 
 ## Core Drift Adaptation
@@ -37,9 +37,10 @@ Phase 34 tracks the larger migration from that baseline to `Warhammer_40k_AI`
 adapter facade, strict interaction descriptors, canonical battlefield projection, spatial-context
 hashes, capability/mission projection, and removal of authoritative live-smoke mutations.
 
-Phase 35 reviews `Warhammer_40k_AI` `6e86f44b87c4559a9297596d5d18dc4247b8cbc3` and external
-contract `42.0.0`. It covers the next compatibility update, changed shooting and placement
-payloads, contract-matched fixtures, and measured live-smoke simplification.
+Phase 35 originally reviewed `Warhammer_40k_AI` `6e86f44b87c4559a9297596d5d18dc4247b8cbc3`
+and external contract `42.0.0`. The authorized continuation reviews
+`fc12fa214642f1b1f2a31b56be7323b7d76dbebc` / `44.1.0` and covers current canonical
+movement membership, Firing Deck history authority, contract-matched fixtures, and smoke checks.
 
 ## Preliminary Setup-Flow Plans
 

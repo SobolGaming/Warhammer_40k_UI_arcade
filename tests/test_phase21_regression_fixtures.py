@@ -1,4 +1,4 @@
-"""Phase 21 golden fixture coverage."""
+"""Historical Phase 21 golden fixtures; current families use Contract 42 examples."""
 
 from __future__ import annotations
 

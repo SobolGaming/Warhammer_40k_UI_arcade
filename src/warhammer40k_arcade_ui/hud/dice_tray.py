@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import cast
 
 from warhammer40k_arcade_ui.core_client.protocol import UiDecision, UiFiniteOption
@@ -29,6 +29,7 @@ class DiceComponentView:
     sides: int
     selectable: bool = False
     rerolled: bool = False
+    assigned_value: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +78,9 @@ class DiceRollView:
     total: int | None
     source: str
     components: tuple[DiceComponentView, ...]
+    assigned_values: tuple[int, ...] = ()
+    result_override: JsonObject | None = None
+    roll_evidence: JsonObject | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,10 +110,11 @@ def build_dice_tray_view(
 
     diagnostics: list[str] = []
     reroll_request = _pending_reroll_request(pending_decision, diagnostics=diagnostics)
-    active_roll = _latest_roll(event_payloads)
+    active_roll = _latest_roll(event_payloads, diagnostics=diagnostics)
     if reroll_request is not None and (
         active_roll is None or active_roll.roll_id != reroll_request.roll_id
     ):
+        diagnostics.append("Physical roll faces are unavailable from viewer-visible events.")
         active_roll = _roll_from_pending_reroll(reroll_request)
     face_columns = _face_columns(active_roll, reroll_request)
     return DiceTrayView(
@@ -134,8 +139,24 @@ def dice_tray_runtime_data(view: DiceTrayView) -> JsonObject:
         "roll_id": "" if active_roll is None else active_roll.roll_id,
         "roll_type": "" if active_roll is None else active_roll.roll_type,
         "values": [] if active_roll is None else list(active_roll.values),
+        "assigned_values": [] if active_roll is None else list(active_roll.assigned_values),
         "total": None if active_roll is None else active_roll.total,
         "source": "" if active_roll is None else active_roll.source,
+        "components": []
+        if active_roll is None
+        else [
+            {
+                "index": component.index,
+                "value": component.value,
+                "assigned_value": component.assigned_value,
+                "sides": component.sides,
+                "rerolled": component.rerolled,
+                "selectable": component.selectable,
+            }
+            for component in active_roll.components
+        ],
+        "result_override": None if active_roll is None else active_roll.result_override,
+        "roll_evidence": None if active_roll is None else active_roll.roll_evidence,
         "faces": [
             {
                 "face": column.face,
@@ -170,8 +191,11 @@ def dice_tray_runtime_data(view: DiceTrayView) -> JsonObject:
     }
 
 
-def _latest_roll(event_payloads: tuple[JsonObject, ...]) -> DiceRollView | None:
+def _latest_roll(
+    event_payloads: tuple[JsonObject, ...], *, diagnostics: list[str]
+) -> DiceRollView | None:
     for event in reversed(event_payloads):
+        diagnostic_count = len(diagnostics)
         event_type = _string(event.get("event_type")) or _string(event.get("type")) or ""
         payload = _object_or_none(event.get("payload"))
         if payload is None:
@@ -180,6 +204,8 @@ def _latest_roll(event_payloads: tuple[JsonObject, ...]) -> DiceRollView | None:
             roll = _roll_from_result_payload(payload, title=None)
             if roll is not None:
                 return roll
+            diagnostics.append("Viewer-visible dice roll has an invalid result payload.")
+            return None
         if event_type == "advance_roll_resolved":
             advance_roll = _object_or_none(payload.get("advance_roll"))
             if advance_roll is not None:
@@ -188,9 +214,12 @@ def _latest_roll(event_payloads: tuple[JsonObject, ...]) -> DiceRollView | None:
                     title="Advance roll",
                     subtitle=_unit_subtitle(advance_roll),
                     source_key="value",
+                    diagnostics=diagnostics,
                 )
                 if roll is not None:
                     return roll
+                if len(diagnostics) > diagnostic_count:
+                    return None
         if event_type == "charge_roll_resolved":
             roll_result = _object_or_none(payload.get("roll_result"))
             if roll_result is not None:
@@ -199,40 +228,68 @@ def _latest_roll(event_payloads: tuple[JsonObject, ...]) -> DiceRollView | None:
                     title="Charge roll",
                     subtitle=_charge_subtitle(payload),
                     source_key="value",
+                    diagnostics=diagnostics,
                 )
                 if roll is not None:
                     return roll
-        roll = _first_roll_from_payload(payload, event_type=event_type)
+                if len(diagnostics) > diagnostic_count:
+                    return None
+        roll = _first_roll_from_payload(payload, event_type=event_type, diagnostics=diagnostics)
         if roll is not None:
             return roll
+        if len(diagnostics) > diagnostic_count:
+            return None
     return None
 
 
-def _first_roll_from_payload(payload: JsonObject, *, event_type: str) -> DiceRollView | None:
-    roll_state = _find_roll_state(payload)
-    if roll_state is None:
+def _first_roll_from_payload(
+    payload: JsonObject, *, event_type: str, diagnostics: list[str]
+) -> DiceRollView | None:
+    located = _find_roll_state_context(payload)
+    if located is None:
         return None
-    return _roll_from_roll_state_payload(
+    roll_state, context = located
+    roll = _roll_from_roll_state_payload(
         roll_state,
         title=_friendly_roll_title(event_type),
         subtitle=event_type,
+        diagnostics=diagnostics,
     )
+    if roll is None:
+        return None
+    return replace(roll, roll_evidence=_roll_evidence(context))
 
 
-def _find_roll_state(value: JsonValue) -> JsonObject | None:
+def _find_roll_state_context(value: JsonValue) -> tuple[JsonObject, JsonObject] | None:
     if type(value) is dict:
         if "original_result" in value and "current_values" in value:
-            return value
+            return value, value
         for nested in value.values():
-            found = _find_roll_state(nested)
+            found = _find_roll_state_context(nested)
             if found is not None:
-                return found
+                roll_state, context = found
+                return roll_state, value if context is roll_state else context
     if type(value) is list:
         for nested in value:
-            found = _find_roll_state(nested)
+            found = _find_roll_state_context(nested)
             if found is not None:
                 return found
     return None
+
+
+def _roll_evidence(context: JsonObject) -> JsonObject | None:
+    evidence: JsonObject = {}
+    for key in (
+        "critical_threshold",
+        "critical_is_threshold",
+        "success_requires_exact",
+        "threshold_source_ids",
+        "minimum_unmodified_success",
+        "unmodified_success_threshold_active",
+    ):
+        if key in context:
+            evidence[key] = context[key]
+    return evidence or None
 
 
 def _roll_from_roll_state_envelope(
@@ -241,11 +298,14 @@ def _roll_from_roll_state_envelope(
     title: str,
     subtitle: str,
     source_key: str,
+    diagnostics: list[str],
 ) -> DiceRollView | None:
     roll_state = _object_or_none(payload.get("roll_state"))
     if roll_state is None:
         return None
-    roll = _roll_from_roll_state_payload(roll_state, title=title, subtitle=subtitle)
+    roll = _roll_from_roll_state_payload(
+        roll_state, title=title, subtitle=subtitle, diagnostics=diagnostics
+    )
     if roll is None:
         return None
     value = _int_or_none(payload.get(source_key))
@@ -261,6 +321,9 @@ def _roll_from_roll_state_envelope(
         total=value,
         source=roll.source,
         components=roll.components,
+        assigned_values=roll.assigned_values,
+        result_override=roll.result_override,
+        roll_evidence=roll.roll_evidence,
     )
 
 
@@ -269,6 +332,7 @@ def _roll_from_roll_state_payload(
     *,
     title: str,
     subtitle: str,
+    diagnostics: list[str],
 ) -> DiceRollView | None:
     original = _object_or_none(roll_state.get("original_result"))
     if original is None:
@@ -278,7 +342,13 @@ def _roll_from_roll_state_payload(
     roll = _roll_from_result_payload(original, title=title)
     if roll is None:
         return None
-    values = current_values or roll.values
+    values = _physical_values_after_rerolls(roll.values, roll_state, diagnostics=diagnostics)
+    if values is None:
+        return None
+    if len(current_values) != len(values):
+        diagnostics.append("Dice roll state has mismatched assigned component values.")
+        return None
+    assigned_values = current_values
     return DiceRollView(
         roll_id=roll.roll_id,
         roll_type=roll.roll_type,
@@ -288,7 +358,14 @@ def _roll_from_roll_state_payload(
         sides=roll.sides,
         total=current_total if current_total is not None else roll.total,
         source=roll.source,
-        components=_components(values=values, sides=roll.sides, roll_state=roll_state),
+        components=_components(
+            values=values,
+            assigned_values=assigned_values,
+            sides=roll.sides,
+            roll_state=roll_state,
+        ),
+        assigned_values=assigned_values,
+        result_override=_object_or_none(roll_state.get("result_override")),
     )
 
 
@@ -311,13 +388,56 @@ def _roll_from_result_payload(payload: JsonObject, *, title: str | None) -> Dice
         sides=sides,
         total=_int_or_none(payload.get("total")),
         source=_string(payload.get("source")) or "",
-        components=_components(values=values, sides=sides, roll_state=None),
+        components=_components(
+            values=values,
+            assigned_values=values,
+            sides=sides,
+            roll_state=None,
+        ),
+        assigned_values=values,
     )
+
+
+def _physical_values_after_rerolls(
+    original_values: tuple[int, ...],
+    roll_state: JsonObject,
+    *,
+    diagnostics: list[str],
+) -> tuple[int, ...] | None:
+    """Replay only the Core-recorded physical reroll faces for presentation."""
+
+    rerolls = roll_state.get("rerolls")
+    if type(rerolls) is not list:
+        diagnostics.append("Dice roll state has no valid reroll record list.")
+        return None
+    values = list(original_values)
+    for reroll in rerolls:
+        record = _object_or_none(reroll)
+        if record is None:
+            diagnostics.append("Dice roll state contains a malformed reroll record.")
+            return None
+        indices = _int_tuple(record.get("selected_indices"))
+        replacement = _object_or_none(record.get("replacement_result"))
+        if replacement is None:
+            diagnostics.append("Dice reroll record has no replacement result.")
+            return None
+        replacement_values = _int_tuple(replacement.get("values"))
+        if (
+            not indices
+            or len(indices) != len(replacement_values)
+            or any(index < 0 or index >= len(values) for index in indices)
+        ):
+            diagnostics.append("Dice reroll replacement does not match selected components.")
+            return None
+        for index, value in zip(indices, replacement_values, strict=True):
+            values[index] = value
+    return tuple(values)
 
 
 def _components(
     *,
     values: tuple[int, ...],
+    assigned_values: tuple[int, ...],
     sides: int,
     roll_state: JsonObject | None,
 ) -> tuple[DiceComponentView, ...]:
@@ -328,6 +448,7 @@ def _components(
             value=value,
             sides=sides,
             rerolled=index in rerolled_indices,
+            assigned_value=assigned_values[index],
         )
         for index, value in enumerate(values)
     )
@@ -407,25 +528,17 @@ def _selected_indices_from_option(option: UiFiniteOption) -> tuple[int, ...]:
 
 
 def _roll_from_pending_reroll(request: DiceRerollRequestView) -> DiceRollView:
-    values = request.current_values
     return DiceRollView(
         roll_id=request.roll_id,
         roll_type=request.roll_type,
         title=_friendly_roll_title(request.roll_type),
         subtitle="Pending reroll decision",
-        values=values,
+        values=(),
         sides=6,
-        total=sum(values) if values else None,
-        source="current",
-        components=tuple(
-            DiceComponentView(
-                index=index,
-                value=value,
-                sides=6,
-                selectable=any(index in selection for selection in request.allowed_selections),
-            )
-            for index, value in enumerate(values)
-        ),
+        total=None,
+        source="request",
+        components=(),
+        assigned_values=request.current_values,
     )
 
 

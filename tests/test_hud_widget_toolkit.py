@@ -858,6 +858,7 @@ def test_phase23_arcade_scissor_clips_headless_framebuffer() -> None:
     window = arcade.Window(64, 64, visible=False)
     arcade.set_window(window)
     try:
+        window.switch_to()
         framebuffer = cast(_FramebufferReader, window.ctx.screen)
         framebuffer.use()
         window.clear(color=(0, 0, 0, 255))

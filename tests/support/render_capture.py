@@ -264,6 +264,8 @@ def capture_window_frame(
     width = int(window.width)
     height = int(window.height)
     _validate_size(width=width, height=height)
+    # Arcade's global window handle does not make its OpenGL context current.
+    window.switch_to()
     framebuffer = cast(ReadableFramebuffer, window.ctx.screen)
     framebuffer.use()
     window.on_draw()

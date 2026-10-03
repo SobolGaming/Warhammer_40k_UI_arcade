@@ -228,7 +228,7 @@ def test_status_strictly_parses_cult_ambush_marker_request_before_variant_select
         "request_id": "decision-request-marker-001",
         "decision_type": "submit_cult_ambush_marker_placement",
         "actor_id": "player-a",
-        "payload": {"proposal_request": proposal_payload},
+        "payload": proposal_payload,
         "is_parameterized": True,
         "options": [
             {
@@ -326,7 +326,7 @@ def test_status_parameterized_proposal_request_requires_nested_identity_envelope
     assert type(proposal_request) is dict
     del proposal_request[missing_key]
 
-    with pytest.raises(UiClientProtocolError, match=f"{missing_key} is required"):
+    with pytest.raises(UiClientProtocolError, match=f"requires {missing_key}"):
         UiClientStatus.from_payload(
             {
                 "stage": "battle",
@@ -486,6 +486,39 @@ def test_invalid_status_represents_prebattle_resolution_violations() -> None:
     assert first_diagnostic.proposal_kind == "scout_move"
     second_diagnostic = status.invalid_diagnostics[1]
     assert second_diagnostic.violation_code == "terrain_path_validation_failed"
+
+
+def test_invalid_status_preserves_top_level_reinforcement_violations() -> None:
+    status = UiClientStatus.from_payload(
+        {
+            "stage": "battle",
+            "status_kind": "invalid",
+            "decision_request": None,
+            "message": "Reinforcement placement is invalid.",
+            "payload": {
+                "request_id": "decision-request-000003",
+                "placement_kind": "strategic_reserves",
+                "phase_body_status": "reinforcement_placement_invalid",
+                "violations": [
+                    {
+                        "violation_code": "large_model_exception_edge_contact_missing",
+                        "message": "Large-model exception requires touching the battlefield edge.",
+                        "model_instance_id": "model-1",
+                        "blocker_id": None,
+                        "battlefield_edge": "south",
+                    }
+                ],
+            },
+        }
+    )
+
+    assert len(status.invalid_diagnostics) == 1
+    diagnostic = status.invalid_diagnostics[0]
+    assert diagnostic.violation_code == "large_model_exception_edge_contact_missing"
+    assert diagnostic.message == "Large-model exception requires touching the battlefield edge."
+    assert diagnostic.proposal_request_id == "decision-request-000003"
+    assert diagnostic.proposal_kind == "strategic_reserves"
+    assert diagnostic.field is None
 
 
 def test_invalid_status_without_payload_uses_message_diagnostic() -> None:
@@ -650,10 +683,22 @@ def test_game_view_preserves_optional_display_maps() -> None:
                         "unit_instance_id": "unit-1",
                         "owner_player_id": "player-a",
                         "unit_display_name": "Battleline Infantry",
+                        "keywords": [],
+                        "faction_keywords": [],
                         "model_instance_ids": ["model-1", "model-2"],
                     }
                 },
-                "model_display_by_id": {"model-1": {"model_instance_id": "model-1"}},
+                "model_display_by_id": {
+                    "model-1": {
+                        "model_instance_id": "model-1",
+                        "unit_instance_id": "unit-1",
+                        "keywords": [],
+                        "faction_keywords": [],
+                        "keyword_source_ids": [],
+                        "base_characteristics": {},
+                        "current_characteristics": {},
+                    }
+                },
             }
         )
     )
@@ -662,9 +707,19 @@ def test_game_view_preserves_optional_display_maps() -> None:
         "unit_instance_id": "unit-1",
         "owner_player_id": "player-a",
         "unit_display_name": "Battleline Infantry",
+        "keywords": [],
+        "faction_keywords": [],
         "model_instance_ids": ["model-1", "model-2"],
     }
-    assert view.model_display_by_id["model-1"] == {"model_instance_id": "model-1"}
+    assert view.model_display_by_id["model-1"] == {
+        "model_instance_id": "model-1",
+        "unit_instance_id": "unit-1",
+        "keywords": [],
+        "faction_keywords": [],
+        "keyword_source_ids": [],
+        "base_characteristics": {},
+        "current_characteristics": {},
+    }
 
 
 def test_game_view_pending_proposal_missing_request_id_fails_fast() -> None:

@@ -12,8 +12,7 @@ displays authoritative results or diagnostics returned by the core engine.
 Target Python version: **3.14.5**.
 
 Supported core engine revision: `Warhammer_40k_AI`
-`dbfcc3a99e9d560d1354506352a09d48ca555a94` (`feat(missions): complete Phase 17N
-layout replay certification (#398)`), external contract `10.2.0`. The package lock and CI both
+`fc12fa214642f1b1f2a31b56be7323b7d76dbebc` (reviewed Contract 44.1 revision), external contract `44.1.0`. The package lock and CI both
 resolve `warhammer40k-core-v2` to this exact commit. When updating the core dependency, update this
 line and review the active plans under `docs/plans/` for adapter or projection drift.
 
@@ -21,6 +20,12 @@ The local client uses the core's public `AdapterGameSession` facade. Current pro
 strictly, editor routing comes from the engine-authored interaction descriptor, and
 `battlefield_view` is the canonical render geometry source. An incompatible installed contract
 stops startup with a copyable terminal diagnostic instead of falling back to an older payload shape.
+
+Contract 44.1 publishes each battlefield model's current nullable canonical rules-unit identity
+beside its physical unit owner. Movement drafts use the current placed membership to collect a
+complete witness for an ordinary or attached actor. Firing Deck declarations copy the current
+ordinary Shooting shot-history list from the proposal; a null history grants no borrowed-weapon
+authority. Old saves and replays remain tied to their original exact Core build.
 
 From a clean clone of this repository:
 
@@ -64,7 +69,7 @@ differs, align the checkout to the supported commit while it is clean:
 
 ```bash
 git -C ../Warhammer_40k_AI rev-parse HEAD
-git -C ../Warhammer_40k_AI checkout --detach dbfcc3a99e9d560d1354506352a09d48ca555a94
+git -C ../Warhammer_40k_AI checkout --detach fc12fa214642f1b1f2a31b56be7323b7d76dbebc
 ```
 
 The conformance and HUD example tests fail at collection or before reading an example when the
@@ -87,7 +92,7 @@ Use this as an in-between path for trying a branch without a local source checko
 ```bash
 uv venv --python 3.14.5 .venv-warhammer-ui
 source .venv-warhammer-ui/bin/activate
-uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@dbfcc3a99e9d560d1354506352a09d48ca555a94
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@fc12fa214642f1b1f2a31b56be7323b7d76dbebc
 uv pip install git+https://github.com/SobolGaming/Warhammer_40k_UI_arcade@main
 warhammer40k-arcade-ui
 ```
@@ -106,7 +111,7 @@ Use this to install a wheel or source distribution produced by `uv build`:
 uv build
 uv venv --python 3.14.5 .venv-warhammer-ui-package
 source .venv-warhammer-ui-package/bin/activate
-uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@dbfcc3a99e9d560d1354506352a09d48ca555a94
+uv pip install git+https://github.com/SobolGaming/Warhammer_40k_AI@fc12fa214642f1b1f2a31b56be7323b7d76dbebc
 uv pip install dist/warhammer40k_arcade_ui-0.1.0-py3-none-any.whl
 warhammer40k-arcade-ui
 ```
@@ -199,13 +204,12 @@ uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase redeploy --ui-pr
 uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase prebattle --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase scout-move --ui-prefs docs/preferences/default.yaml
 uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase movement --ui-prefs docs/preferences/default.yaml
+uv run warhammer40k-arcade-ui --live-core-smoke --stop-at-phase shooting --ui-prefs docs/preferences/default.yaml
 ```
 
-The CLI also recognizes `shooting`, `charge`, and `fight` as contract checkpoints. The current
-canonical core fixture becomes terminal before reaching them, so requesting one exits the smoke
-startup path with a typed `Game became terminal before smoke checkpoint ...` diagnostic. They are
-not advertised as reachable smoke checkpoints until a core-owned fixture can reach them through
-public decisions.
+`charge` and `fight` are rejected at argument validation: the canonical core fixture exposes no
+public Charge or Fight decision before becoming terminal. Separate real-session tests cover those
+editors.
 
 Stop points:
 
@@ -224,6 +228,8 @@ Stop points:
 - `movement`: auto-answer setup and prebattle smoke decisions, complete reserve declarations, deploy
   all smoke units, resolve Scout Move, then pause at the first battle-round `select_movement_unit`
   request.
+- `shooting`: continue the same public decision traversal through Movement, then pause at the first
+  battle-round Shooting request.
 
 All scripted choices are submitted through the public real-local-session facade. The harness does
 not inspect lifecycle queues or replace authoritative battlefield state. Scripted choices are only

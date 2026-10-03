@@ -1,11 +1,11 @@
 # Python/Arcade client → Unreal Engine: 3D-first migration plan
 
-**Planning date / revision date:** 2026-10-02 / 2026-10-02  
-**Revision:** 2 — approved client-only scope; Codex research-completion handoff.  
-**Scope decision:** D01 / SCOPE01 **APPROVED**: retain the separate authoritative Python rules engine; this campaign changes the client only.  
-**Research status:** **RESEARCH_INCOMPLETE** — RQ01–RQ24 require evidence-backed closure or an explicit blocked disposition.  
-**Execution authority:** Research and planning only. Neither this revision nor D01 authorizes implementation, new executable experiments, external-core changes, or repository publication.  
-**Canonical destination:** `docs/migration/unreal-migration-plan.md`  
+**Planning date / revision date:** 2026-10-02 / 2026-10-02
+**Revision:** 2 — approved client-only scope; Codex research-completion handoff.
+**Scope decision:** D01 / SCOPE01 **APPROVED**: retain the separate authoritative Python rules engine; this campaign changes the client only.
+**Research status:** **RESEARCH_INCOMPLETE** — RQ01–RQ24 require evidence-backed closure or an explicit blocked disposition.
+**Execution authority:** Research and planning only. Neither this revision nor D01 authorizes implementation, new executable experiments, external-core changes, or repository publication.
+**Canonical destination:** `docs/migration/unreal-migration-plan.md`
 **Review status:** Original single-session source/planning review, followed by document revision and consistency checks. No new repository inspection, online re-verification, application tests, Unreal build, feasibility experiment, or independent review was performed for this revision.
 
 **Read section 0 first.** It is the immediate Codex assignment and takes precedence over the later prospective implementation tasks. Sections 1–16 preserve the migration design and historical research context, with scope-dependent language updated. The core remains an external dependency, not an implementation workstream. Exact engine/library versions and live-repository facts carried forward from the earlier plan must be revalidated through the research register.
@@ -424,9 +424,9 @@ Use **UE 5.8 as the candidate engine line**, with the exact patch/build and comp
 
 ### 2.1 Evidence vocabulary
 
-**V — Verified source in the original research:** directly inspected at an immutable repository revision as recorded in section 16. Carried forward here; not a claim of fresh inspection or runtime success in this revision.  
-**D — Documentation-backed in the original research:** supported by the primary-documentation references in section 16, which used the 5.8 candidate line unless stated otherwise. Revalidate live/version-sensitive details before adoption.  
-**P — Proposed:** architecture, budgets, bindings, interfaces, filenames, experiments, or acceptance criteria chosen by this plan.  
+**V — Verified source in the original research:** directly inspected at an immutable repository revision as recorded in section 16. Carried forward here; not a claim of fresh inspection or runtime success in this revision.
+**D — Documentation-backed in the original research:** supported by the primary-documentation references in section 16, which used the 5.8 candidate line unless stated otherwise. Revalidate live/version-sensitive details before adoption.
+**P — Proposed:** architecture, budgets, bindings, interfaces, filenames, experiments, or acceptance criteria chosen by this plan.
 **U — Unverified:** requires worktree access, execution, additional source tracing, owner choice, or hardware evidence.
 
 Sections describing the destination, experiments, and future milestones are **P** unless explicitly marked V/D. Existing commands are identified separately from proposed commands. Unknown is never PASS.
@@ -1112,58 +1112,58 @@ Later source changes reopen affected research items. A resolved item does not ne
 
 ### M00 — Baseline and authority packet
 
-**Objective:** establish the actual working baseline without disrupting the active campaign.  
-**Prerequisites:** access to the approved worktree and coordinator; planning-only work remains non-mutating.  
+**Objective:** establish the actual working baseline without disrupting the active campaign.
+**Prerequisites:** access to the approved worktree and coordinator; planning-only work remains non-mutating.
 **Scope/exclusions:** inspection and documentation, no tool installation, dependency update, branch reset or application change.
 
 **Files/modules:** canonical plan; proposed `docs/migration/evidence/M00/`; existing root/nested `AGENTS.md`, `.codex/agents`, active `docs/plans`, pyproject/lock/CI and local environment metadata.
 
 **Tasks:** record UI/core/installed-package SHAs, uncommitted changes, active milestones/owners and fixture sources; enumerate all applicable instructions and resource categories; record OS/GPU/driver/CPU/RAM/compiler/UE availability; inspect current CI run evidence where accessible; carry forward D01 as approved without asking again; resolve the initial deployment/platform questions and D02 target-contract policy through RQ02/RQ04/RQ05; continue the research register without starting M01 executable work.
 
-**Inspectable result:** a baseline manifest and unresolved-gap ledger, with no application mutation.  
-**Acceptance/procedure:** run only authorized read-only metadata checks; reconcile dependency pin versus sibling checkout versus installed package; every unknown remains explicit; owner decisions recorded. No “clean”/“passing” claim without evidence.  
-**Risks/decisions:** dirty/shared worktree, evolving Phase 35, absent GPU/toolchain, missing external artifacts and unresolved deployment/platform choices. D01 is not a blocker.  
-**Rollback:** documentation-only changes can be removed; never reset a shared checkout.  
+**Inspectable result:** a baseline manifest and unresolved-gap ledger, with no application mutation.
+**Acceptance/procedure:** run only authorized read-only metadata checks; reconcile dependency pin versus sibling checkout versus installed package; every unknown remains explicit; owner decisions recorded. No “clean”/“passing” claim without evidence.
+**Risks/decisions:** dirty/shared worktree, evolving Phase 35, absent GPU/toolchain, missing external artifacts and unresolved deployment/platform choices. D01 is not a blocker.
+**Rollback:** documentation-only changes can be removed; never reset a shared checkout.
 **Temporary/removal:** provisional machine/contract assumptions are replaced by measured metadata, not left as release evidence.
 
 ### M01 — Characterization, target contract and immutable fixtures
 
-**Objective:** turn implemented behavior into a reproducible migration contract.  
-**Prerequisites:** M00 and applicable RQ closure records; exact external target access; explicit authorization for the new executable characterization work (bounded experiment or G-IMPLEMENT).  
+**Objective:** turn implemented behavior into a reproducible migration contract.
+**Prerequisites:** M00 and applicable RQ closure records; exact external target access; explicit authorization for the new executable characterization work (bounded experiment or G-IMPLEMENT).
 **Scope/exclusions:** client characterization harness/fixtures, shared value/intent contracts and public protocol experiment; no full UI recreation or external-core changes.
 
 **Files/modules:** proposed `unreal/WarhammerClient/Plugins/TabletopPresentation/Source/TabletopModel/`; `tests/migration/fixtures/<core-sha>/`; `tests/migration/manifest.json`; `scripts/migration/`; current client `state`, `core_client`, `render`, `preferences`, `hud`, resource and test paths.
 
 **Tasks:** consume the source/gesture/resource/variant inventory resolved in RQ07–RQ13; implement the authorized client harness and immutable fixtures from the selected external canonical recipes; execute E01 and E08's executable portions; realize the resolved typed coordinate/ID/revision/intent boundaries; capture permitted viewer-safe failure traces and profile/save interface fixtures; preserve the approved target-contract difference ledger. Do not postpone missing requirements discovery until this code milestone.
 
-**Runnable result:** headless contract/fixture tests and a complete capability ledger; no claims of 3D playability yet.  
-**Acceptance:** fixtures fail closed when missing/wrong-version; sample finite and parameterized requests compare through the same exact core; negative viewer/retry/stale tests pass; every CAP row has its research disposition and executable evidence status; blockers cannot be labelled complete. D02 was frozen in RQ02 and is checked for drift, not selected after adapter implementation.  
-**Validation:** run existing affected tests in prepared environment; run new protocol/normalization suites and record exact commands/test counts.  
-**Risks:** weak baseline corpus, opaque hash mismatch, target drift, unsupported editor ambiguity.  
-**Rollback:** keep fixtures append-only/versioned; disable new harness without changing old tests.  
+**Runnable result:** headless contract/fixture tests and a complete capability ledger; no claims of 3D playability yet.
+**Acceptance:** fixtures fail closed when missing/wrong-version; sample finite and parameterized requests compare through the same exact core; negative viewer/retry/stale tests pass; every CAP row has its research disposition and executable evidence status; blockers cannot be labelled complete. D02 was frozen in RQ02 and is checked for drift, not selected after adapter implementation.
+**Validation:** run existing affected tests in prepared environment; run new protocol/normalization suites and record exact commands/test counts.
+**Risks:** weak baseline corpus, opaque hash mismatch, target drift, unsupported editor ambiguity.
+**Rollback:** keep fixtures append-only/versioned; disable new harness without changing old tests.
 **Temporary/removal:** recording/export adapters are test tooling; any transient 10.2 experiment client remains outside shipping. The durable external target was frozen by RQ02, not deferred until M03.
 
 ### M02 — 3D foundation and adaptive HUD proof
 
-**Objective:** prove the architecture is really 3D before substantial feature porting.  
-**Prerequisites:** RQ05/RQ09–RQ14/RQ18–RQ20 resolutions and stable coordinate/identity/composition contracts; supported local UE toolchain; explicit bounded proof authorization for E02/E04 or G-IMPLEMENT for the full foundation. Credit already accepted proof work from M01/M02 rather than repeating it.  
+**Objective:** prove the architecture is really 3D before substantial feature porting.
+**Prerequisites:** RQ05/RQ09–RQ14/RQ18–RQ20 resolutions and stable coordinate/identity/composition contracts; supported local UE toolchain; explicit bounded proof authorization for E02/E04 or G-IMPLEMENT for the full foundation. Credit already accepted proof work from M01/M02 rather than repeating it.
 **Scope/exclusions:** board, five footprints, cube replacement, raised support, camera, picking, minimum HUD/preview; no detailed art/new gameplay.
 
 **Files/modules:** `WarhammerBattlefield`, `TabletopHUD`, editor-only asset utilities; proposed `Content/Migration/FirstClass3D`; visual definition manifest and geometry/interaction tests.
 
 **Tasks:** execute E02/E04; implement explicit handedness/unit transform; generate procedural token meshes/materials/query proxies; add perspective rig and input arbitration; implement support-vs-selection distinction; build sidebar policy and both profile layouts at representative resolution/DPI; prove preview shares runtime composition.
 
-**Runnable result:** inspectable runtime 3D test scene, not yet a real-core playable migration.  
-**Acceptance:** all first-class 3D fixture conditions; zero authority coupling in camera; same ID/geometry after mesh replacement; correct nonzero Z and facing; UI never leaks gestures; sidebar allocation/narrow mode and profile normalization pass.  
-**Validation:** low-level transform tests plus actual rendered automated/manual interaction; export geometry/HUD-layout snapshots and visual evidence.  
-**Risks:** mirrored art/winding, flat picking, unreadable oblique tokens, YAML differences, unsupported test GPU.  
-**Rollback:** isolated Unreal directory/fixtures; legacy unchanged.  
+**Runnable result:** inspectable runtime 3D test scene, not yet a real-core playable migration.
+**Acceptance:** all first-class 3D fixture conditions; zero authority coupling in camera; same ID/geometry after mesh replacement; correct nonzero Z and facing; UI never leaks gestures; sidebar allocation/narrow mode and profile normalization pass.
+**Validation:** low-level transform tests plus actual rendered automated/manual interaction; export geometry/HUD-layout snapshots and visual evidence.
+**Risks:** mirrored art/winding, flat picking, unreadable oblique tokens, YAML differences, unsupported test GPU.
+**Rollback:** isolated Unreal directory/fixtures; legacy unchanged.
 **Temporary/removal:** illustrative placeholder data remains labelled; no synthetic scene is used as proof of live gameplay. Debug gizmos become opt-in/test-only before M07.
 
 ### M03 — Early packaged real-core 3D slice
 
-**Objective:** first functional end-to-end migration result.  
-**Prerequisites:** G-IMPLEMENT, D02 frozen, deployment/platform choices closed, relevant E01/E02/E04 proofs passed, and E03A approved external-runtime/service delivery feasibility. D01 is already approved. E03B is an acceptance gate of M03, not a prerequisite for writing M03.  
+**Objective:** first functional end-to-end migration result.
+**Prerequisites:** G-IMPLEMENT, D02 frozen, deployment/platform choices closed, relevant E01/E02/E04 proofs passed, and E03A approved external-runtime/service delivery feasibility. D01 is already approved. E03B is an acceptance gate of M03, not a prerequisite for writing M03.
 **Scope/exclusions:** one representative core-owned scenario and validated action; not all editors or a complete game.
 
 **Files/modules:** `WarhammerClient`, `WarhammerCoreClient`, client staging/connection/process-supervision configuration for the approved external artifact/service, existing `TabletopHUD`/`WarhammerBattlefield`, proposed platform smoke scripts and release manifest. No Python-core or external-host source edits.
@@ -1174,94 +1174,94 @@ Later source changes reopen affected research items. A resolved item does not ne
 
 **Acceptance:** scenario loads from a documented core recipe; same intended world action produces equivalent command intent across views; camera-only actions produce no authoritative change; UI submit/cancel does not touch world input; invalid/stale action remains core-rejected; approved deployment-mode startup (including offline launch when required) and uncertain-result recovery pass; existing supported data is mapped without overwriting originals. Each owner-approved initial OS package is exercised, not merely compiled.
 
-**Validation:** E03B complete clean-machine test; packaged semantic interaction trace, core outcome evidence, before/after IDs/poses/HUD values, input ownership trace and exact package hashes. A screenshot, fake client, empty suite, no-op-only action or editor-only run cannot close M03.  
-**Risks:** unavailable or incompatible externally supplied native runtime, missing target API, unreproducible real action, hidden-information leakage. External defects return to their separate owner.  
-**Rollback:** legacy remains default and uses its own runtime/data; delete only the isolated candidate bundle.  
+**Validation:** E03B complete clean-machine test; packaged semantic interaction trace, core outcome evidence, before/after IDs/poses/HUD values, input ownership trace and exact package hashes. A screenshot, fake client, empty suite, no-op-only action or editor-only run cannot close M03.
+**Risks:** unavailable or incompatible externally supplied native runtime, missing target API, unreproducible real action, hidden-information leakage. External defects return to their separate owner.
+**Rollback:** legacy remains default and uses its own runtime/data; delete only the isolated candidate bundle.
 **Temporary/removal:** ad hoc host setup and test credentials are replaced by the validated RQ04 launch/attachment workflow before acceptance. An intentionally supported attach-only service remains externally managed; do not absorb it into the client.
 
 ### M04 — Core interaction parity: finite, movement, placement and selection
 
-**Objective:** migrate the established primary interaction families.  
-**Prerequisites:** M03, variant checklist from M01.  
+**Objective:** migrate the established primary interaction families.
+**Prerequisites:** M03, variant checklist from M01.
 **Scope/exclusions:** implemented finite choices, deployment/redeploy/placement, supported movement-family editors, current-action state, roster/world selection and overlays; no new core rules.
 
 **Files/modules:** C++ application state machines/editor controllers, `TabletopModel`, world annotations, HUD widgets and parity tests; source references include `state/movement_submission.py`, interaction dispatch and the corresponding characterized legacy flows.
 
 **Tasks:** migrate variant by variant; preserve pending-request identity and draft invalidation; handle cancellation/modal focus; preserve alias-based entity selection and visibility; show core diagnostic reasons; update geometry and labels from accepted projections; incorporate approved target-version semantics.
 
-**Runnable result:** the Unreal client packages for each approved initial platform can perform the enumerated implemented finite/placement/movement workflows.  
-**Acceptance:** each migrated variant has positive, negative and cancellation traces; path witnesses remain contract-correct; no stale draft submits; hidden/collapsed panels do not break selection synchronization; camera rotation changes neither intent nor legality.  
-**Validation:** differential/semantic corpus and packaged route tests; geometry/label tests at multiple camera angles.  
-**Risks:** family-specific payloads generalized incorrectly, source plans mistaken for shipped features, new-frame reply races.  
-**Rollback:** leave legacy default; revert an isolated editor feature only with its capability status updated.  
+**Runnable result:** the Unreal client packages for each approved initial platform can perform the enumerated implemented finite/placement/movement workflows.
+**Acceptance:** each migrated variant has positive, negative and cancellation traces; path witnesses remain contract-correct; no stale draft submits; hidden/collapsed panels do not break selection synchronization; camera rotation changes neither intent nor legality.
+**Validation:** differential/semantic corpus and packaged route tests; geometry/label tests at multiple camera angles.
+**Risks:** family-specific payloads generalized incorrectly, source plans mistaken for shipped features, new-frame reply races.
+**Rollback:** leave legacy default; revert an isolated editor feature only with its capability status updated.
 **Temporary/removal:** generic debug JSON forms may aid inspection but cannot replace a currently implemented usable editor at parity signoff.
 
 ### M05 — Remaining implemented UI, profiles, diagnostics and presentation parity
 
-**Objective:** close remaining observed client behavior without importing unfinished roadmap wholesale.  
-**Prerequisites:** M04, completed M01 behavior inventory.  
+**Objective:** close remaining observed client behavior without importing unfinished roadmap wholesale.
+**Prerequisites:** M04, completed M01 behavior inventory.
 **Scope/exclusions:** implemented assignment/opportunity/other editor subsets, roster/configuration workflows, profile/theme/icon behavior, preview/export, traces/crash UX; no automatic completion of active legacy plans.
 
 **Files/modules:** `WarhammerClient`, `TabletopHUD`, preference/composition adapters, packaged resources, diagnostics and source-specific variant tests.
 
 **Tasks:** finish every characterized remaining variant; preserve active/unsupported/recognized-inactive distinctions and extension payloads; import/export representative profiles; implement preview/component/headless artifact parity; preserve long-text/overflow/high-contrast controls; preserve safe diagnostic categories; verify actual roster import/edit/save surfaces found in M01.
 
-**Runnable result:** complete approved existing-behavior capability matrix in packaged form.  
-**Acceptance:** no silent widget/binding/profile removal; all default resource paths work outside the checkout; unsupported actions remain explicit; normal users cannot access raw hidden payloads; advanced trace options do not leak secrets; no CAP row disappears into a generic “done.”  
-**Validation:** profile golden corpus, UI layout matrix, keyboard/mouse semantic tests, viewer-switch tests and current-source comparison.  
-**Risks:** YAML coercion drift, inaccessible narrow layouts, new prerequisite from uncharacterized behavior.  
-**Rollback:** isolated preference files and conversion copies; original legacy profiles preserved.  
+**Runnable result:** complete approved existing-behavior capability matrix in packaged form.
+**Acceptance:** no silent widget/binding/profile removal; all default resource paths work outside the checkout; unsupported actions remain explicit; normal users cannot access raw hidden payloads; advanced trace options do not leak secrets; no CAP row disappears into a generic “done.”
+**Validation:** profile golden corpus, UI layout matrix, keyboard/mouse semantic tests, viewer-switch tests and current-source comparison.
+**Risks:** YAML coercion drift, inaccessible narrow layouts, new prerequisite from uncharacterized behavior.
+**Rollback:** isolated preference files and conversion copies; original legacy profiles preserved.
 **Temporary/removal:** manual configuration workarounds are replaced by normal supported workflows, or remain explicitly blocked—not accepted as parity.
 
 ### M06 — Data/coexistence proof and physical-tabletop reuse demonstration
 
-**Objective:** establish safe data boundaries and demonstrate real presentation reuse.  
-**Prerequisites:** M03 session/persistence foundation, M05 profile contract; observation work may start after M01.  
+**Objective:** establish safe data boundaries and demonstrate real presentation reuse.
+**Prerequisites:** M03 session/persistence foundation, M05 profile contract; observation work may start after M01.
 **Scope/exclusions:** E06/E07, compatible restart/rollback and synthetic observation demo; no production hardware CV/calibration.
 
 **Files/modules:** launcher/data manifest, persistence UX/tests, reusable plugin demo host, recorded-observation adapter and calibration-fixture configuration.
 
 **Tasks:** test current formats and interrupted writes; retain backups and exact-build pairing; prove or explicitly disallow old-client resume for new sessions; exercise duplicate/missing/stale observation and manual registration; use the same HUD/presentation plugin in a host with no battlefield-camera dependency; test known synthetic table/projector mapping.
 
-**Runnable result:** exact-core recoverable sessions and a separate reuse demo.  
-**Acceptance:** old data unchanged; mismatch fails closed; no claimed midgame rollback without demonstrated loader/adapter support; virtual-camera changes cannot alter physical calibration; observation changes do not directly mutate authoritative state; no CV SDK dependency in shared HUD.  
-**Validation:** E06/E07 packets with byte hashes, recovery logs, dependency inspection and synthetic numeric assertions.  
-**Risks:** legacy UI lacks resume, contract-42 save incompatibility, observation identity confusion, leaking raw observer data.  
-**Rollback:** leave old default and both runtimes available; preserve new progress with its compatible bundle.  
+**Runnable result:** exact-core recoverable sessions and a separate reuse demo.
+**Acceptance:** old data unchanged; mismatch fails closed; no claimed midgame rollback without demonstrated loader/adapter support; virtual-camera changes cannot alter physical calibration; observation changes do not directly mutate authoritative state; no CV SDK dependency in shared HUD.
+**Validation:** E06/E07 packets with byte hashes, recovery logs, dependency inspection and synthetic numeric assertions.
+**Risks:** legacy UI lacks resume, contract-42 save incompatibility, observation identity confusion, leaking raw observer data.
+**Rollback:** leave old default and both runtimes available; preserve new progress with its compatible bundle.
 **Temporary/removal:** synthetic observation adapter remains demo/test-only; it is not labelled a production vision integration.
 
 ### M07 — Platform, performance, reliability and release-candidate audit
 
-**Objective:** meet the accepted desktop, behavior and operational quality bars.  
-**Prerequisites:** M04–M06; instrumentation begins earlier.  
+**Objective:** meet the accepted desktop, behavior and operational quality bars.
+**Prerequisites:** M04–M06; instrumentation begins earlier.
 **Scope/exclusions:** E05 and full acceptance matrix, packaging hardening and license/provenance review; no art-driven scope expansion.
 
 **Files/modules:** platform build/test jobs, release manifests, profiler instrumentation, dependency/resource inventory and evidence packets.
 
 **Tasks:** run W0/W1/W2; attribute bottlenecks; optimize only demonstrated client problems; test clean installs (offline where required), approved runtime/service availability, native-library loading, long sessions, repeated start/stop, background/focus transitions, crash recovery and malformed input; verify cook contains all selectable visual assets; complete license/distribution prerequisites.
 
-**Runnable result:** immutable release candidates for each required OS.  
-**Acceptance:** accepted budgets and full CAP tests pass on stated hardware/OS; no unreviewed feature removal; no unresolved severity-1/2 correctness/security/data-loss findings; exact build evidence available; each blocking limitation has an owner and cannot be called PASS.  
-**Validation:** full layered suite, Insights traces, memory results, packaged smoke, licensing checklist and independent code review plus acceptance audit.  
-**Risks:** platform-specific native dependency failures, incorrect performance comparison, release-content rights.  
-**Rollback:** never replace the default with a failed candidate; immutable known-good bundles retained.  
+**Runnable result:** immutable release candidates for each required OS.
+**Acceptance:** accepted budgets and full CAP tests pass on stated hardware/OS; no unreviewed feature removal; no unresolved severity-1/2 correctness/security/data-loss findings; exact build evidence available; each blocking limitation has an owner and cannot be called PASS.
+**Validation:** full layered suite, Insights traces, memory results, packaged smoke, licensing checklist and independent code review plus acceptance audit.
+**Risks:** platform-specific native dependency failures, incorrect performance comparison, release-content rights.
+**Rollback:** never replace the default with a failed candidate; immutable known-good bundles retained.
 **Temporary/removal:** development-only credentials, debug bypasses and editor-only runtime dependencies absent from release.
 
 ### M08 — Controlled default switch and eventual legacy retirement
 
-**Objective:** make Unreal the default without losing recovery options.  
-**Prerequisites:** M07 complete; explicit owner approval of release/cutover; data compatibility/limitations documented and accepted.  
+**Objective:** make Unreal the default without losing recovery options.
+**Prerequisites:** M07 complete; explicit owner approval of release/cutover; data compatibility/limitations documented and accepted.
 **Scope/exclusions:** launcher/default selection and monitored acceptance sessions; no engine switching inside a running process.
 
 **Files/modules:** launcher/release manifest, documentation, migration/rollback instructions and final evidence index.
 
 **Tasks:** preserve legacy and candidate bundles side by side; back up supported data; switch only the default for eligible **new launches**; keep explicit legacy selection and session-version routing; exercise rollback; collect agreed acceptance sessions; retire legacy only under criteria in section 13.
 
-**Runnable result:** new launches choose Unreal by default, with explicit legacy recovery available.  
-**Acceptance:** each session launches a compatible client/core/data combination; rollback restores the default without overwriting new progress; independent review/audit findings closed; retirement is a separate approved act.  
-**Validation:** repeat launcher/data test matrix before and after default change, including missing candidate bundle, failed health check and mismatched save.  
-**Risks:** accidental same-save concurrent writes, false assumption of reverse migration, removal of the only compatible old runtime.  
-**Rollback:** revert the default manifest/selector, not game data; route existing sessions to their compatible bundle or documented recovery procedure.  
+**Runnable result:** new launches choose Unreal by default, with explicit legacy recovery available.
+**Acceptance:** each session launches a compatible client/core/data combination; rollback restores the default without overwriting new progress; independent review/audit findings closed; retirement is a separate approved act.
+**Validation:** repeat launcher/data test matrix before and after default change, including missing candidate bundle, failed health check and mismatched save.
+**Risks:** accidental same-save concurrent writes, false assumption of reverse migration, removal of the only compatible old runtime.
+**Rollback:** revert the default manifest/selector, not game data; route existing sessions to their compatible bundle or documented recovery procedure.
 **Temporary/removal:** coexistence launcher entries and legacy packages are removed only after retirement criteria, never merely because the new renderer looks correct.
 
 ### 12.2 Parallel work and fresh-session packets

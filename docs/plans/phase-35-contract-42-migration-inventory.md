@@ -2,9 +2,12 @@
 
 Reviewed against `Warhammer_40k_AI` commit
 `6e86f44b87c4559a9297596d5d18dc4247b8cbc3`. This is evidence for the Phase 35 plan,
-not a claim that the UI already supports Contract 42. The UI still pins
-`dbfcc3a99e9d560d1354506352a09d48ca555a94` / Contract `10.2.0` until the atomic
-compatibility milestone passes its acceptance gates.
+not a claim that every UI workflow supports Contract 42. The original planning baseline pinned
+`dbfcc3a99e9d560d1354506352a09d48ca555a94` / Contract `10.2.0`; the Phase 35 implementation
+branch now pins the reviewed Contract 42 commit. The pin must not merge until the atomic
+compatibility milestone passes its acceptance gates. The separate
+[M2 evidence record](phase-35-contract-42-m2-evidence.md) tracks implemented behavior, measured
+performance, and unresolved public-contract gaps.
 
 Sources at the reviewed commit: every file from `contracts/migrations/10-to-11.md` through
 `41-to-42.md`, `contracts/manifest.json`,
@@ -34,6 +37,59 @@ contains 97 cases, including five conformance cases for four flat request famili
 Ambush marker has place and no-marker variants. The flat families are Cult Ambush marker,
 model materialization, healing revival, and return-on-death placement. Other parameterized
 families retain nested `payload.proposal_request` examples.
+
+Model materialization is a flat placement family whose newly created model IDs are absent
+from `battlefield_view.authoritative.models_by_id` until Core accepts placement. Its current
+request supplies the exact `models`, ordered `model_instance_ids`, `army_id`, source physical
+unit, and player. The editor uses those fields for the new model base and submission identity;
+it continues to require projected ownership and `split_origin` for existing placement models.
+The source unit may also lack a rendered `UnitView` after its last old model is destroyed.
+The materialization regression covers the headless editor, Core payload shape, stale/invalid
+retry, viewer switch, and accepted placement through a public session built from a pinned
+Core-generated checkpoint. Core-valid rectangular bases use a circumscribed radius only for
+the current circular draft/render preview; Core validates the exact footprint on submission.
+No local model profile or placement legality is inferred.
+
+Attached reserve and Disembark placement requests publish the current physical component and
+model inventories in their context. The placement editor keeps the canonical rules-unit actor
+separate from those physical owners, checks every requested model against its projected owner
+and emitted component set, and emits `attempted_rules_unit_placement` with one complete row per
+current component. The real attached reserve regression covers headless opening, grouped
+accepted/invalid/stale submissions, and same-owner nonmember rejection. Pinned Core's
+`engine/phases/movement_transports.py` Disembark builder emits the same current component/model
+inventories plus Transport context; a focused test checks the shared UI serializer and Core
+payload decoder. That test does not claim a live attached Disembark acceptance. The grouped draft
+obtains `army_id` from a unique public placed-army owner row or support-profile mustering row,
+with conflicts rejected. If both are absent, the HUD reports a typed local placement diagnostic;
+it does not derive an ID from the attached or component spelling. Deployment and prebattle
+placement requests instead publish component and model inventories at the request top level.
+The same physical-row editor now consumes them, and a real empty-battlefield attached deployment
+is accepted using the canonical fixture's public mustering row. Pinned Core `GameConfig` requires
+an `army_catalog` and exactly one `ArmyMusterRequest` per player; it has no direct
+`army_definitions` config field. The owner-visible support profile emits that player's mustering
+row. If supplied public authority is missing or conflicting, the editor reports a typed local
+diagnostic for malformed or stale input. This does not establish a supported-session Core blocker.
+
+Attached Scout finite options and `submit_scout_move` requests also publish component and model
+inventories. Current Action, physical roster rows, battlefield selection, and the movement draft
+now share the canonical actor through that explicit membership. The draft keeps the emitted Scout
+distance and model witness IDs. Pinned Core's Scout resolver still looks up the canonical Attached
+Unit as a physical placement and raises `PlacementError`; the real accepted-path regression remains
+failing ([Core #537](https://github.com/SobolGaming/Warhammer_40k_AI/issues/537)). Attached
+Charge's movement request still lacks public component/model membership, so the
+UI does not transfer the Scout mapping or infer Charge membership.
+
+The additional first-failed-save Damage-to-zero regression in
+`tests/test_contract42_damage_zero.py` follows the public `select_modifier_ignores` request
+through both keep and ignore branches. It checks the emitted sourced `SET 0` operation,
+forged and stale option rejection without a decision record or projection change, and
+owner/opponent event and pending-request scope. The UI never computes replacement damage.
+Its exact-build checkpoint comes from pinned Core's
+`tests/order93_save_damage_helpers.py` via the explicit
+`scripts/generate_contract42_damage_zero_fixture.py` generator. Runtime UI tests restore the
+committed checkpoint and use public session choices; the generator's Core-owned helper starts
+from an in-progress shooting scenario, not a roster-start traversal. Fixture provenance and
+hashes are recorded in `tests/fixtures/contract42_damage_zero_checkpoint.md`.
 
 The target manifest's JSON schema URI revisions are distinct from the runtime payload
 discriminators. The target runtime still emits `decision-request-view-v5-phase17n-step4` and
@@ -148,3 +204,34 @@ die and aggregate-override patterns absent from the canonical conformance exampl
 The target pin must remain on an implementation branch until strict examples, real public-session
 submission and invalid-diagnostic tests, viewer-scope/render tests, the simplified smoke path,
 and all repository gates pass. No core source file is edited for this inventory.
+
+## Authorized continuation: Contract 42.0 to 44.1.0
+
+The table above records the original 10.2-to-42 review. The current implementation target is
+Core `fc12fa214642f1b1f2a31b56be7323b7d76dbebc`, external contract `44.1.0`.
+The fourteen commits after the original `6e86f44b87c4559a9297596d5d18dc4247b8cbc3` target
+were reviewed against `contracts/migrations/42-to-43.md`, `43-to-44.md`, the current manifest,
+`docs/ADAPTER_DECISION_CONTRACT.md`, and the changed public producers and consumers.
+
+| Change | Current public authority | UI consumer |
+| --- | --- | --- |
+| Order 101 setup retry | A well-formed rule-invalid Disembark or reserve attempt can return fresh movement selection; malformed or stale input retains the proposal. | Follow current request/option IDs; no cached selection retry. |
+| Contract 42.1 Shock Disembark | Start/completion engagement lists are empty and no forced Fight selection is queued. | Keep the engine event and current decision ordering. |
+| Contract 42.2 Fight completion | `fight_selection_completed` records consumed selection; `unit_has_fought` requires an actual melee attack. | Display emitted events without equating an empty selection to combat. |
+| Contract 43 Precision grouping | Every `GatheredAttackGroup` requires Boolean `target_has_character`; deterministic group IDs change. | Preserve current Core group/option IDs and recorded context; discard older cached IDs. |
+| Contract 44 membership | Every authoritative battlefield model requires nullable `rules_unit_instance_id`; battlefield schema is `battlefield-view-v5-rules-unit-membership`. | Join current `placed` models across physical owners to the canonical movement actor; preserve null redaction and physical owner separately. |
+| Contract 44.1 Firing Deck | A non-null Firing Deck proposal publishes `firing_deck_already_shot_unit_instance_ids`; `[]` is authentic empty history, `null` is no ordinary Shooting authority. | Copy the request history and current weapon/cargo identities into the declaration; reject missing or null authority for borrowed weapons. |
+
+Session metadata, command result and outcome tags are `v44-contract`. Persistence is
+`session-persistence-v35-target-aware-attack-groups` with external persistence pin `44.0.0`;
+the current runtime contract is `44.1.0`. Replay is
+`replay-artifact-v36-target-aware-attack-groups`. Old saves, replay data, pending requests and
+attack-group IDs stay on their original exact runtime. Neither migration file authorizes an
+inferred missing membership or target context.
+
+The intervening Core issue fixes also repair attached Scout physical ownership and accepted
+history, reserve-deadline continuation, attached Charge membership projection, and public Firing
+Deck history. They require real UI submission checks before an M2 acceptance claim. Catalog reuse
+in the same range affects selected test construction and offline immutable geometry generation;
+it does not establish a current UI startup speedup. The separate M2 evidence record reports
+the exact current checks and limits.

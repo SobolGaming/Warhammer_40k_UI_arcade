@@ -551,11 +551,12 @@ def test_player_units_roster_button_selects_undeployed_finite_unit_option() -> N
         center_x = round((roster_button.bounds[0] + roster_button.bounds[2]) / 2.0)
         center_y = round((roster_button.bounds[1] + roster_button.bounds[3]) / 2.0)
 
-        driver.click_screen(center_x, center_y)
+        for _ in range(2):
+            driver.click_screen(center_x, center_y)
 
-        assert driver.selected_unit_id == "army-beta:scout-redeploy-unit"
-        assert driver.selected_model_id is None
-        assert driver.highlighted_finite_option_id == "deploy:army-beta:scout-redeploy-unit"
+            assert driver.selected_unit_id == "army-beta:scout-redeploy-unit"
+            assert driver.selected_model_id is None
+            assert driver.highlighted_finite_option_id == "deploy:army-beta:scout-redeploy-unit"
 
         driver.press_key(arcade.key.ENTER)
 
@@ -618,7 +619,7 @@ def test_manual_deployments_refresh_authoritative_projection_before_prebattle() 
     try:
         _deploy_all_live_smoke_units(driver)
 
-        assert driver.pending_decision_type == "resolve_sequencing_order"
+        assert driver.pending_decision_type == "select_redeploy_unit"
         assert driver.battlefield_unit_ids == (
             "army-alpha:deep-strike-unit",
             "army-alpha:scout-redeploy-unit",
@@ -680,7 +681,7 @@ def _deploy_all_live_smoke_units(driver: GuiTestDriver) -> None:
         unit_id = driver.selected_unit_id
         assert unit_id is not None
         _deploy_current_live_smoke_unit(driver, unit_id)
-    assert driver.pending_decision_type == "resolve_sequencing_order"
+    assert driver.pending_decision_type == "select_redeploy_unit"
 
 
 def _deploy_current_live_smoke_unit(driver: GuiTestDriver, unit_id: str) -> None:

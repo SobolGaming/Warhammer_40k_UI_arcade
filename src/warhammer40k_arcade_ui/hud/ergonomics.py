@@ -113,6 +113,7 @@ def build_hud_ergonomics_view(
     pending_decision: UiDecision | None = None,
     hovered_hud_button_id: str | None = None,
     selected_unit_id: str | None = None,
+    selected_component_unit_ids: tuple[str, ...] = (),
     viewer_player_id: str | None = None,
     unit_display_by_id: JsonObject | None = None,
     model_display_by_id: JsonObject | None = None,
@@ -145,6 +146,7 @@ def build_hud_ergonomics_view(
             view=view,
             viewer_player_id=viewer_player_id,
             selected_unit_id=selected_unit_id,
+            selected_component_unit_ids=selected_component_unit_ids,
             hovered_hud_button_id=hovered_hud_button_id,
             placement_draft_panel=placement_draft_panel,
             unit_display_by_id=unit_display_by_id,
@@ -413,6 +415,7 @@ def _player_unit_buttons(
     view: BattlefieldView,
     viewer_player_id: str | None,
     selected_unit_id: str | None,
+    selected_component_unit_ids: tuple[str, ...],
     hovered_hud_button_id: str | None,
     placement_draft_panel: PlacementDraftPanelView | None,
     unit_display_by_id: JsonObject | None,
@@ -430,7 +433,11 @@ def _player_unit_buttons(
                 player_id=unit.player_id,
                 model_count=len(unit.models),
                 on_battlefield=True,
-                selected_unit_id=selected_unit_id,
+                selected_unit_id=(
+                    unit.unit_id
+                    if unit.unit_id in selected_component_unit_ids
+                    else selected_unit_id
+                ),
                 hovered_hud_button_id=hovered_hud_button_id,
                 placement_draft_panel=placement_draft_panel,
             )
@@ -454,7 +461,9 @@ def _player_unit_buttons(
                 player_id=player_id,
                 model_count=model_count,
                 on_battlefield=False,
-                selected_unit_id=selected_unit_id,
+                selected_unit_id=(
+                    unit_id if unit_id in selected_component_unit_ids else selected_unit_id
+                ),
                 hovered_hud_button_id=hovered_hud_button_id,
                 placement_draft_panel=placement_draft_panel,
             )
@@ -745,6 +754,23 @@ def _assignment_action_buttons(
             hovered_hud_button_id=hovered_hud_button_id,
         ),
     ]
+    if assignment_hud_panel.choice_count > 1:
+        buttons.insert(
+            1,
+            _assignment_action_button(
+                index=1,
+                action_kind="assignment_next_choice",
+                label=(
+                    f"Next {assignment_hud_panel.choice_index + 1}"
+                    f"/{assignment_hud_panel.choice_count}"
+                ),
+                request_id=assignment_hud_panel.request_id,
+                selected=False,
+                enabled=True,
+                disabled_reason="",
+                hovered_hud_button_id=hovered_hud_button_id,
+            ),
+        )
     if assignment_hud_panel.decline_available:
         buttons.insert(
             1,
@@ -822,6 +848,8 @@ def _assignment_action_text_icon(action_kind: HudButtonActionKind) -> str:
         return "NO"
     if action_kind == "assignment_clear":
         return "CL"
+    if action_kind == "assignment_next_choice":
+        return "NX"
     return "AS"
 
 
@@ -1070,7 +1098,14 @@ def _assignment_rows(
             target_ref_keys=group.target_ref_keys,
             target_unit_id=_first_unit_ref(group.target_ref_keys),
             selected=group.group_id == selected_assignment_group_id,
-            enabled=bool(group.target_ref_keys),
+            enabled=(
+                bool(group.target_ref_keys)
+                or assignment_hud_panel.proposal_kind == "shooting_declaration"
+                or (
+                    assignment_hud_panel.proposal_kind == "stratagem_target_binding"
+                    and assignment_hud_panel.editable
+                )
+            ),
         )
         for index, group in enumerate(assignment_hud_panel.groups[:3])
     )
@@ -1087,7 +1122,7 @@ def _assignment_notice_rows(
             component_id=f"assignment_notice_{index}",
             icon_id="action.summary",
             primary_label=_assignment_notice_label(line),
-            secondary_label=_assignment_notice_body(line),
+            secondary_label=line,
             state="warning" if _is_warning_assignment_advisory(line) else "active",
             density="compact",
         )
@@ -1104,8 +1139,7 @@ def _prioritized_assignment_advisories(lines: tuple[str, ...]) -> tuple[str, ...
 def _is_warning_assignment_advisory(line: str) -> bool:
     lower_line = line.lower()
     return (
-        "synthetic midpoint" in lower_line
-        or "invalid" in lower_line
+        "invalid" in lower_line
         or "unsupported" in lower_line
         or "projection/request drift" in lower_line
         or "missing from this viewer projection" in lower_line
@@ -1115,8 +1149,6 @@ def _is_warning_assignment_advisory(line: str) -> bool:
 
 
 def _assignment_notice_label(line: str) -> str:
-    if "synthetic midpoint" in line.lower():
-        return "Synthetic witness"
     if (
         "projection/request drift" in line.lower()
         or "missing from this viewer projection" in line.lower()
@@ -1125,18 +1157,6 @@ def _assignment_notice_label(line: str) -> str:
     if "mode context" in line.lower():
         return "Context missing"
     return "Advisory"
-
-
-def _assignment_notice_body(line: str) -> str:
-    synthetic_prefix = "UI-generated synthetic midpoint witness evidence will be inserted for "
-    if synthetic_prefix in line:
-        suffix = line.split(synthetic_prefix, maxsplit=1)[1]
-        count_summary = suffix.split(":", maxsplit=1)[0].replace(
-            "straight moved model path(s)",
-            "straight path(s)",
-        )
-        return f"Synthetic midpoint witness evidence: {count_summary}."
-    return line
 
 
 def _assignment_subtitle(assignment_hud_panel: AssignmentHudPanelView | None) -> str:
