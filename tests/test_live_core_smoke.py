@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import pairwise
 from pathlib import Path
 
 import pytest
+from warhammer40k_core.adapters.setup_smoke import canonical_setup_prebattle_smoke_config
 
 from warhammer40k_arcade_ui.core_client import live_smoke
 from warhammer40k_arcade_ui.core_client.live_smoke import (
@@ -21,6 +22,7 @@ from warhammer40k_arcade_ui.core_client.local_session_client import LocalSession
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
     JsonValue,
+    UiClientStatus,
     UiDecision,
     UiFiniteOption,
     UiGameView,
@@ -245,6 +247,49 @@ def test_live_core_smoke_rejects_unadvertised_phase_before_session_creation(
     monkeypatch.setattr(live_smoke, "LocalSessionClient", unexpected_client)
     with pytest.raises(LiveCoreSmokeError, match="Unsupported live-core smoke stop phase"):
         build_live_core_smoke_startup(stop_at_phase=phase)
+
+
+def test_live_core_smoke_stops_at_first_transition_budget_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_config = canonical_setup_prebattle_smoke_config()
+    monkeypatch.setattr(
+        live_smoke,
+        "canonical_setup_prebattle_smoke_config",
+        lambda: replace(real_config, max_lifecycle_transitions=1),
+    )
+    advance_count = 0
+
+    class CountingClient(LocalSessionClient):
+        def advance_until_decision_or_terminal(self) -> UiClientStatus:
+            nonlocal advance_count
+            advance_count += 1
+            return super().advance_until_decision_or_terminal()
+
+    monkeypatch.setattr(live_smoke, "LocalSessionClient", CountingClient)
+
+    with pytest.raises(LiveCoreSmokeError, match="transition_budget_exhausted"):
+        build_live_core_smoke_startup()
+    assert advance_count == 1
+
+
+def test_live_core_smoke_honors_unsupported_start_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UnsupportedStartClient:
+        def start_game(self, config: object) -> UiClientStatus:
+            return UiClientStatus(
+                stage="setup",
+                status_kind="unsupported",
+                message="Safe startup failure.",
+            )
+
+        def advance_until_decision_or_terminal(self) -> UiClientStatus:
+            raise AssertionError("Smoke advanced after an unsupported start status.")
+
+    monkeypatch.setattr(live_smoke, "LocalSessionClient", UnsupportedStartClient)
+    with pytest.raises(LiveCoreSmokeError, match="Safe startup failure"):
+        build_live_core_smoke_startup()
 
 
 def test_live_core_smoke_reports_unknown_finite_family_without_guessing() -> None:

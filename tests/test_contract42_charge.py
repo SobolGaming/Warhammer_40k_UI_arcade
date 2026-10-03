@@ -22,8 +22,11 @@ from warhammer40k_arcade_ui.state.selection import SelectionState
 pytestmark = pytest.mark.integration
 
 
-def test_charge_draft_submits_only_committed_reachable_target() -> None:
-    client = seeded_charge_client()
+@pytest.mark.parametrize("source_facing_degrees", [0.0, 45.0])
+def test_charge_draft_submits_only_committed_reachable_target(
+    source_facing_degrees: float,
+) -> None:
+    client = seeded_charge_client(source_facing_degrees=source_facing_degrees)
     selection_request = _decision(client.advance_until_decision_or_terminal())
     assert selection_request.decision_type == "select_charging_unit"
     assert selection_request.actor_id == "player-a"
@@ -129,6 +132,18 @@ def test_charge_draft_submits_only_committed_reachable_target() -> None:
     model_paths = witness["model_paths"]
     assert type(model_paths) is list
     assert len(model_paths) == len(source.models)
+    assert {model.facing_degrees for model in source.models} == {source_facing_degrees}
+    assert all(
+        type(path) is dict
+        and type(path["poses"]) is list
+        and all(
+            type(pose) is dict
+            and type(pose["facing"]) is dict
+            and pose["facing"]["degrees"] == source_facing_degrees
+            for pose in path["poses"]
+        )
+        for path in model_paths
+    )
 
     before_battlefield = client.get_view("player-a").battlefield_view
     before_events = client.get_events_since(0, "player-a").events

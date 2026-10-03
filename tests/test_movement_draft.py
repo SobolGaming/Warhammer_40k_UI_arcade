@@ -272,6 +272,66 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     assert second_movement["final_pose"] == second_poses[-1]
 
 
+@pytest.mark.parametrize("proposal_kind", ["normal_move", "scout_move"])
+def test_movement_payload_preserves_each_model_elevation_and_facing(
+    proposal_kind: str,
+) -> None:
+    view = default_battlefield_view()
+    source = view.units[0]
+    elevations_and_facings = ((1.5, 45.0), (2.25, 120.0), (-0.5, 270.0))
+    source = replace(
+        source,
+        models=tuple(
+            replace(model, elevation_z_inches=z, facing_degrees=facing)
+            for model, (z, facing) in zip(source.models, elevations_and_facings, strict=True)
+        ),
+    )
+    view = replace(view, units=(source, *view.units[1:]))
+    decision = (
+        _scout_move_proposal_decision(action_kind="scout_move")
+        if proposal_kind == "scout_move"
+        else _movement_proposal_decision()
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(view=view),
+        pending_decision=decision,
+    )
+    assert draft is not None
+    payload = (
+        draft.add_waypoint(view=view, world_point=(10.0, 18.0))
+        .mark_ready(view=view)
+        .payload_preview
+    )
+    assert payload is not None
+    paths = _witness_model_paths(payload)
+    assert set(paths) == {model.model_id for model in source.models}
+    for model in source.models:
+        poses = paths[model.model_id]["poses"]
+        assert type(poses) is list
+        for pose in poses:
+            assert type(pose) is dict
+            position = pose["position"]
+            facing = pose["facing"]
+            assert type(position) is dict
+            assert type(facing) is dict
+            assert position["z"] == model.elevation_z_inches
+            assert facing["degrees"] == model.facing_degrees
+        if model.model_id != "intercessor_1":
+            assert poses == [poses[0], poses[0]]
+    if proposal_kind == "normal_move":
+        movements = payload["model_movements"]
+        assert type(movements) is list
+        for row in movements:
+            assert type(row) is dict
+            model_id = row["model_instance_id"]
+            assert type(model_id) is str
+            witness_poses = paths[model_id]["poses"]
+            assert type(witness_poses) is list
+            assert row["path"] == witness_poses
+            assert row["final_pose"] == witness_poses[-1]
+
+
 def test_charge_move_payload_preserves_entered_witness_and_committed_targets() -> None:
     view = default_battlefield_view()
     selection = _selected_intercessors()

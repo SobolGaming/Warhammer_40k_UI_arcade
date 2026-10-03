@@ -14,7 +14,11 @@ from warhammer40k_core.adapters.redaction import (
 )
 from warhammer40k_core.engine.decision_request import DecisionError
 from warhammer40k_core.engine.game_state import GameConfig
-from warhammer40k_core.engine.phase import GameLifecycleError, LifecycleStatus
+from warhammer40k_core.engine.phase import (
+    GameLifecycleError,
+    LifecycleStatus,
+    LifecycleStatusKind,
+)
 
 from warhammer40k_arcade_ui.core_client.compatibility import require_supported_core_contract
 from warhammer40k_arcade_ui.core_client.protocol import (
@@ -162,8 +166,7 @@ class LocalSessionClient:
     def _status_from_lifecycle(self, status: LifecycleStatus) -> UiClientStatus:
         decision, viewer_player_id = self._projected_decision_for_status(status)
         if viewer_player_id is None:
-            message = None
-            payload: JsonValue = None
+            message, payload = _actorless_status_details(status)
         else:
             public_status = redacted_lifecycle_status(
                 status,
@@ -198,3 +201,24 @@ class LocalSessionClient:
             return None, None
         view = UiGameView.from_payload(self.session.view(viewer_player_id=viewer_player_id))
         return view.pending_decision, viewer_player_id
+
+
+def _actorless_status_details(status: LifecycleStatus) -> tuple[str | None, JsonValue]:
+    """Expose only known global failure reasons before a player view exists."""
+
+    if status.status_kind is LifecycleStatusKind.UNSUPPORTED:
+        payload = status.payload
+        if (
+            type(payload) is dict
+            and payload.get("unsupported_reason") == "transition_budget_exhausted"
+        ):
+            return (
+                "Core stopped at its transition safety boundary (transition_budget_exhausted).",
+                {"unsupported_reason": "transition_budget_exhausted"},
+            )
+        return ("Core reported an unsupported status before a player view was available.", None)
+    if status.status_kind is LifecycleStatusKind.INVALID:
+        return ("Core reported an invalid status before a player view was available.", None)
+    if status.status_kind is LifecycleStatusKind.TERMINAL:
+        return ("Core ended before a player view was available.", None)
+    return (None, None)

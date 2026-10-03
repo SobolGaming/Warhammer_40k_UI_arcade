@@ -606,7 +606,9 @@ def _scout_catalog(base: ArmyCatalog, *, attached: bool, transport: bool) -> Arm
     return replace(base, datasheets=tuple(datasheets))
 
 
-def _scout_client(*, attached: bool, transport: bool) -> LocalSessionClient:
+def _scout_client(
+    *, attached: bool, transport: bool, owner_facing_degrees: float = 0.0
+) -> LocalSessionClient:
     """Seed placed setup state; let the real lifecycle issue the Scout choice."""
 
     config = canonical_setup_prebattle_smoke_config(
@@ -684,6 +686,9 @@ def _scout_client(*, attached: bool, transport: bool) -> LocalSessionClient:
                             pose=Pose.at(
                                 origin.position.x + (index % 3) * 1.8,
                                 origin.position.y + (index // 3) * 1.8,
+                                facing_degrees=(
+                                    owner_facing_degrees if army.player_id == "player-a" else 0.0
+                                ),
                             ),
                         )
                         for index, model in enumerate(unit.own_models)

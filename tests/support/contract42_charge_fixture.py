@@ -46,7 +46,9 @@ COMMITTED = "army-beta:new"
 OTHER_REACHABLE = "army-beta:old"
 
 
-def seeded_charge_client(*, fly: bool = False) -> LocalSessionClient:
+def seeded_charge_client(
+    *, fly: bool = False, source_facing_degrees: float = 0.0
+) -> LocalSessionClient:
     catalog = ArmyCatalog.phase9a_canonical_content_pack()
     if fly:
         catalog = replace(
@@ -137,9 +139,24 @@ def seeded_charge_client(*, fly: bool = False) -> LocalSessionClient:
     }
     for army in armies:
         for unit in army.units:
-            battlefield = battlefield.with_unit_placement(
-                _placed_unit(unit, army.army_id, army.player_id, origins[unit.unit_instance_id])
+            placement = _placed_unit(
+                unit, army.army_id, army.player_id, origins[unit.unit_instance_id]
             )
+            if unit.unit_instance_id == SOURCE:
+                placement = placement.with_model_placements(
+                    tuple(
+                        model.with_pose(
+                            Pose.at(
+                                model.pose.position.x,
+                                model.pose.position.y,
+                                model.pose.position.z,
+                                facing_degrees=source_facing_degrees,
+                            )
+                        )
+                        for model in placement.model_placements
+                    )
+                )
+            battlefield = battlefield.with_unit_placement(placement)
     state = GameState.from_config(config)
     for army in armies:
         state.record_army_definition(army)

@@ -428,6 +428,8 @@ def _canonical_model(
         or _display_suffix(model_id),
         position=world_position,
         base_radius=_shape_display_radius(support_shape),
+        elevation_z_inches=_required_float(position, "z_inches"),
+        facing_degrees=facing_degrees,
         base_movement_inches=_display_movement_inches(display),
         support_footprint=_model_shape_footprint(
             support_shape,
@@ -879,6 +881,8 @@ def _model_from_placement(
             _required_float(position, "x"),
             _required_float(position, "y"),
         ),
+        elevation_z_inches=_required_float(position, "z"),
+        facing_degrees=_required_float(_json_object("pose.facing", pose.get("facing")), "degrees"),
         base_radius=_model_base_radius_inches(
             model_id=model_id,
             model_display_by_id=model_display_by_id,

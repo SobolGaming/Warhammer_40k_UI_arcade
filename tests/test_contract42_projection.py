@@ -19,7 +19,10 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
-from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_game_view
+from warhammer40k_arcade_ui.render.core_projection import (
+    CoreProjectionRenderError,
+    battlefield_view_from_game_view,
+)
 from warhammer40k_arcade_ui.render.primitives import PLAYER_1_COLOR
 from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
 
@@ -85,6 +88,43 @@ def test_destroyed_model_remains_rendered_while_projected_pose_exists() -> None:
     model["pose"] = None
     removed = battlefield_view_from_game_view(UiGameView.from_payload(raw))
     assert all(model.model_id != model_id for unit in removed.units for model in unit.models)
+
+
+def test_canonical_model_projection_preserves_elevation_and_facing() -> None:
+    raw = _post_deployment_payload()
+    battlefield = cast(JsonObject, raw["battlefield_view"])
+    models = cast(JsonObject, cast(JsonObject, battlefield["authoritative"])["models_by_id"])
+    model_id = next(iter(models))
+    pose = cast(JsonObject, cast(JsonObject, models[model_id])["pose"])
+    cast(JsonObject, pose["position"])["z_inches"] = 2.5
+    pose["facing_degrees"] = 45.0
+
+    projected = battlefield_view_from_game_view(UiGameView.from_payload(raw))
+    model = next(
+        model for unit in projected.units for model in unit.models if model.model_id == model_id
+    )
+    assert model.elevation_z_inches == 2.5
+    assert model.facing_degrees == 45.0
+
+
+@pytest.mark.parametrize("field", ["z_inches", "facing_degrees"])
+@pytest.mark.parametrize("malformed", [False, True])
+def test_canonical_model_pose_requires_finite_elevation_and_facing(
+    field: str, malformed: bool
+) -> None:
+    raw = _post_deployment_payload()
+    battlefield = cast(JsonObject, raw["battlefield_view"])
+    models = cast(JsonObject, cast(JsonObject, battlefield["authoritative"])["models_by_id"])
+    model = cast(JsonObject, next(iter(models.values())))
+    pose = cast(JsonObject, model["pose"])
+    target = cast(JsonObject, pose["position"]) if field == "z_inches" else pose
+    if malformed:
+        target[field] = "not-a-number"
+    else:
+        del target[field]
+
+    with pytest.raises(CoreProjectionRenderError, match=f"{field} must be a number"):
+        battlefield_view_from_game_view(UiGameView.from_payload(raw))
 
 
 def test_canonical_membership_is_required_nullable_and_separate_from_physical_owner() -> None:

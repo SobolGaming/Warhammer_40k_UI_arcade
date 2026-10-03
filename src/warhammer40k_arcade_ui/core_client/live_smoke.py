@@ -111,8 +111,9 @@ def build_live_core_smoke_startup(
 
     stop_phase = _validated_stop_phase(stop_at_phase)
     client = LocalSessionClient()
-    client.start_game(canonical_setup_prebattle_smoke_config())
-    status = client.advance_until_decision_or_terminal()
+    status = client.start_game(canonical_setup_prebattle_smoke_config())
+    if status.status_kind == "advanced" and status.decision is None:
+        status = client.advance_until_decision_or_terminal()
     status = _drive_to_checkpoint(client=client, status=status, stop_phase=stop_phase)
     return _startup_from_status(
         client=client,
@@ -137,8 +138,18 @@ def _drive_to_checkpoint(
                 raise LiveCoreSmokeError(
                     f"Game became terminal before smoke checkpoint {stop_phase!r}."
                 )
+            if current.status_kind != "advanced":
+                raise LiveCoreSmokeError(
+                    f"Core returned {current.status_kind!r} without a visible decision "
+                    f"before smoke checkpoint {stop_phase!r}."
+                )
             current = client.advance_until_decision_or_terminal()
             continue
+        if current.status_kind != "waiting_for_decision":
+            raise LiveCoreSmokeError(
+                f"Core returned {current.status_kind!r} with an unexpected decision "
+                f"before smoke checkpoint {stop_phase!r}."
+            )
         viewer_id = decision.actor_id or LIVE_CORE_SMOKE_VIEWER_PLAYER_ID
         view = client.get_view(viewer_id)
         if _is_requested_checkpoint(
@@ -601,6 +612,10 @@ def _required_decision(status: UiClientStatus) -> UiDecision:
 
 
 def _raise_for_invalid_status(status: UiClientStatus) -> None:
+    if status.status_kind == "unsupported":
+        raise LiveCoreSmokeError(
+            f"Core stopped smoke automation: {status.message or 'unsupported status'}"
+        )
     if status.status_kind != "invalid":
         return
     diagnostic = status.invalid_diagnostics[0] if status.invalid_diagnostics else None

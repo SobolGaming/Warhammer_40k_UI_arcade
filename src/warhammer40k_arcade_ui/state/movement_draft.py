@@ -115,11 +115,23 @@ class MovementModelPath:
     model_id: str
     base_radius: float
     points: tuple[WorldPoint, ...]
+    elevation_z_inches: float = 0.0
+    facing_degrees: float = 0.0
     assignment_group_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "model_id", _non_empty_string("model_id", self.model_id))
         _validate_positive("base_radius", self.base_radius)
+        object.__setattr__(
+            self,
+            "elevation_z_inches",
+            _validated_finite_float("elevation_z_inches", self.elevation_z_inches),
+        )
+        object.__setattr__(
+            self,
+            "facing_degrees",
+            _validated_finite_float("facing_degrees", self.facing_degrees),
+        )
         if type(self.points) is not tuple or not self.points:
             raise MovementDraftError("MovementModelPath points must be a non-empty tuple.")
         object.__setattr__(
@@ -504,6 +516,8 @@ class MovementDraft:
                     model_id=model.model_id,
                     base_radius=model.base_radius,
                     points=(model.position,),
+                    elevation_z_inches=model.elevation_z_inches,
+                    facing_degrees=model.facing_degrees,
                 )
                 for model in unit.models
             ),
@@ -934,7 +948,9 @@ class MovementDraft:
                 "model_paths": [
                     {
                         "model_id": path.model_id,
-                        "poses": [_pose_payload(point) for point in path.payload_points()],
+                        "poses": [
+                            _pose_payload(point, path=path) for point in path.payload_points()
+                        ],
                     }
                     for path in self.model_paths
                 ],
@@ -942,8 +958,8 @@ class MovementDraft:
             "model_movements": [
                 {
                     "model_instance_id": path.model_id,
-                    "path": [_pose_payload(point) for point in path.payload_points()],
-                    "final_pose": _pose_payload(path.payload_points()[-1]),
+                    "path": [_pose_payload(point, path=path) for point in path.payload_points()],
+                    "final_pose": _pose_payload(path.payload_points()[-1], path=path),
                 }
                 for path in self.model_paths
             ],
@@ -980,7 +996,9 @@ class MovementDraft:
                 "model_paths": [
                     {
                         "model_id": path.model_id,
-                        "poses": [_pose_payload(point) for point in path.payload_points()],
+                        "poses": [
+                            _pose_payload(point, path=path) for point in path.payload_points()
+                        ],
                     }
                     for path in self.model_paths
                 ],
@@ -1440,15 +1458,15 @@ def _polyline_length(points: tuple[WorldPoint, ...]) -> float:
     return sum(math.dist(start, end) for start, end in pairwise(points))
 
 
-def _pose_payload(point: WorldPoint) -> JsonObject:
+def _pose_payload(point: WorldPoint, *, path: MovementModelPath) -> JsonObject:
     x, y = point
     return {
         "position": {
             "x": x,
             "y": y,
-            "z": 0.0,
+            "z": path.elevation_z_inches,
         },
-        "facing": {"degrees": 0.0},
+        "facing": {"degrees": path.facing_degrees},
     }
 
 

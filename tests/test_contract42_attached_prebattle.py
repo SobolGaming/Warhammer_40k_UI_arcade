@@ -1080,10 +1080,13 @@ def test_attached_scout_window_rejects_membership_drift_without_stale_focus() ->
         window.close()
 
 
-def test_attached_scout_public_witness_is_accepted_by_core() -> None:
+@pytest.mark.parametrize("owner_facing_degrees", [0.0, 45.0])
+def test_attached_scout_public_witness_is_accepted_by_core(owner_facing_degrees: float) -> None:
     """A complete current-ID Scout witness must pass the public Core decision path."""
 
-    client = _scout_client(attached=True, transport=False)
+    client = _scout_client(
+        attached=True, transport=False, owner_facing_degrees=owner_facing_degrees
+    )
     _, request = _attached_scout_request(client)
     proposal = request.movement_proposal
     assert proposal is not None
@@ -1104,7 +1107,13 @@ def test_attached_scout_public_witness_is_accepted_by_core() -> None:
     witness = cast(JsonObject, payload["witness"])
     paths = cast(list[JsonObject], witness["model_paths"])
     assert {cast(str, path["model_id"]) for path in paths} == set(proposal.required_model_ids)
+    assert len(paths) == 6
     assert all(len(cast(list[JsonObject], path["poses"])) == 2 for path in paths)
+    assert all(
+        pose["facing"] == {"degrees": owner_facing_degrees}
+        for path in paths
+        for pose in cast(list[JsonObject], path["poses"])
+    )
     accepted = client.submit_parameterized_payload(
         request_id=request.request_id,
         payload=payload,
