@@ -6,7 +6,9 @@ test only records UI routing; real-session tests use LocalSessionClient.
 
 from __future__ import annotations
 
+import importlib
 import json
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import replace
 from functools import cache
@@ -23,6 +25,7 @@ from warhammer40k_core.core.datasheet import (
     DatasheetAbilityDescriptor,
 )
 from warhammer40k_core.core.dice import DiceExpression, DiceRollResult, DiceRollSpec, DiceRollState
+from warhammer40k_core.core.dice_extremum import DiceExtremum
 from warhammer40k_core.core.missions import ObjectiveMarkerRole
 from warhammer40k_core.core.modifiers import ModifierOperation, ModifierTerm
 from warhammer40k_core.core.profile_modifier_trace import CharacteristicModifierTrace
@@ -32,6 +35,7 @@ from warhammer40k_core.core.ruleset_descriptor import RulesetDescriptor
 from warhammer40k_core.engine.army_mustering import muster_army
 from warhammer40k_core.engine.battlefield_state import ModelPlacement, UnitPlacement
 from warhammer40k_core.engine.damage_allocation import DECLINE_DESTRUCTION_REACTION_OPTION_ID
+from warhammer40k_core.engine.decision_request import DecisionRequest
 from warhammer40k_core.engine.effects import (
     GENERIC_RULE_EFFECT_KIND,
     EffectExpiration,
@@ -56,7 +60,10 @@ from warhammer40k_core.rules.mission_pack_import import (
 )
 
 from tests.support.contract42_battle_fixture import shooting_client
-from tests.support.core_contract_examples import required_core_example_path
+from tests.support.core_contract_examples import (
+    required_core_example_path,
+    verified_core_examples_root,
+)
 from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
 from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
 from warhammer40k_arcade_ui.core_client.protocol import (
@@ -149,6 +156,112 @@ def test_new_finite_family_routes_current_core_example_ids_without_invention(
     raw_options = cast(list[JsonObject], matches[0]["options"])
     assert submission.selected_option_id == raw_options[-1]["option_id"]
     assert submission.result_id == "ui-result-000001"
+
+
+@pytest.mark.integration
+def test_real_private_dice_extremum_is_owner_scoped_through_local_facade() -> None:
+    """Exercise Core's secret dice choice through current public views and submissions."""
+
+    # Core's canonical fixture imports its sibling `tests` helpers. Temporarily
+    # expose that pinned package path without replacing this UI test package.
+    core_tests = str(verified_core_examples_root().parents[1] / "tests")
+    test_package = importlib.import_module("tests")
+    package_path = cast(list[str], test_package.__path__)
+    package_path.append(core_tests)
+    try:
+        helper = importlib.import_module("tests.dice_result_semantics_helpers")
+    finally:
+        package_path.remove(core_tests)
+    extremum_session = cast(
+        Callable[..., tuple[LocalGameSession, DiceRollState, DecisionRequest]],
+        helper.extremum_session,
+    )
+    session, roll, request = extremum_session(extremum=DiceExtremum.LOWEST, secret=True)
+    client = LocalSessionClient(session=session)
+    owner = client.get_view("player-a")
+    decision = owner.pending_decision
+    assert decision is not None
+    assert decision.decision_type == "select_dice_extremum"
+    assert decision.actor_id == "player-a"
+    assert decision.request_id == request.request_id
+    assert tuple(option.option_id for option in decision.options) == tuple(
+        option.option_id for option in request.options
+    )
+    assert len(decision.options) == 2  # Core's tied physical dice need a real choice.
+    assert type(decision.payload) is dict
+    assert decision.payload["roll_state"] == roll.to_payload()
+
+    opponent = client.get_view("player-b")
+    hidden = opponent.pending_decision
+    assert hidden is not None
+    assert hidden.decision_type == "hidden_decision"
+    assert hidden.request_id != request.request_id
+    assert hidden.actor_id is None
+    assert hidden.options == ()
+    assert hidden.interaction is None
+    assert hidden.payload == {"secret": True, "hidden": True}
+    hidden_json = json.dumps(hidden.payload)
+    assert request.request_id not in hidden_json
+    assert roll.original_result.roll_id not in hidden_json
+    assert all(option.option_id not in hidden_json for option in request.options)
+    assert client.get_view("player-a").pending_decision == decision
+
+    owner_before = client.get_events_since(0, "player-a")
+    opponent_before = client.get_events_since(0, "player-b")
+    referenced = tuple(
+        event for event in owner_before.events if event["event_type"] == "dice_extremum_referenced"
+    )
+    assert len(referenced) == 1
+    assert not any(
+        "dice_extremum" in cast(str, event["event_type"]) for event in opponent_before.events
+    )
+    assert request.request_id not in json.dumps(opponent_before.events)
+
+    before_records = session.decision_record_count()
+    with pytest.raises(UiClientSubmissionError):
+        client.submit_finite(
+            request_id=decision.request_id,
+            selected_option_id=f"{decision.options[0].option_id}:forged",
+            result_id="finite-private-dice-forged",
+        )
+    assert session.decision_record_count() == before_records
+    assert client.get_view("player-a").pending_decision == decision
+    assert client.get_view("player-b").pending_decision == hidden
+    assert client.get_events_since(0, "player-a") == owner_before
+    assert client.get_events_since(0, "player-b") == opponent_before
+
+    result_id = "finite-private-dice-selected"
+    accepted = client.submit_finite(
+        request_id=decision.request_id,
+        selected_option_id=decision.options[0].option_id,
+        result_id=result_id,
+    )
+    assert accepted.status_kind != "invalid", accepted.invalid_diagnostics
+    assert session.decision_record_count() == before_records + 1
+    owner_after = client.get_view("player-a")
+    opponent_after = client.get_view("player-b")
+    assert owner_after.pending_decision is not None
+    assert owner_after.pending_decision.request_id != decision.request_id
+    assert opponent_after.pending_decision is not None
+    assert opponent_after.pending_decision.request_id != request.request_id
+    owner_new = client.get_events_since(owner_before.next_cursor, "player-a")
+    opponent_new = client.get_events_since(opponent_before.next_cursor, "player-b")
+    selected = tuple(
+        event for event in owner_new.events if event["event_type"] == "dice_extremum_selected"
+    )
+    assert len(selected) == 1
+    selected_payload = cast(JsonObject, selected[0]["payload"])
+    assert selected_payload["request_id"] == request.request_id
+    assert selected_payload["result_id"] == result_id
+    assert selected_payload["selection"] == decision.options[0].payload
+    assert not any(
+        "dice_extremum" in cast(str, event["event_type"]) for event in opponent_new.events
+    )
+    opponent_events_json = json.dumps(client.get_events_since(0, "player-b").events)
+    assert request.request_id not in opponent_events_json
+    assert roll.original_result.roll_id not in opponent_events_json
+    assert result_id not in opponent_events_json
+    assert all(option.option_id not in opponent_events_json for option in request.options)
 
 
 def _minimal_view(viewer: str) -> UiGameView:
