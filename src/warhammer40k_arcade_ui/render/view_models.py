@@ -185,15 +185,30 @@ class ModelBaseView:
     label: str
     position: Point
     base_radius: float
+    elevation_z_inches: float = 0.0
+    facing_degrees: float = 0.0
     base_movement_inches: float | None = None
     support_footprint: Polygon | None = None
     measurement_footprints: tuple[Polygon, ...] = ()
+    rules_unit_instance_id: str | None = None
+    state: str = "placed"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "model_id", _non_empty_string("model_id", self.model_id))
         object.__setattr__(self, "label", _non_empty_string("label", self.label))
         object.__setattr__(self, "position", _validate_point("position", self.position))
         _validate_positive_float("base_radius", self.base_radius)
+        for name in ("elevation_z_inches", "facing_degrees"):
+            value = _numeric_to_float(name, getattr(self, name))
+            _validate_finite_float(name, value)
+            object.__setattr__(self, name, value)
+        object.__setattr__(
+            self,
+            "rules_unit_instance_id",
+            _optional_non_empty_string("rules_unit_instance_id", self.rules_unit_instance_id),
+        )
+        if self.state not in {"placed", "destroyed"}:
+            raise RenderViewModelError("state must be placed or destroyed.")
         if self.base_movement_inches is not None:
             _validate_positive_float("base_movement_inches", self.base_movement_inches)
         if self.support_footprint is not None:
@@ -221,6 +236,10 @@ class ModelBaseView:
             label=_required_string(model, "label"),
             position=_required_point(model, "position"),
             base_radius=_required_positive_float(model, "base_radius"),
+            elevation_z_inches=_numeric_to_float(
+                "elevation_z_inches", model.get("elevation_z_inches", 0.0)
+            ),
+            facing_degrees=_numeric_to_float("facing_degrees", model.get("facing_degrees", 0.0)),
             base_movement_inches=_optional_positive_float(model, "base_movement_inches"),
             support_footprint=(
                 None
@@ -231,6 +250,8 @@ class ModelBaseView:
                 _validate_polygon("measurement_footprint", footprint)
                 for footprint in _optional_list(model, "measurement_footprints")
             ),
+            rules_unit_instance_id=_optional_string(model, "rules_unit_instance_id"),
+            state=_optional_string(model, "state") or "placed",
         )
 
 

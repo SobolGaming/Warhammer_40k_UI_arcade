@@ -230,8 +230,7 @@ def _interaction_shape(
 
 
 def _upgrade_scout_request(proposal: JsonObject) -> None:
-    proposal.setdefault("component_unit_instance_ids", [])
-    proposal.setdefault("model_instance_ids", [])
+    proposal.setdefault("component_unit_instance_ids", [proposal["unit_instance_id"]])
     proposal.setdefault("placement_kind", None)
     proposal.setdefault("deployment_zone_ids", [])
     proposal.setdefault("legal_deployment_zones", [])
@@ -254,7 +253,7 @@ def _upgrade_generic_placement_request(proposal: JsonObject) -> None:
 def _upgrade_deployment_request(proposal: JsonObject) -> None:
     proposal.setdefault("setup_step", "deploy_armies")
     proposal.setdefault("ruleset_descriptor_hash", "fixture-ruleset-hash")
-    proposal.setdefault("component_unit_instance_ids", [])
+    proposal.setdefault("component_unit_instance_ids", [proposal["unit_instance_id"]])
     proposal.setdefault("deployment_zone_ids", ["fixture-deployment-zone"])
     proposal.setdefault("legal_deployment_zones", [])
     proposal.setdefault("mission_pack_id", "fixture-mission-pack")
@@ -266,7 +265,7 @@ def _upgrade_deployment_request(proposal: JsonObject) -> None:
 
 
 def _upgrade_prebattle_placement_request(proposal: JsonObject) -> None:
-    proposal.setdefault("component_unit_instance_ids", [])
+    proposal.setdefault("component_unit_instance_ids", [proposal["unit_instance_id"]])
     proposal.setdefault("scout_distance_inches", None)
     proposal.setdefault("deployment_zone_ids", [])
     proposal.setdefault("legal_deployment_zones", [])

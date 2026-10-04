@@ -178,6 +178,41 @@ def test_submit_placement_draft_clears_submitted_draft_after_engine_invalid() ->
     assert result.finite_state.diagnostics[0].violation_code == "invalid_placement"
 
 
+def test_submit_placement_draft_preserves_unsupported_without_advancing() -> None:
+    decision = _placement_proposal_decision()
+    status = UiClientStatus(
+        stage="battle",
+        status_kind="unsupported",
+        message="Core stopped at its transition safety boundary (transition_budget_exhausted).",
+        payload={"unsupported_reason": "transition_budget_exhausted"},
+    )
+    fake = FakeCoreClient(
+        status=status,
+        view=_game_view(pending_decision=decision),
+        event_delta=UiEventDelta(
+            viewer_player_id="player_1",
+            cursor=0,
+            next_cursor=0,
+            events=(),
+        ),
+    )
+
+    result = submit_placement_draft(
+        state=FiniteDecisionUiState(pending_decision=decision),
+        placement_draft=_ready_draft(decision),
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert len(fake.parameterized_submissions) == 1
+    assert fake.advance_call_count == 0
+    assert result.finite_state.status_kind == "unsupported"
+    assert result.finite_state.pending_decision is None
+    assert "transition_budget_exhausted" in result.finite_state.status_message
+    assert result.finite_state.diagnostics[0].violation_code == "core_unsupported"
+    assert result.finite_state.diagnostics[0].message == result.finite_state.status_message
+
+
 def test_submit_placement_draft_without_core_client_returns_local_diagnostic() -> None:
     decision = _placement_proposal_decision()
 

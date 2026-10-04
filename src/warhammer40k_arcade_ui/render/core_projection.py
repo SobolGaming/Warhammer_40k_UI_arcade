@@ -70,6 +70,7 @@ def battlefield_view_from_game_view(view: UiGameView) -> BattlefieldView:
         terrain=_canonical_terrain(authoritative),
         units=_canonical_units(
             authoritative=authoritative,
+            viewer_player_id=view.viewer_player_id,
             unit_display_by_id=view.unit_display_by_id,
             model_display_by_id=view.model_display_by_id,
         ),
@@ -359,6 +360,7 @@ def _canonical_hit_regions(render: JsonObject) -> tuple[HitRegionView, ...]:
 def _canonical_units(
     *,
     authoritative: JsonObject,
+    viewer_player_id: str,
     unit_display_by_id: JsonObject,
     model_display_by_id: JsonObject,
 ) -> tuple[UnitView, ...]:
@@ -367,8 +369,24 @@ def _canonical_units(
     owner_by_unit_id: dict[str, str] = {}
     for model_id, raw_model in sorted(models_by_id.items()):
         model = _json_object("battlefield model", raw_model)
-        if _required_string(model, "state") != "placed" or model.get("pose") is None:
+        state = _required_string(model, "state")
+        rules_unit_id = _optional_string_field(model, "rules_unit_instance_id")
+        if "pose" not in model:
+            raise CoreProjectionRenderError(f"battlefield model {model_id} is missing pose.")
+        if state == "placed" and model["pose"] is None:
+            raise CoreProjectionRenderError(f"placed battlefield model {model_id} is missing pose.")
+        if (
+            state == "placed"
+            and _required_string(model, "owner_player_id") == viewer_player_id
+            and rules_unit_id is None
+        ):
+            raise CoreProjectionRenderError(
+                f"placed owner model {model_id} is missing rules_unit_instance_id."
+            )
+        if model["pose"] is None:
             continue
+        if state not in {"placed", "destroyed"}:
+            raise CoreProjectionRenderError(f"Unsupported canonical model state: {state}.")
         unit_id = _required_string(model, "unit_instance_id")
         owner_by_unit_id[unit_id] = _required_string(model, "owner_player_id")
         grouped.setdefault(unit_id, []).append(
@@ -376,6 +394,8 @@ def _canonical_units(
                 model_id=model_id,
                 model=model,
                 model_display_by_id=model_display_by_id,
+                state=state,
+                rules_unit_id=rules_unit_id,
             )
         )
     units: list[UnitView] = []
@@ -400,6 +420,8 @@ def _canonical_model(
     model_id: str,
     model: JsonObject,
     model_display_by_id: JsonObject,
+    state: str,
+    rules_unit_id: str | None,
 ) -> ModelBaseView:
     pose = _json_object("model pose", model.get("pose"))
     position = _json_object("model position", pose.get("position"))
@@ -420,6 +442,8 @@ def _canonical_model(
         or _display_suffix(model_id),
         position=world_position,
         base_radius=_shape_display_radius(support_shape),
+        elevation_z_inches=_required_float(position, "z_inches"),
+        facing_degrees=facing_degrees,
         base_movement_inches=_display_movement_inches(display),
         support_footprint=_model_shape_footprint(
             support_shape,
@@ -434,6 +458,8 @@ def _canonical_model(
             )
             for shape in measurement_shapes
         ),
+        rules_unit_instance_id=rules_unit_id,
+        state=state,
     )
 
 
@@ -869,6 +895,8 @@ def _model_from_placement(
             _required_float(position, "x"),
             _required_float(position, "y"),
         ),
+        elevation_z_inches=_required_float(position, "z"),
+        facing_degrees=_required_float(_json_object("pose.facing", pose.get("facing")), "degrees"),
         base_radius=_model_base_radius_inches(
             model_id=model_id,
             model_display_by_id=model_display_by_id,
@@ -888,9 +916,12 @@ def _model_base_radius_inches(*, model_id: str, model_display_by_id: JsonObject)
     kind = _required_string(base_size, "kind")
     if kind == "circular":
         return _required_positive_float(base_size, "diameter_mm") / _MM_PER_INCH / 2.0
-    if kind == "oval":
+    if kind in {"oval", "rectangular"}:
         length = _required_positive_float(base_size, "length_mm")
         width = _required_positive_float(base_size, "width_mm")
+        if kind == "rectangular":
+            # The current renderer draws a circle; contain every rectangle corner.
+            return math.hypot(length / 2.0, width / 2.0) / _MM_PER_INCH
         return max(length, width) / _MM_PER_INCH / 2.0
     raise CoreProjectionRenderError(f"model_display base_size kind is unsupported: {kind}.")
 

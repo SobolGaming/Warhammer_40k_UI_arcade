@@ -351,6 +351,12 @@ class UiBattlefieldProjection:
     interaction: JsonObject
     render: JsonObject
 
+    @property
+    def models_by_id(self) -> JsonObject:
+        """Return the viewer-scoped physical model identities."""
+
+        return _json_object("battlefield models_by_id", self.authoritative["models_by_id"])
+
     @classmethod
     def from_payload(cls, payload: object) -> Self:
         value = _json_object("battlefield view", payload)
@@ -404,6 +410,22 @@ class UiBattlefieldProjection:
         )
         for key in authoritative:
             _json_object(key, authoritative[key])
+        for model_id, raw_model in _json_object(
+            "models_by_id", authoritative["models_by_id"]
+        ).items():
+            model = _json_object(f"models_by_id.{model_id}", raw_model)
+            _required_matching_string(model, "model_instance_id", model_id, "battlefield model key")
+            _required_string(model, "unit_instance_id")
+            state = _required_string(model, "state")
+            if "pose" not in model:
+                raise UiClientProtocolError(f"models_by_id.{model_id}.pose is required.")
+            if state == "placed" and model["pose"] is None:
+                raise UiClientProtocolError(
+                    f"models_by_id.{model_id}.pose is required for a placed model."
+                )
+            rules_unit_id = _required_value(model, "rules_unit_instance_id")
+            if rules_unit_id is not None:
+                _non_empty_string("rules_unit_instance_id", rules_unit_id)
         interaction = _json_object("battlefield interaction", value["interaction"])
         _require_exact_keys(
             interaction,
@@ -689,6 +711,8 @@ class UiMovementProposalRequest:
     ruleset_descriptor_hash: str | None = None
     scout_distance_inches: float | None = None
     spatial_context_hash: str | None = None
+    component_unit_instance_ids: tuple[str, ...] = ()
+    required_model_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "request_id", _non_empty_string("request_id", self.request_id))
@@ -762,6 +786,23 @@ class UiMovementProposalRequest:
             "spatial_context_hash",
             _optional_string("spatial_context_hash", self.spatial_context_hash),
         )
+        for field_name in ("component_unit_instance_ids", "required_model_ids"):
+            values: tuple[str, ...] = (
+                self.component_unit_instance_ids
+                if field_name == "component_unit_instance_ids"
+                else self.required_model_ids
+            )
+            if type(values) is not tuple:
+                raise UiClientProtocolError(f"{field_name} must be a tuple of unique IDs.")
+            normalized = tuple(_non_empty_string(field_name, value) for value in values)
+            if len(normalized) != len(set(normalized)):
+                raise UiClientProtocolError(f"{field_name} must be a tuple of unique IDs.")
+            object.__setattr__(self, field_name, normalized)
+        if self.decision_type == "submit_scout_move":
+            if self.player_id != self.actor_id:
+                raise UiClientProtocolError("Scout Move player_id must match actor_id.")
+            if not self.component_unit_instance_ids or not self.required_model_ids:
+                raise UiClientProtocolError("Scout Move requires component and model inventories.")
 
     @classmethod
     def from_payload(cls, payload: object) -> Self:
@@ -799,8 +840,8 @@ class UiMovementProposalRequest:
                 raise UiClientProtocolError(
                     "Scout Move proposal request placement_kind must be null."
                 )
-            _string_list(proposal, "component_unit_instance_ids")
-            _string_list(proposal, "model_instance_ids")
+            component_ids = tuple(_string_list(proposal, "component_unit_instance_ids"))
+            model_ids = tuple(_string_list(proposal, "model_instance_ids"))
             _string_list(proposal, "deployment_zone_ids")
             _json_list("legal_deployment_zones", proposal["legal_deployment_zones"])
             _json_object("mission_setup", proposal["mission_setup"])
@@ -831,6 +872,8 @@ class UiMovementProposalRequest:
                 ruleset_descriptor_hash=_required_string(proposal, "ruleset_descriptor_hash"),
                 scout_distance_inches=_required_number(proposal, "scout_distance_inches"),
                 spatial_context_hash=None,
+                component_unit_instance_ids=component_ids,
+                required_model_ids=model_ids,
             )
         _require_exact_keys(
             proposal,
@@ -903,6 +946,9 @@ class UiPlacementProposalRequest:
     source_rule_id: str | None
     context: JsonObject
     spatial_context_hash: str | None = None
+    army_id: str | None = None
+    materialized_models: tuple[JsonObject, ...] = ()
+    component_unit_instance_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "request_id", _non_empty_string("request_id", self.request_id))
@@ -976,6 +1022,48 @@ class UiPlacementProposalRequest:
             "spatial_context_hash",
             _optional_string("spatial_context_hash", self.spatial_context_hash),
         )
+        object.__setattr__(self, "army_id", _optional_string("army_id", self.army_id))
+        if type(self.materialized_models) is not tuple:
+            raise UiClientProtocolError("materialized_models must be a tuple.")
+        models = tuple(
+            _json_object("materialized model", model) for model in self.materialized_models
+        )
+        if self.decision_type == "submit_catalog_model_materialization_placement":
+            if self.army_id is None or not models:
+                raise UiClientProtocolError(
+                    "Model materialization requires an army and emitted models."
+                )
+            model_ids = tuple(_required_string(model, "model_instance_id") for model in models)
+            if model_ids != self.required_model_ids or len(set(model_ids)) != len(model_ids):
+                raise UiClientProtocolError(
+                    "Materialized models must match the emitted model_instance_ids exactly."
+                )
+            for model in models:
+                _json_object("materialized model base_size", _required_value(model, "base_size"))
+        elif self.army_id is not None or models:
+            raise UiClientProtocolError(
+                "Only model materialization may carry request-created model authority."
+            )
+        object.__setattr__(self, "materialized_models", models)
+        component_ids = self.component_unit_instance_ids
+        if type(component_ids) is not tuple:
+            raise UiClientProtocolError("component_unit_instance_ids must be unique IDs.")
+        normalized_component_ids = tuple(
+            _non_empty_string("component_unit_instance_id", value) for value in component_ids
+        )
+        if len(normalized_component_ids) != len(set(normalized_component_ids)):
+            raise UiClientProtocolError("component_unit_instance_ids must be unique IDs.")
+        object.__setattr__(
+            self,
+            "component_unit_instance_ids",
+            normalized_component_ids,
+        )
+        if self.decision_type in {
+            "submit_deployment_placement",
+            "submit_redeploy_placement",
+            "submit_scout_reserve_setup",
+        } and (not component_ids or not self.required_model_ids):
+            raise UiClientProtocolError("Pre-battle placement requires component and model IDs.")
 
     @classmethod
     def from_payload(
@@ -1144,6 +1232,9 @@ class UiPlacementProposalRequest:
                 action_kind=None,
                 source_rule_id=None,
                 context=_json_object("proposal context", proposal["context"]),
+                component_unit_instance_ids=tuple(
+                    _string_list(proposal, "component_unit_instance_ids")
+                ),
             )
         if decision_type in {"submit_redeploy_placement", "submit_scout_reserve_setup"}:
             _require_exact_keys(
@@ -1185,6 +1276,9 @@ class UiPlacementProposalRequest:
                 action_kind=_required_string(proposal, "action_kind"),
                 source_rule_id=_required_string(proposal, "source_rule_id"),
                 context=_json_object("proposal context", proposal["context"]),
+                component_unit_instance_ids=tuple(
+                    _string_list(proposal, "component_unit_instance_ids")
+                ),
             )
         if decision_type == "submit_catalog_model_materialization_placement":
             _require_exact_keys(
@@ -1198,7 +1292,10 @@ class UiPlacementProposalRequest:
                 decision_type,
                 "placement request decision_type",
             )
-            _json_list("materialized models", proposal["models"])
+            models = tuple(
+                _json_object("materialized model", model)
+                for model in _json_list("materialized models", proposal["models"])
+            )
             placement_kind = _required_string(proposal, "placement_kind")
             player_id = _required_matching_string(
                 proposal,
@@ -1224,6 +1321,8 @@ class UiPlacementProposalRequest:
                 action_kind=_required_string(proposal, "action_phase"),
                 source_rule_id=_required_string(proposal, "source_rule_id"),
                 context={},
+                army_id=_required_string(proposal, "army_id"),
+                materialized_models=models,
             )
         if decision_type == "submit_healing_revival_placement":
             _require_exact_keys(
@@ -1238,14 +1337,34 @@ class UiPlacementProposalRequest:
                 "placement request decision_type",
             )
             effect = _json_object("healing effect", proposal["effect"])
-            unit_instance_id = _required_string(effect, "target_unit_instance_id")
+            target_unit_instance_id = _required_string(effect, "target_unit_instance_id")
+            component_unit_instance_id = _required_string(proposal, "component_unit_instance_id")
+            phase_start = _json_object("revival_phase_start", proposal["revival_phase_start"])
+            _require_exact_keys(
+                phase_start,
+                _HEALING_REVIVAL_PHASE_START_KEYS,
+                "revival phase-start witness",
+            )
+            for key in _HEALING_REVIVAL_PHASE_START_KEYS - {"battle_round", "model_ids"}:
+                _required_string(phase_start, key)
+            if _required_int(phase_start, "battle_round") < 1:
+                raise UiClientProtocolError("Revival phase-start battle_round must be positive.")
+            model_ids = _string_list(phase_start, "model_ids")
+            if model_ids != sorted(set(model_ids)):
+                raise UiClientProtocolError(
+                    "Revival phase-start model_ids must be sorted and unique."
+                )
+            if phase_start["target_unit_instance_id"] != target_unit_instance_id:
+                raise UiClientProtocolError(
+                    "Revival phase-start target differs from the healing effect."
+                )
             return cls(
                 request_id=request_id,
                 decision_type=decision_type,
                 actor_id=actor_id,
                 game_id=None,
                 player_id=actor_id,
-                unit_instance_id=unit_instance_id,
+                unit_instance_id=component_unit_instance_id,
                 proposal_kind=proposal_kind,
                 placement_kind="return_to_battlefield",
                 placement_kinds=("return_to_battlefield",),
@@ -1262,7 +1381,12 @@ class UiPlacementProposalRequest:
                 setup_step=None,
                 action_kind=None,
                 source_rule_id=_required_string(effect, "source_rule_id"),
-                context={},
+                context={
+                    "target_rules_unit_instance_id": target_unit_instance_id,
+                    "step_index": _required_int(proposal, "step_index"),
+                    "effect": effect,
+                    "revival_phase_start": phase_start,
+                },
             )
         if decision_type == "submit_return_on_death_placement":
             _require_exact_keys(
@@ -1306,6 +1430,16 @@ class UiPlacementProposalRequest:
         raise UiClientProtocolError(
             f"Placement request decision_type is unsupported: {decision_type}."
         )
+
+
+_FLAT_PARAMETERIZED_DECISION_TYPES = frozenset(
+    {
+        "submit_cult_ambush_marker_placement",
+        "submit_healing_revival_placement",
+        "submit_catalog_model_materialization_placement",
+        "submit_return_on_death_placement",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1354,34 +1488,37 @@ class UiParameterizedProposalRequest:
         actor_id: str | None,
     ) -> Self:
         decision_payload = _json_object("parameterized decision payload", payload)
-        proposal_payload = _json_object(
-            "parameterized proposal request",
-            decision_payload["proposal_request"],
-        )
         if actor_id is None:
             raise UiClientProtocolError(
                 "decision_request.actor_id is required for parameterized proposals."
             )
-        proposal_actor_id = _required_string(proposal_payload, "actor_id")
-        if proposal_actor_id != actor_id:
-            raise UiClientProtocolError("actor_id must match decision_request.actor_id.")
-        return cls(
-            request_id=_required_matching_string(
-                proposal_payload,
-                "request_id",
-                decision_request_id,
-                "decision_request.request_id",
-            ),
-            decision_type=_required_matching_string(
-                proposal_payload,
-                "decision_type",
-                decision_type,
-                "decision_request.decision_type",
-            ),
-            actor_id=proposal_actor_id,
-            proposal_kind=_optional_string_value(proposal_payload, "proposal_kind"),
-            payload=proposal_payload,
-        )
+        is_flat = decision_type in _FLAT_PARAMETERIZED_DECISION_TYPES
+        if is_flat:
+            if "proposal_request" in decision_payload:
+                raise UiClientProtocolError(
+                    f"{decision_type} requires a flat parameterized request."
+                )
+            context = decision_payload
+        else:
+            if "proposal_request" not in decision_payload:
+                raise UiClientProtocolError(f"{decision_type} requires a nested proposal_request.")
+            context = _json_object(
+                "parameterized proposal request",
+                decision_payload["proposal_request"],
+            )
+        identity = {
+            "request_id": decision_request_id,
+            "decision_type": decision_type,
+            "actor_id": actor_id,
+        }
+        for key, expected in identity.items():
+            if not is_flat and key not in context:
+                raise UiClientProtocolError(f"nested parameterized request requires {key}.")
+            if key in context and context[key] != expected:
+                raise UiClientProtocolError(
+                    f"parameterized {key} must match decision_request.{key}."
+                )
+        return cls.from_payload({**context, **identity})
 
 
 @dataclass(frozen=True, slots=True)
@@ -1524,6 +1661,15 @@ class UiDecision:
             if is_parameterized and parse_parameterized_proposal
             else None
         )
+        if (
+            parameterized_proposal is not None
+            and interaction is not None
+            and parameterized_proposal.proposal_kind is not None
+            and parameterized_proposal.proposal_kind != interaction.proposal_kind
+        ):
+            raise UiClientProtocolError(
+                "parameterized proposal_kind must match the interaction descriptor."
+            )
         return cls(
             request_id=request_id,
             decision_type=decision_type,
@@ -1787,8 +1933,8 @@ class UiGameView:
             ),
             pending_decision=pending_decision,
             pending_proposal=pending_proposal,
-            unit_display_by_id=_optional_json_object_value(view, "unit_display_by_id"),
-            model_display_by_id=_optional_json_object_value(view, "model_display_by_id"),
+            unit_display_by_id=_validated_unit_displays(view),
+            model_display_by_id=_validated_model_displays(view),
             projection_schema=GAME_VIEW_SCHEMA_VERSION,
             projection_state_hash=_required_string(view, "projection_state_hash"),
             viewer_role=_required_viewer_role(view),
@@ -2020,6 +2166,22 @@ def invalid_diagnostics_from_status(
     resolution = body.get("resolution")
     if resolution is not None:
         return _invalid_diagnostics_from_resolution(body=body, resolution=resolution)
+    if "violations" in body:
+        violations = _json_list("invalid status violations", body["violations"])
+        if not violations:
+            return (_malformed_invalid_status_diagnostic("has no violations"),)
+        request_id = _optional_string_value(body, "request_id")
+        top_level_kind = _optional_string_value(body, "proposal_kind") or _optional_string_value(
+            body, "placement_kind"
+        )
+        return tuple(
+            _invalid_diagnostic_from_top_level_violation(
+                violation=violation,
+                proposal_request_id=request_id,
+                proposal_kind=top_level_kind,
+            )
+            for violation in violations
+        )
     invalid_reason = body.get("invalid_reason")
     field = body.get("field")
     if invalid_reason is not None:
@@ -2072,6 +2234,23 @@ def _invalid_diagnostics_from_resolution(
             "proposal resolution violations",
             resolution_payload["violations"],
         )
+    )
+
+
+def _invalid_diagnostic_from_top_level_violation(
+    *,
+    violation: JsonValue,
+    proposal_request_id: str | None,
+    proposal_kind: str | None,
+) -> UiInvalidDiagnostic:
+    payload = _json_object("invalid status violation", violation)
+    return UiInvalidDiagnostic(
+        violation_code=_required_string(payload, "violation_code"),
+        message=_required_string(payload, "message"),
+        field=_optional_string_value(payload, "field"),
+        proposal_request_id=proposal_request_id,
+        proposal_kind=proposal_kind,
+        status="invalid",
     )
 
 
@@ -2250,11 +2429,25 @@ _HEALING_REVIVAL_REQUEST_KEYS = {
     "submission_kind",
     "proposal_kind",
     "effect",
+    "revival_phase_start",
     "step_index",
     "model_instance_id",
     "component_unit_instance_id",
     "source_selection_request_id",
     "source_selection_result_id",
+}
+
+_HEALING_REVIVAL_PHASE_START_KEYS = {
+    "rule_source_id",
+    "source_package_hash",
+    "game_id",
+    "battle_round",
+    "turn_owner_player_id",
+    "phase",
+    "phase_start_event_id",
+    "phase_start_window_id",
+    "target_unit_instance_id",
+    "model_ids",
 }
 
 _RETURN_ON_DEATH_REQUEST_KEYS = {
@@ -2392,10 +2585,88 @@ def _optional_string_value(payload: JsonObject, key: str) -> str | None:
     return _optional_string(key, payload.get(key))
 
 
-def _optional_json_object_value(payload: JsonObject, key: str) -> JsonObject:
-    if key not in payload or payload[key] is None:
-        return {}
-    return _json_object(key, payload[key])
+def _validated_unit_displays(view: JsonObject) -> JsonObject:
+    displays = _json_object("unit_display_by_id", view["unit_display_by_id"])
+    for unit_id, value in displays.items():
+        display = _json_object(f"unit_display_by_id.{unit_id}", value)
+        _required_matching_string(display, "unit_instance_id", unit_id, "unit display key")
+        _string_list(display, "keywords")
+        _string_list(display, "faction_keywords")
+        _string_list(display, "model_instance_ids")
+    return displays
+
+
+def _validated_model_displays(view: JsonObject) -> JsonObject:
+    displays = _json_object("model_display_by_id", view["model_display_by_id"])
+    for model_id, value in displays.items():
+        display = _json_object(f"model_display_by_id.{model_id}", value)
+        _required_matching_string(display, "model_instance_id", model_id, "model display key")
+        _required_string(display, "unit_instance_id")
+        for key in ("keywords", "faction_keywords", "keyword_source_ids"):
+            _string_list(display, key)
+        for category in ("base_characteristics", "current_characteristics"):
+            characteristics = _json_object(category, _required_value(display, category))
+            for label, raw_characteristic in characteristics.items():
+                characteristic = _json_object(f"{category}.{label}", raw_characteristic)
+                _validate_characteristic_display(characteristic, label=label)
+    return displays
+
+
+def _validate_characteristic_display(characteristic: JsonObject, *, label: str) -> None:
+    required = {
+        "characteristic",
+        "label",
+        "value_kind",
+        "raw",
+        "base",
+        "final",
+        "display_value",
+        "applied_modifier_ids",
+        "redaction",
+    }
+    _require_keys(
+        characteristic,
+        required=required,
+        allowed=required | {"random_expression"},
+        field_name=f"characteristic {label}",
+    )
+    _required_matching_string(characteristic, "label", label, "characteristic key")
+    _required_string(characteristic, "characteristic")
+    value_kind = _required_string(characteristic, "value_kind")
+    if value_kind not in {
+        "random",
+        "numeric",
+        "source_dash",
+        "replacement_dash",
+        "replacement_zero",
+        "replacement_star",
+        "unknown",
+    }:
+        raise UiClientProtocolError(f"Unsupported characteristic value_kind: {value_kind}.")
+    for key in ("raw", "base", "final"):
+        value = characteristic[key]
+        if value is not None and type(value) is not int:
+            raise UiClientProtocolError(f"characteristic {label}.{key} must be integer or null.")
+    display_value = characteristic["display_value"]
+    if display_value is not None and type(display_value) is not str:
+        raise UiClientProtocolError(f"characteristic {label}.display_value must be text or null.")
+    _string_list(characteristic, "applied_modifier_ids")
+    redaction = _json_object("characteristic redaction", characteristic["redaction"])
+    _require_exact_keys(redaction, {"hidden", "reason"}, "characteristic redaction")
+    _required_bool(redaction, "hidden")
+    _optional_string_value(redaction, "reason")
+    if value_kind == "random":
+        if display_value is None or not display_value:
+            raise UiClientProtocolError("random characteristic requires display_value.")
+        expression = _json_object(
+            "random_expression", _required_value(characteristic, "random_expression")
+        )
+        _require_exact_keys(expression, {"quantity", "sides", "modifier"}, "random_expression")
+        if _required_int(expression, "quantity") < 1 or _required_int(expression, "sides") < 2:
+            raise UiClientProtocolError("random_expression requires positive dice dimensions.")
+        _required_int(expression, "modifier")
+    elif "random_expression" in characteristic:
+        raise UiClientProtocolError("Only random characteristics may contain random_expression.")
 
 
 def _required_matching_string(

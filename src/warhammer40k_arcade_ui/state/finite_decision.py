@@ -89,10 +89,12 @@ class FiniteDecisionUiState:
         """Create finite UI state from an initial client status."""
 
         return cls(
-            pending_decision=status.decision,
+            pending_decision=(
+                None if status.status_kind in {"unsupported", "terminal"} else status.decision
+            ),
             status_kind=status.status_kind,
             status_message=_status_message(status),
-            diagnostics=status.invalid_diagnostics,
+            diagnostics=_status_diagnostics(status),
             event_cursor=event_cursor,
             event_log_lines=_trim_event_lines(event_log_lines),
             event_payloads=(),
@@ -257,13 +259,14 @@ class FiniteDecisionUiState:
     def apply_status(self, status: UiClientStatus) -> FiniteDecisionUiState:
         """Apply the latest authoritative client status."""
 
-        pending_decision = (
-            status.decision
-            if status.decision is not None
-            else self.pending_decision
-            if status.status_kind == "invalid"
-            else None
-        )
+        if status.status_kind in {"unsupported", "terminal"}:
+            pending_decision = None
+        elif status.decision is not None:
+            pending_decision = status.decision
+        elif status.status_kind == "invalid":
+            pending_decision = self.pending_decision
+        else:
+            pending_decision = None
         return replace(
             self,
             pending_decision=pending_decision,
@@ -274,18 +277,23 @@ class FiniteDecisionUiState:
             ),
             status_kind=status.status_kind,
             status_message=_status_message(status),
-            diagnostics=status.invalid_diagnostics,
+            diagnostics=_status_diagnostics(status),
         )._normalized()
 
     def apply_view(self, view: UiGameView) -> FiniteDecisionUiState:
         """Apply viewer-scoped pending-decision state from a refreshed projection."""
 
+        pending_decision = (
+            None
+            if self.status_kind in {"unsupported", "terminal", "fatal"}
+            else view.pending_decision
+        )
         return replace(
             self,
-            pending_decision=view.pending_decision,
+            pending_decision=pending_decision,
             highlighted_option_index=_highlighted_option_index_for_transition(
                 current_decision=self.pending_decision,
-                next_decision=view.pending_decision,
+                next_decision=pending_decision,
                 current_index=self.highlighted_option_index,
             ),
         )._normalized()
@@ -352,11 +360,13 @@ def refresh_submission_projection(
 ) -> SubmissionRefreshResult:
     """Refresh status, projection, and events for the actor who owns the next request."""
 
-    refreshed_state = state.apply_status(status)
     refresh_viewer_player_id = refresh_viewer_player_id_for_status(
         status=status,
         fallback_viewer_player_id=fallback_viewer_player_id,
     )
+    if refresh_viewer_player_id != fallback_viewer_player_id:
+        state = replace(state, event_cursor=0, event_log_lines=(), event_payloads=())
+    refreshed_state = state.apply_status(status)
     refreshed_view = client.get_view(refresh_viewer_player_id)
     refreshed_state = refreshed_state.apply_view(refreshed_view)
     event_delta = client.get_events_since(refreshed_state.event_cursor, refresh_viewer_player_id)
@@ -366,6 +376,18 @@ def refresh_submission_projection(
         refreshed_view=refreshed_view,
         viewer_player_id=refresh_viewer_player_id,
     )
+
+
+def status_after_submission(
+    *,
+    submitted_status: UiClientStatus,
+    client: UiCoreClient,
+) -> UiClientStatus:
+    """Advance only when Core reports an applied action awaiting continuation."""
+
+    if submitted_status.status_kind == "advanced":
+        return client.advance_until_decision_or_terminal()
+    return submitted_status
 
 
 def refresh_viewer_player_id_for_status(
@@ -415,6 +437,8 @@ def _status_message(status: UiClientStatus) -> str:
         return status.invalid_diagnostics[0].message
     if status.message is not None:
         return status.message
+    if status.status_kind in {"unsupported", "terminal"}:
+        return status.status_kind
     if status.decision is None:
         return status.status_kind
     if status.decision.is_parameterized:
@@ -426,6 +450,25 @@ def _status_message(status: UiClientStatus) -> str:
         )
         return f"Proposal required: {label}"
     return f"Waiting: {status.decision.decision_type}"
+
+
+def _status_diagnostics(status: UiClientStatus) -> tuple[UiInvalidDiagnostic, ...]:
+    if status.status_kind == "unsupported":
+        message = _status_message(status)
+        if (
+            type(status.payload) is dict
+            and status.payload.get("unsupported_reason") == "transition_budget_exhausted"
+            and "transition_budget_exhausted" not in message
+        ):
+            message = f"{message} (transition_budget_exhausted)"
+        return (
+            UiInvalidDiagnostic(
+                violation_code="core_unsupported",
+                message=message,
+                field="core_engine",
+            ),
+        )
+    return status.invalid_diagnostics
 
 
 def _event_line(event: JsonObject) -> str:

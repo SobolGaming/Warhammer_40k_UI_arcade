@@ -13,6 +13,7 @@ from warhammer40k_arcade_ui.core_client.protocol import (
 )
 from warhammer40k_arcade_ui.state.finite_decision import (
     FiniteDecisionUiState,
+    status_after_submission,
     submit_finite_option,
 )
 
@@ -81,6 +82,36 @@ def test_fatal_game_engine_error_state_clears_pending_decision() -> None:
     assert next_state.diagnostics[0].violation_code == "fatal_game_engine_error"
     assert next_state.diagnostics[0].field == "core_engine"
     assert next_state.diagnostics[0].message == "Missing engine projection field: 'request_id'."
+
+
+def test_submission_continues_only_after_authoritative_advanced_status() -> None:
+    for status_kind in ("waiting_for_decision", "terminal", "invalid", "unsupported"):
+        status = UiClientStatus(stage="battle", status_kind=status_kind)
+        client = FakeCoreClient(status=status)
+
+        assert status_after_submission(submitted_status=status, client=client) is status
+        assert client.advance_call_count == 0
+
+    advanced = UiClientStatus(stage="battle", status_kind="advanced")
+    client = FakeCoreClient(status=advanced)
+    assert status_after_submission(submitted_status=advanced, client=client) is advanced
+    assert client.advance_call_count == 1
+
+
+def test_initial_unsupported_status_displays_diagnostic_without_pending_action() -> None:
+    status = UiClientStatus(
+        stage="battle",
+        status_kind="unsupported",
+        message="Core stopped at its transition safety boundary (transition_budget_exhausted).",
+        payload={"unsupported_reason": "transition_budget_exhausted"},
+    )
+
+    state = FiniteDecisionUiState.from_status(status)
+
+    assert state.status_kind == "unsupported"
+    assert state.pending_decision is None
+    assert state.diagnostics[0].violation_code == "core_unsupported"
+    assert state.diagnostics[0].message == state.status_message
 
 
 def test_submit_finite_option_records_client_submission_and_refreshes_events() -> None:
@@ -152,7 +183,7 @@ def test_submit_finite_option_refreshes_next_actor_view_for_hidden_options() -> 
         event_delta_by_player_id={
             "player-b": UiEventDelta(
                 viewer_player_id="player-b",
-                cursor=3,
+                cursor=0,
                 next_cursor=4,
                 events=(
                     {
@@ -177,11 +208,12 @@ def test_submit_finite_option_refreshes_next_actor_view_for_hidden_options() -> 
 
     assert result.viewer_player_id == "player-b"
     assert fake.view_requests == ["player-b"]
-    assert fake.event_delta_requests == [(3, "player-b")]
+    assert fake.event_delta_requests == [(0, "player-b")]
     assert result.finite_state.pending_decision == next_decision
     assert result.finite_state.highlighted_option is not None
     assert result.finite_state.highlighted_option.option_id == "assassination"
     assert result.finite_state.event_log_lines[-1] == "decision_requested: player-b"
+    assert "ready" not in result.finite_state.event_log_lines
 
 
 def test_submit_finite_option_does_not_call_client_for_parameterized_request() -> None:

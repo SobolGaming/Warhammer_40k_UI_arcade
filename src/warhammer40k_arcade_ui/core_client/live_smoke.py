@@ -36,8 +36,6 @@ type LiveCoreSmokeStopPhase = Literal[
     "scout-move",
     "movement",
     "shooting",
-    "charge",
-    "fight",
 ]
 LIVE_CORE_SMOKE_STOP_PHASES: tuple[LiveCoreSmokeStopPhase, ...] = (
     "setup",
@@ -49,8 +47,6 @@ LIVE_CORE_SMOKE_STOP_PHASES: tuple[LiveCoreSmokeStopPhase, ...] = (
     "scout-move",
     "movement",
     "shooting",
-    "charge",
-    "fight",
 )
 
 _SETUP_STOP_DECISION_TYPES = {
@@ -62,8 +58,30 @@ _SETUP_STOP_DECISION_TYPES = {
     "prebattle": "select_prebattle_action",
     "scout-move": "submit_scout_move",
 }
-_BATTLE_STOP_PHASES = {"movement", "shooting", "charge", "fight"}
+_BATTLE_STOP_PHASES = {"movement", "shooting"}
 _MAX_AUTOMATED_DECISIONS = 200
+_CANONICAL_DEPLOYMENT_OPTION_IDS = (
+    "deploy:army-beta:scout-redeploy-unit",
+    "deploy:army-alpha:deep-strike-unit",
+    "deploy:army-alpha:scout-redeploy-unit",
+    "deploy:army-alpha:strategic-reserve-unit",
+)
+_CANONICAL_REDEPLOY_OPTION_IDS = {
+    "player-a": "redeploy:army-alpha:scout-redeploy-unit",
+    "player-b": "redeploy:army-beta:scout-redeploy-unit",
+}
+_CANONICAL_SCOUT_OPTION_IDS = {
+    "player-a": "scout_move:army-alpha:scout-redeploy-unit",
+    "player-b": "scout_move:army-beta:scout-redeploy-unit",
+}
+_CANONICAL_MOVEMENT_OPTION_IDS = {
+    "player-a": (
+        "army-alpha:deep-strike-unit",
+        "army-alpha:scout-redeploy-unit",
+        "army-alpha:strategic-reserve-unit",
+    ),
+    "player-b": ("army-beta:scout-redeploy-unit",),
+}
 
 
 class LiveCoreSmokeError(ValueError):
@@ -93,8 +111,9 @@ def build_live_core_smoke_startup(
 
     stop_phase = _validated_stop_phase(stop_at_phase)
     client = LocalSessionClient()
-    client.start_game(canonical_setup_prebattle_smoke_config())
-    status = client.advance_until_decision_or_terminal()
+    status = client.start_game(canonical_setup_prebattle_smoke_config())
+    if status.status_kind == "advanced" and status.decision is None:
+        status = client.advance_until_decision_or_terminal()
     status = _drive_to_checkpoint(client=client, status=status, stop_phase=stop_phase)
     return _startup_from_status(
         client=client,
@@ -119,8 +138,18 @@ def _drive_to_checkpoint(
                 raise LiveCoreSmokeError(
                     f"Game became terminal before smoke checkpoint {stop_phase!r}."
                 )
+            if current.status_kind != "advanced":
+                raise LiveCoreSmokeError(
+                    f"Core returned {current.status_kind!r} without a visible decision "
+                    f"before smoke checkpoint {stop_phase!r}."
+                )
             current = client.advance_until_decision_or_terminal()
             continue
+        if current.status_kind != "waiting_for_decision":
+            raise LiveCoreSmokeError(
+                f"Core returned {current.status_kind!r} with an unexpected decision "
+                f"before smoke checkpoint {stop_phase!r}."
+            )
         viewer_id = decision.actor_id or LIVE_CORE_SMOKE_VIEWER_PLAYER_ID
         view = client.get_view(viewer_id)
         if _is_requested_checkpoint(
@@ -131,7 +160,7 @@ def _drive_to_checkpoint(
             return current
         result_id = f"ui-live-smoke-{result_index:06d}"
         if decision.is_parameterized:
-            payload = _automated_parameterized_payload(decision=decision, view=view)
+            payload = _automated_parameterized_payload(decision=decision, view=view, client=client)
             current = client.submit_parameterized_payload(
                 request_id=decision.request_id,
                 payload=payload,
@@ -173,52 +202,69 @@ def _automated_option_id(decision: UiDecision) -> str:
         )
     if decision.decision_type == "select_secondary_missions":
         return _required_option(decision, LIVE_CORE_SMOKE_FIXED_SECONDARY_OPTION_ID)
+    if decision.decision_type == "use_stratagem":
+        return _required_option(decision, "decline_stratagem_window")
     if decision.decision_type == "select_reserve_declaration":
         return _required_option(decision, "complete_reserve_declarations")
     if decision.decision_type == "select_deployment_unit":
-        return option_ids[0]
-    if decision.decision_type == "resolve_ordering":
-        player_b_order = next(
-            (option_id for option_id in option_ids if option_id.endswith(":player-b")),
+        chosen = next(
+            (
+                option_id
+                for option_id in _CANONICAL_DEPLOYMENT_OPTION_IDS
+                if option_id in option_ids
+            ),
             None,
         )
-        return player_b_order or option_ids[0]
+        if chosen is None:
+            raise LiveCoreSmokeError(
+                f"Canonical deployment option is absent from {decision.request_id!r}."
+            )
+        return chosen
     if decision.decision_type == "select_redeploy_unit":
-        redeploy = next(
-            (option_id for option_id in option_ids if option_id.startswith("redeploy:")),
-            None,
+        return _required_option(
+            decision,
+            _canonical_actor_option(decision, _CANONICAL_REDEPLOY_OPTION_IDS),
         )
-        return redeploy or _preferred_completion_option(option_ids)
     if decision.decision_type == "select_prebattle_action":
-        scout = next(
-            (option_id for option_id in option_ids if option_id.startswith("scout_move:")),
+        return _required_option(
+            decision,
+            _canonical_actor_option(decision, _CANONICAL_SCOUT_OPTION_IDS),
+        )
+    if decision.decision_type == "select_movement_unit":
+        actor_id = decision.actor_id
+        if actor_id is None or actor_id not in _CANONICAL_MOVEMENT_OPTION_IDS:
+            raise LiveCoreSmokeError(
+                f"Canonical smoke has no movement actor policy at {decision.request_id!r}."
+            )
+        chosen = next(
+            (
+                option_id
+                for option_id in _CANONICAL_MOVEMENT_OPTION_IDS[actor_id]
+                if option_id in option_ids
+            ),
             None,
         )
-        return scout or _preferred_completion_option(option_ids)
+        if chosen is None:
+            raise LiveCoreSmokeError(
+                f"Canonical movement option is absent from {decision.request_id!r}."
+            )
+        return chosen
     if decision.decision_type == "select_movement_action":
-        return _first_available_option(
-            option_ids,
-            ("remain_stationary", "normal_move", "fall_back"),
+        return _required_option(decision, "remain_stationary")
+    raise LiveCoreSmokeError(
+        f"Canonical smoke has no option policy for {decision.decision_type!r} "
+        f"at {decision.request_id!r}."
+    )
+
+
+def _canonical_actor_option(decision: UiDecision, choices: dict[str, str]) -> str:
+    actor_id = decision.actor_id
+    if actor_id is None or actor_id not in choices:
+        raise LiveCoreSmokeError(
+            f"Canonical smoke has no actor policy for {decision.decision_type!r} "
+            f"at {decision.request_id!r}."
         )
-    return _preferred_completion_option(option_ids)
-
-
-def _preferred_completion_option(option_ids: tuple[str, ...]) -> str:
-    for token in ("complete", "decline", "pass", "skip", "none", "no_"):
-        option = next((value for value in option_ids if token in value.lower()), None)
-        if option is not None:
-            return option
-    return option_ids[0]
-
-
-def _first_available_option(
-    option_ids: tuple[str, ...],
-    preferred: tuple[str, ...],
-) -> str:
-    for option_id in preferred:
-        if option_id in option_ids:
-            return option_id
-    return _preferred_completion_option(option_ids)
+    return choices[actor_id]
 
 
 def _required_option(decision: UiDecision, option_id: str) -> str:
@@ -233,6 +279,7 @@ def _automated_parameterized_payload(
     *,
     decision: UiDecision,
     view: UiGameView,
+    client: LocalSessionClient,
 ) -> JsonObject:
     interaction = decision.interaction
     proposal = decision.parameterized_proposal
@@ -242,9 +289,20 @@ def _automated_parameterized_payload(
         raise LiveCoreSmokeError(
             f"Smoke request {decision.decision_type!r} requires explicit variant selection."
         )
+    if decision.decision_type == "submit_stratagem_target_proposal":
+        request = decision.payload
+        if type(request) is dict and request.get("declinable") is True:
+            return {"submission_kind": "decline_stratagem_window"}
+        raise LiveCoreSmokeError("Smoke Stratagem proposal does not declare a decline option.")
     kind = interaction.interaction_kind
     if kind in {"model_pose_placement", "multi_model_placement"}:
-        return _placement_payload(proposal.payload, view=view)
+        return _placement_payload(
+            proposal.payload,
+            view=view,
+            support_profile=client.get_support_profile(
+                _required_string(proposal.payload, "player_id")
+            ),
+        )
     if kind == "path_editor" and proposal.proposal_kind == "scout_move":
         return _scout_move_payload(proposal.payload, view=view)
     raise LiveCoreSmokeError(
@@ -253,18 +311,44 @@ def _automated_parameterized_payload(
     )
 
 
-def _placement_payload(request: JsonObject, *, view: UiGameView) -> JsonObject:
+def _placement_payload(
+    request: JsonObject, *, view: UiGameView, support_profile: UiSupportProfile
+) -> JsonObject:
     decision_type = _required_string(request, "decision_type")
     unit_id = _required_string(request, "unit_instance_id")
     player_id = _optional_string(request, "player_id") or _required_string(request, "actor_id")
     model_ids = tuple(_string_list(request, "model_instance_ids"))
     if not model_ids:
         raise LiveCoreSmokeError("Smoke placement request has no model_instance_ids.")
+    component_ids = tuple(_string_list(request, "component_unit_instance_ids"))
+    if not component_ids or len(component_ids) != len(set(component_ids)):
+        raise LiveCoreSmokeError("Smoke placement request has no unique component inventory.")
+    army_id = _public_smoke_army_id(
+        view=view,
+        support_profile=support_profile,
+        player_id=player_id,
+    )
+    physical_component_ids: set[str] = set()
+    for model_id in model_ids:
+        model = _projected_model(view, model_id)
+        if model is None:
+            raise LiveCoreSmokeError(f"Smoke model {model_id!r} is absent from the projection.")
+        component_id = _required_string(model, "unit_instance_id")
+        if (
+            component_id not in component_ids
+            or _required_string(model, "owner_player_id") != player_id
+        ):
+            raise LiveCoreSmokeError(f"Smoke model {model_id!r} differs from request ownership.")
+        physical_component_ids.add(component_id)
+    if physical_component_ids != set(component_ids):
+        raise LiveCoreSmokeError("Smoke placement inventory omits a current component.")
     model_placements: list[JsonValue] = [
         {
-            "army_id": unit_id.split(":", maxsplit=1)[0],
+            "army_id": army_id,
             "player_id": player_id,
-            "unit_instance_id": unit_id,
+            "unit_instance_id": _required_string(
+                _required_projected_model(view, model_id), "unit_instance_id"
+            ),
             "model_instance_id": model_id,
             "pose": _placement_pose_payload(
                 index=index,
@@ -335,12 +419,22 @@ def _scout_move_payload(request: JsonObject, *, view: UiGameView) -> JsonObject:
     unit_id = _required_string(request, "unit_instance_id")
     model_ids = tuple(_string_list(request, "model_instance_ids"))
     if not model_ids:
-        model_ids = _placed_model_ids_for_unit(view, unit_id)
+        raise LiveCoreSmokeError("Smoke Scout request has no model_instance_ids.")
+    component_ids = tuple(_string_list(request, "component_unit_instance_ids"))
+    if not component_ids or len(component_ids) != len(set(component_ids)):
+        raise LiveCoreSmokeError("Smoke Scout request has no unique component inventory.")
     model_paths: list[JsonValue] = []
+    physical_component_ids: set[str] = set()
     for model_id in model_ids:
         model = _projected_model(view, model_id)
         if model is None or model.get("pose") is None:
             raise LiveCoreSmokeError(f"Scout model {model_id!r} has no projected pose.")
+        component_id = _required_string(model, "unit_instance_id")
+        if component_id not in component_ids or _required_string(
+            model, "owner_player_id"
+        ) != _required_string(request, "player_id"):
+            raise LiveCoreSmokeError(f"Scout model {model_id!r} differs from request ownership.")
+        physical_component_ids.add(component_id)
         start = _proposal_pose_from_projected(_required_object(model, "pose"))
         position = _required_object(start, "position")
         x = _required_number(position, "x")
@@ -357,6 +451,8 @@ def _scout_move_payload(request: JsonObject, *, view: UiGameView) -> JsonObject:
                 ],
             }
         )
+    if physical_component_ids != set(component_ids):
+        raise LiveCoreSmokeError("Smoke Scout inventory omits a current component.")
     payload: JsonObject = {
         "proposal_request_id": _required_string(request, "request_id"),
         "proposal_kind": _required_string(request, "proposal_kind"),
@@ -385,17 +481,47 @@ def _projected_model(view: UiGameView, model_id: str) -> JsonObject | None:
     return None if value is None else _required_object(models, model_id)
 
 
-def _placed_model_ids_for_unit(view: UiGameView, unit_id: str) -> tuple[str, ...]:
-    battlefield = view.battlefield_view
-    if battlefield is None:
-        raise LiveCoreSmokeError("Smoke proposal requires canonical battlefield_view.")
-    models = _required_object(battlefield.authoritative, "models_by_id")
-    return tuple(
-        model_id
-        for model_id in sorted(models)
-        if _required_string(_required_object(models, model_id), "unit_instance_id") == unit_id
-        and _required_object(models, model_id).get("pose") is not None
+def _required_projected_model(view: UiGameView, model_id: str) -> JsonObject:
+    model = _projected_model(view, model_id)
+    if model is None:
+        raise LiveCoreSmokeError(f"Smoke model {model_id!r} is absent from the projection.")
+    return model
+
+
+def _public_smoke_army_id(
+    *, view: UiGameView, support_profile: UiSupportProfile, player_id: str
+) -> str:
+    if support_profile.game_id != view.game_id:
+        raise LiveCoreSmokeError("Smoke support profile differs from the current game.")
+    battlefield_state = view.battlefield_state
+    placed_armies = (
+        [] if battlefield_state is None else _json_object(battlefield_state).get("placed_armies")
     )
+    if type(placed_armies) is not list:
+        raise LiveCoreSmokeError("Smoke battlefield has no public placed-army rows.")
+    placed_army_ids = tuple(
+        _required_string(row, "army_id")
+        for value in placed_armies
+        if (row := _json_object(value)).get("player_id") == player_id
+    )
+    if len(placed_army_ids) > 1:
+        raise LiveCoreSmokeError("Smoke placement has multiple placed owner armies.")
+    rows = support_profile.payload.get("mustering_support_rows")
+    if type(rows) is not list:
+        raise LiveCoreSmokeError("Smoke support profile has no mustering rows.")
+    mustered_army_ids = tuple(
+        _required_string(row, "army_id")
+        for value in rows
+        if (row := _json_object(value)).get("player_id") == player_id
+    )
+    if len(mustered_army_ids) > 1 or (
+        placed_army_ids and mustered_army_ids and placed_army_ids != mustered_army_ids
+    ):
+        raise LiveCoreSmokeError("Smoke placement has conflicting public owner armies.")
+    army_ids = placed_army_ids or mustered_army_ids
+    if not army_ids:
+        raise LiveCoreSmokeError("Smoke placement requires one public owner army.")
+    return army_ids[0]
 
 
 def _proposal_pose_from_projected(pose: JsonObject) -> JsonObject:
@@ -486,6 +612,10 @@ def _required_decision(status: UiClientStatus) -> UiDecision:
 
 
 def _raise_for_invalid_status(status: UiClientStatus) -> None:
+    if status.status_kind == "unsupported":
+        raise LiveCoreSmokeError(
+            f"Core stopped smoke automation: {status.message or 'unsupported status'}"
+        )
     if status.status_kind != "invalid":
         return
     diagnostic = status.invalid_diagnostics[0] if status.invalid_diagnostics else None

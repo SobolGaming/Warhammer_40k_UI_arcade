@@ -4,14 +4,27 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from tests.support.contract_fixtures import decision_from_fixture
-from warhammer40k_arcade_ui.core_client.protocol import UiDecision
+import pytest
+
+from tests.support.contract_fixtures import current_decision_payload, decision_from_fixture
+from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
+    UiClientProtocolError,
+    UiDecision,
+)
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.render.view_models import BattlefieldView
-from warhammer40k_arcade_ui.state.entity_selection import EntityRef, entity_ref_for_model
+from warhammer40k_arcade_ui.state.entity_selection import (
+    EntityRef,
+    EntitySelectionError,
+    entity_ref_for_model,
+    movement_entity_selection_profile,
+    movement_proposal_unit,
+)
 from warhammer40k_arcade_ui.state.movement_draft import (
     MovementDraft,
+    MovementDraftError,
     movement_proposal_for_selected_unit,
     unsupported_parameterized_tool_label,
 )
@@ -71,6 +84,55 @@ def test_movement_draft_seed_from_unit_selection_expands_to_all_models() -> None
         "intercessor_1",
         "intercessor_2",
         "intercessor_3",
+    )
+
+
+def test_parsed_scout_actor_must_own_public_player_component_before_draft() -> None:
+    view = default_battlefield_view()
+    valid = _scout_move_proposal_decision(action_kind="scout_move")
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=valid,
+    )
+    assert draft is not None
+    assert draft.player_id == "player_1"
+    assert len(draft.model_paths) == 3
+
+    malformed = _scout_move_proposal_payload(action_kind="scout_move", actor_id="player_2")
+    with pytest.raises(UiClientProtocolError, match="Scout Move player_id must match actor_id"):
+        UiDecision.from_payload(malformed)
+
+
+def test_scout_actor_drift_fails_shared_selection_and_draft() -> None:
+    decision = _scout_move_proposal_decision(action_kind="scout_move")
+    proposal = decision.movement_proposal
+    assert proposal is not None
+    # Simulate an incompatible post-parse object so the shared guards are exercised directly.
+    object.__setattr__(proposal, "actor_id", "player_2")
+    object.__setattr__(decision, "actor_id", "player_2")
+    view = default_battlefield_view()
+    selection = _selected_intercessors()
+
+    with pytest.raises(EntitySelectionError, match="player_id differs from the current actor"):
+        movement_proposal_unit(view=view, proposal=proposal)
+    profile = movement_entity_selection_profile(view=view, decision=decision)
+    assert profile.candidate_refs == ()
+    assert profile.unsupported_reason is not None
+    assert "player_id differs" in profile.unsupported_reason
+    with pytest.raises(MovementDraftError, match="player_id differs from the current actor"):
+        MovementDraft.start_for_pending(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+        )
+    assert (
+        movement_proposal_for_selected_unit(
+            view=view,
+            selection=selection,
+            pending_decision=decision,
+        )
+        is None
     )
 
 
@@ -227,8 +289,6 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     payload = draft.payload_preview
 
     assert payload is not None
-    assert draft.synthetic_witness_model_ids == ()
-    assert draft.synthetic_witness_point_count == 0
     assert not any("synthetic midpoint witness evidence" in hint for hint in draft.local_hint_lines)
     assert draft.payload_witness_summary_lines == (
         "intercessor_1: 2 witness point(s)",
@@ -271,7 +331,67 @@ def test_payload_preview_includes_explicit_no_op_paths_for_unchanged_models() ->
     assert second_movement["final_pose"] == second_poses[-1]
 
 
-def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
+@pytest.mark.parametrize("proposal_kind", ["normal_move", "scout_move"])
+def test_movement_payload_preserves_each_model_elevation_and_facing(
+    proposal_kind: str,
+) -> None:
+    view = default_battlefield_view()
+    source = view.units[0]
+    elevations_and_facings = ((1.5, 45.0), (2.25, 120.0), (-0.5, 270.0))
+    source = replace(
+        source,
+        models=tuple(
+            replace(model, elevation_z_inches=z, facing_degrees=facing)
+            for model, (z, facing) in zip(source.models, elevations_and_facings, strict=True)
+        ),
+    )
+    view = replace(view, units=(source, *view.units[1:]))
+    decision = (
+        _scout_move_proposal_decision(action_kind="scout_move")
+        if proposal_kind == "scout_move"
+        else _movement_proposal_decision()
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(view=view),
+        pending_decision=decision,
+    )
+    assert draft is not None
+    payload = (
+        draft.add_waypoint(view=view, world_point=(10.0, 18.0))
+        .mark_ready(view=view)
+        .payload_preview
+    )
+    assert payload is not None
+    paths = _witness_model_paths(payload)
+    assert set(paths) == {model.model_id for model in source.models}
+    for model in source.models:
+        poses = paths[model.model_id]["poses"]
+        assert type(poses) is list
+        for pose in poses:
+            assert type(pose) is dict
+            position = pose["position"]
+            facing = pose["facing"]
+            assert type(position) is dict
+            assert type(facing) is dict
+            assert position["z"] == model.elevation_z_inches
+            assert facing["degrees"] == model.facing_degrees
+        if model.model_id != "intercessor_1":
+            assert poses == [poses[0], poses[0]]
+    if proposal_kind == "normal_move":
+        movements = payload["model_movements"]
+        assert type(movements) is list
+        for row in movements:
+            assert type(row) is dict
+            model_id = row["model_instance_id"]
+            assert type(model_id) is str
+            witness_poses = paths[model_id]["poses"]
+            assert type(witness_poses) is list
+            assert row["path"] == witness_poses
+            assert row["final_pose"] == witness_poses[-1]
+
+
+def test_charge_move_payload_preserves_entered_witness_and_committed_targets() -> None:
     view = default_battlefield_view()
     selection = _selected_intercessors()
     decision = _movement_proposal_decision(
@@ -280,7 +400,8 @@ def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
         context={
             "movement_mode": "charge",
             "maximum_distance_inches": 7.0,
-            "reachable_target_unit_instance_ids": ["guardian_squad"],
+            "reachable_target_unit_instance_ids": ["guardian_squad", "other_reachable"],
+            "target_selection": {"target_ids": ["guardian_squad"]},
         },
     )
     draft = MovementDraft.start_for_pending(
@@ -289,7 +410,22 @@ def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
         pending_decision=decision,
     )
     assert draft is not None
-    ready = draft.add_waypoint(view=view, world_point=(10.0, 18.0)).mark_ready(view=view)
+    one_waypoint = draft.add_waypoint(view=view, world_point=(10.0, 18.0))
+    one_waypoint_witness = one_waypoint.to_payload()["witness"]
+    assert type(one_waypoint_witness) is dict
+    one_waypoint_paths = one_waypoint_witness["model_paths"]
+    assert type(one_waypoint_paths) is list
+    one_waypoint_path = one_waypoint_paths[0]
+    assert type(one_waypoint_path) is dict
+    assert one_waypoint_path["poses"] == [
+        {"position": {"x": 7.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
+        {"position": {"x": 10.0, "y": 18.0, "z": 0.0}, "facing": {"degrees": 0.0}},
+    ]
+    ready = (
+        draft.add_waypoint(view=view, world_point=(8.5, 18.0))
+        .add_waypoint(view=view, world_point=(10.0, 18.0))
+        .mark_ready(view=view)
+    )
 
     payload = ready.payload_preview
 
@@ -297,7 +433,6 @@ def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
     assert payload["proposal_kind"] == "charge_move"
     assert payload["movement_mode"] == "charge"
     assert payload["charge_target_unit_instance_ids"] == ["guardian_squad"]
-    assert ready.synthetic_witness_model_ids == ("intercessor_1",)
     witness = payload["witness"]
     assert type(witness) is dict
     model_paths = witness["model_paths"]
@@ -311,6 +446,109 @@ def test_charge_move_payload_uses_sampled_witness_and_charge_targets() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("proposal_kind", "action_kind"),
+    [
+        ("scout_move", "scout_move"),
+        ("scout_move", "dedicated_transport_scout_move"),
+        ("pile_in", "pile_in"),
+        ("consolidate", "consolidate"),
+    ],
+)
+def test_current_path_witness_preserves_entered_endpoints_and_waypoints(
+    proposal_kind: str, action_kind: str
+) -> None:
+    view = default_battlefield_view()
+    decision = (
+        _scout_move_proposal_decision(action_kind=action_kind)
+        if proposal_kind == "scout_move"
+        else _movement_proposal_decision(
+            proposal_kind=proposal_kind,
+            movement_phase_action=proposal_kind,
+            phase="fight",
+            context={
+                "movement_mode": proposal_kind,
+                "maximum_distance_inches": 3.0,
+                f"legal_{proposal_kind}_target_unit_instance_ids": ["guardian_squad"],
+                "legal_consolidation_modes": ["engaging"] if proposal_kind == "consolidate" else [],
+            },
+        )
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+    assert draft is not None
+
+    endpoint_only = draft.add_waypoint(view=view, world_point=(9.0, 18.0)).mark_ready(view=view)
+    endpoint_payload = endpoint_only.payload_preview
+    assert endpoint_payload is not None
+    assert endpoint_payload["proposal_request_id"] == decision.request_id
+    assert endpoint_payload["proposal_kind"] == proposal_kind
+    if proposal_kind == "scout_move":
+        assert endpoint_payload["action_kind"] == action_kind
+        assert endpoint_payload["source_rule_id"] == "core:scouts"
+        assert endpoint_payload["scout_distance_inches"] == 6.0
+    else:
+        assert endpoint_payload["movement_mode"] == proposal_kind
+        assert endpoint_payload["movement_phase_action"] == proposal_kind
+    endpoint_paths = _witness_model_paths(endpoint_payload)
+    assert _path_points(endpoint_paths["intercessor_1"]) == ((7.0, 18.0), (9.0, 18.0))
+    assert _path_points(endpoint_paths["intercessor_2"]) == ((7.0, 22.0), (7.0, 22.0))
+    assert _path_points(endpoint_paths["intercessor_3"]) == ((7.0, 26.0), (7.0, 26.0))
+    assert endpoint_only.payload_witness_summary_lines[0] == "intercessor_1: 2 witness point(s)"
+    if proposal_kind != "scout_move":
+        movements = endpoint_payload["model_movements"]
+        assert type(movements) is list
+        movement_paths: dict[str, object] = {}
+        for row in movements:
+            assert type(row) is dict
+            model_id = row.get("model_instance_id")
+            assert type(model_id) is str
+            movement_paths[model_id] = row["path"]
+        assert movement_paths == {
+            model_id: path["poses"] for model_id, path in endpoint_paths.items()
+        }
+
+    with_waypoint = (
+        draft.add_waypoint(view=view, world_point=(8.0, 18.5))
+        .add_waypoint(view=view, world_point=(9.0, 18.0))
+        .mark_ready(view=view)
+    )
+    waypoint_payload = with_waypoint.payload_preview
+    assert waypoint_payload is not None
+    waypoint_paths = _witness_model_paths(waypoint_payload)
+    assert _path_points(waypoint_paths["intercessor_1"]) == (
+        (7.0, 18.0),
+        (8.0, 18.5),
+        (9.0, 18.0),
+    )
+    assert with_waypoint.payload_witness_summary_lines[0] == "intercessor_1: 3 witness point(s)"
+
+
+def test_charge_move_refuses_missing_target_commitment() -> None:
+    view = default_battlefield_view()
+    decision = _movement_proposal_decision(
+        proposal_kind="charge_move",
+        movement_phase_action="charge_move",
+        context={
+            "movement_mode": "charge",
+            "maximum_distance_inches": 7.0,
+            "reachable_target_unit_instance_ids": ["guardian_squad"],
+        },
+    )
+    draft = MovementDraft.start_for_pending(
+        view=view,
+        selection=_selected_intercessors(),
+        pending_decision=decision,
+    )
+    assert draft is not None
+
+    with pytest.raises(MovementDraftError, match=r"context.target_selection.*JSON object"):
+        draft.add_waypoint(view=view, world_point=(10.0, 18.0)).to_payload()
+
+
 def test_charge_move_no_move_payload_omits_witness() -> None:
     view = default_battlefield_view()
     decision = _movement_proposal_decision(
@@ -320,6 +558,7 @@ def test_charge_move_no_move_payload_omits_witness() -> None:
             "movement_mode": "charge",
             "maximum_distance_inches": 7.0,
             "reachable_target_unit_instance_ids": ["guardian_squad"],
+            "target_selection": {"target_ids": ["guardian_squad"]},
         },
     )
     draft = MovementDraft.start_for_pending(
@@ -470,6 +709,24 @@ def test_start_for_pending_does_not_use_proposal_unit_when_selection_drifted() -
     assert draft is None
 
 
+def test_movement_draft_rejects_foreign_model_in_actor_focus() -> None:
+    view = default_battlefield_view()
+    preferences = default_preferences()
+    stale = SelectionState.initial(preferences).select_model_id(
+        unit_id="intercessor_squad",
+        model_id="guardian_1",
+        preferences=preferences,
+    )
+    assert (
+        MovementDraft.start_for_pending(
+            view=view,
+            selection=stale,
+            pending_decision=_movement_proposal_decision(),
+        )
+        is None
+    )
+
+
 def test_assignment_views_expose_summary_friendly_model_states() -> None:
     view = default_battlefield_view()
     model_2 = _model_ref("intercessor_2")
@@ -578,6 +835,7 @@ def _movement_proposal_decision(
     request_id: str = "decision-request-000005",
     proposal_kind: str = "normal_move",
     movement_phase_action: str = "normal_move",
+    phase: str = "movement",
     context: dict[str, object] | None = None,
 ) -> UiDecision:
     proposal_context = (
@@ -601,7 +859,7 @@ def _movement_proposal_decision(
                     "actor_id": "player_1",
                     "game_id": "phase9-game",
                     "battle_round": 1,
-                    "phase": "movement",
+                    "phase": phase,
                     "unit_instance_id": "intercessor_squad",
                     "proposal_kind": proposal_kind,
                     "source_decision_request_id": "decision-request-000004",
@@ -621,6 +879,89 @@ def _movement_proposal_decision(
             ],
         }
     )
+
+
+def _scout_move_proposal_decision(*, action_kind: str) -> UiDecision:
+    return UiDecision.from_payload(_scout_move_proposal_payload(action_kind=action_kind))
+
+
+def _scout_move_proposal_payload(*, action_kind: str, actor_id: str = "player_1") -> JsonObject:
+    request_id = "decision-request-scout-endpoints"
+    return current_decision_payload(
+        {
+            "request_id": request_id,
+            "decision_type": "submit_scout_move",
+            "actor_id": actor_id,
+            "payload": {
+                "proposal_request": {
+                    "request_id": request_id,
+                    "decision_type": "submit_scout_move",
+                    "actor_id": actor_id,
+                    "game_id": "scout-endpoint-fixture",
+                    "setup_step": "resolve_prebattle_actions",
+                    "player_id": "player_1",
+                    "unit_instance_id": "intercessor_squad",
+                    "component_unit_instance_ids": ["intercessor_squad"],
+                    "model_instance_ids": [
+                        "intercessor_1",
+                        "intercessor_2",
+                        "intercessor_3",
+                    ],
+                    "proposal_kind": "scout_move",
+                    "action_kind": action_kind,
+                    "source_rule_id": "core:scouts",
+                    "placement_kind": None,
+                    "scout_distance_inches": 6.0,
+                    "deployment_zone_ids": ["deployment-zone-a"],
+                    "legal_deployment_zones": [],
+                    "mission_setup": {},
+                    "ruleset_descriptor_hash": "ruleset-scout-endpoints",
+                    "source_decision_request_id": "decision-request-prebattle-endpoints",
+                    "source_decision_result_id": "ui-result-prebattle-endpoints",
+                    "context": {"source_selected_option_id": f"{action_kind}:intercessor_squad"},
+                }
+            },
+            "is_parameterized": True,
+            "options": [
+                {
+                    "option_id": "submit_parameterized_payload",
+                    "label": "Submit Parameterized Payload",
+                    "payload": {"submission_kind": "parameterized"},
+                }
+            ],
+        }
+    )
+
+
+def _witness_model_paths(payload: JsonObject) -> dict[str, JsonObject]:
+    witness = payload.get("witness")
+    assert type(witness) is dict
+    rows = witness.get("model_paths")
+    assert type(rows) is list
+    paths: dict[str, JsonObject] = {}
+    for row in rows:
+        assert type(row) is dict
+        model_id = row.get("model_id")
+        assert type(model_id) is str
+        paths[model_id] = row
+    return paths
+
+
+def _path_points(path: JsonObject) -> tuple[tuple[float, float], ...]:
+    poses = path.get("poses")
+    assert type(poses) is list
+    points: list[tuple[float, float]] = []
+    for pose in poses:
+        assert type(pose) is dict
+        position = pose.get("position")
+        assert type(position) is dict
+        x, y = position.get("x"), position.get("y")
+        assert isinstance(x, (int, float))
+        assert not isinstance(x, bool)
+        assert isinstance(y, (int, float))
+        assert not isinstance(y, bool)
+        points.append((float(x), float(y)))
+    return tuple(points)
 
 
 def _shooting_proposal_decision() -> UiDecision:

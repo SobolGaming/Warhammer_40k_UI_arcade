@@ -8,10 +8,17 @@ from warhammer40k_core.adapters.access_control import ViewerContext
 from warhammer40k_core.adapters.contracts import AdapterGameSession
 from warhammer40k_core.adapters.event_stream import EventStreamCursor
 from warhammer40k_core.adapters.local_session import LocalGameSession
-from warhammer40k_core.adapters.redaction import public_support_profile_payload
+from warhammer40k_core.adapters.redaction import (
+    public_support_profile_payload,
+    redacted_lifecycle_status,
+)
 from warhammer40k_core.engine.decision_request import DecisionError
 from warhammer40k_core.engine.game_state import GameConfig
-from warhammer40k_core.engine.phase import GameLifecycleError, LifecycleStatus
+from warhammer40k_core.engine.phase import (
+    GameLifecycleError,
+    LifecycleStatus,
+    LifecycleStatusKind,
+)
 
 from warhammer40k_arcade_ui.core_client.compatibility import require_supported_core_contract
 from warhammer40k_arcade_ui.core_client.protocol import (
@@ -158,10 +165,17 @@ class LocalSessionClient:
 
     def _status_from_lifecycle(self, status: LifecycleStatus) -> UiClientStatus:
         decision, viewer_player_id = self._projected_decision_for_status(status)
+        if viewer_player_id is None:
+            message, payload = _actorless_status_details(status)
+        else:
+            public_status = redacted_lifecycle_status(
+                status,
+                viewer=ViewerContext.for_player(viewer_player_id),
+            )
+            message = public_status["message"]
+            payload = validate_json_value(public_status["payload"])
         if viewer_player_id is not None:
             self._last_viewer_player_id = viewer_player_id
-        message = status.message
-        payload = validate_json_value(status.payload)
         status_kind = status.status_kind.value
         return UiClientStatus(
             stage=status.stage.value,
@@ -187,3 +201,24 @@ class LocalSessionClient:
             return None, None
         view = UiGameView.from_payload(self.session.view(viewer_player_id=viewer_player_id))
         return view.pending_decision, viewer_player_id
+
+
+def _actorless_status_details(status: LifecycleStatus) -> tuple[str | None, JsonValue]:
+    """Expose only known global failure reasons before a player view exists."""
+
+    if status.status_kind is LifecycleStatusKind.UNSUPPORTED:
+        payload = status.payload
+        if (
+            type(payload) is dict
+            and payload.get("unsupported_reason") == "transition_budget_exhausted"
+        ):
+            return (
+                "Core stopped at its transition safety boundary (transition_budget_exhausted).",
+                {"unsupported_reason": "transition_budget_exhausted"},
+            )
+        return ("Core reported an unsupported status before a player view was available.", None)
+    if status.status_kind is LifecycleStatusKind.INVALID:
+        return ("Core reported an invalid status before a player view was available.", None)
+    if status.status_kind is LifecycleStatusKind.TERMINAL:
+        return ("Core ended before a player view was available.", None)
+    return (None, None)

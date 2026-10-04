@@ -19,9 +19,13 @@ from warhammer40k_arcade_ui.render.view_models import BattlefieldView, UnitView
 from warhammer40k_arcade_ui.state.assignment_workspace import is_assignment_parameterized_decision
 from warhammer40k_arcade_ui.state.entity_selection import (
     EntityRef,
+    EntitySelectionError,
     EntitySelectionState,
     build_entity_selection_profile,
-    entity_ref_for_model,
+    model_entity_ref,
+    movement_proposal_component_unit_ids,
+    movement_proposal_unit,
+    movement_selection_matches_actor,
     unit_entity_ref,
 )
 from warhammer40k_arcade_ui.state.interaction_dispatch import (
@@ -51,14 +55,6 @@ SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS = frozenset(
         "advance",
         "fall_back",
         "surge_move",
-        "charge_move",
-        "pile_in",
-        "consolidate",
-        "scout_move",
-    )
-)
-SAMPLED_WITNESS_PROPOSAL_KINDS = frozenset(
-    (
         "charge_move",
         "pile_in",
         "consolidate",
@@ -102,7 +98,6 @@ class MovementProposalProfile:
 
     proposal_kind: str
     decision_type: str
-    requires_sampled_witness: bool
     allows_no_witness_no_move: bool
     distance_context_key: str | None
 
@@ -120,11 +115,23 @@ class MovementModelPath:
     model_id: str
     base_radius: float
     points: tuple[WorldPoint, ...]
+    elevation_z_inches: float = 0.0
+    facing_degrees: float = 0.0
     assignment_group_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "model_id", _non_empty_string("model_id", self.model_id))
         _validate_positive("base_radius", self.base_radius)
+        object.__setattr__(
+            self,
+            "elevation_z_inches",
+            _validated_finite_float("elevation_z_inches", self.elevation_z_inches),
+        )
+        object.__setattr__(
+            self,
+            "facing_degrees",
+            _validated_finite_float("facing_degrees", self.facing_degrees),
+        )
         if type(self.points) is not tuple or not self.points:
             raise MovementDraftError("MovementModelPath points must be a non-empty tuple.")
         object.__setattr__(
@@ -150,31 +157,17 @@ class MovementModelPath:
 
         return any(math.dist(start, end) > 0.0 for start, end in pairwise(self.points))
 
-    def uses_synthetic_payload_midpoint(self, *, requires_sampled_witness: bool) -> bool:
-        """Return whether payload serialization inserts midpoint witness evidence."""
-
-        return (
-            requires_sampled_witness
-            and len(self.points) == 2
-            and math.dist(self.points[0], self.points[1]) > 0.0
-        )
-
     @property
     def path_length_inches(self) -> float:
         """Return total path length in inches."""
 
         return _polyline_length(self.points)
 
-    def payload_points(self, *, requires_sampled_witness: bool) -> tuple[WorldPoint, ...]:
-        """Return payload points, including explicit no-op start/end for unchanged models."""
+    def payload_points(self) -> tuple[WorldPoint, ...]:
+        """Preserve entered points and expand an unchanged model to explicit start/end."""
 
         if len(self.points) == 1:
             return (self.points[0], self.points[0])
-        if self.uses_synthetic_payload_midpoint(requires_sampled_witness=requires_sampled_witness):
-            # The engine needs non-endpoint path evidence even for straight moved segments.
-            start, end = self.points
-            midpoint = ((start[0] + end[0]) / 2.0, (start[1] + end[1]) / 2.0)
-            return (start, midpoint, end)
         return self.points
 
     def with_translated_waypoint(
@@ -293,6 +286,7 @@ class MovementDraft:
     projection_state_hash: str | None = None
     ready_payload: JsonObject | None = None
     next_assignment_group_index: int = 1
+    component_unit_instance_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -355,6 +349,8 @@ class MovementDraft:
             movement_phase_action=self.movement_phase_action,
             movement_mode=self.movement_mode,
             fall_back_mode=self.fall_back_mode,
+            allows_nullable_movement_mode=self.proposal_context.get("context_kind")
+            == "triggered_movement",
         )
         if context_diagnostic is not None:
             raise MovementDraftError(context_diagnostic.message)
@@ -430,6 +426,19 @@ class MovementDraft:
             or self.next_assignment_group_index < 1
         ):
             raise MovementDraftError("next_assignment_group_index must be a positive integer.")
+        component_ids = self.component_unit_instance_ids
+        if type(component_ids) is not tuple:
+            raise MovementDraftError("component_unit_instance_ids must be unique IDs.")
+        normalized_component_ids = tuple(
+            _non_empty_string("component_unit_instance_id", value) for value in component_ids
+        )
+        if len(normalized_component_ids) != len(set(normalized_component_ids)):
+            raise MovementDraftError("component_unit_instance_ids must be unique IDs.")
+        object.__setattr__(
+            self,
+            "component_unit_instance_ids",
+            normalized_component_ids,
+        )
 
     @classmethod
     def start_for_pending(
@@ -447,10 +456,24 @@ class MovementDraft:
         proposal = _draftable_movement_proposal(pending_decision)
         if proposal is None:
             return None
-        unit = _unit_by_id(view, proposal.unit_instance_id)
+        try:
+            unit = movement_proposal_unit(view=view, proposal=proposal)
+            component_ids = movement_proposal_component_unit_ids(view=view, proposal=proposal)
+        except EntitySelectionError as exc:
+            raise MovementDraftError(str(exc)) from exc
         if unit is None:
             return None
-        if selection.selected_unit_id != unit.unit_id:
+        selected_unit_id = selection.selected_unit_id
+        if selected_unit_id not in (unit.unit_id, *component_ids) and not (
+            proposal.decision_type == SCOUT_MOVE_DECISION_TYPE and selected_unit_id is None
+        ):
+            return None
+        if not movement_selection_matches_actor(
+            view=view,
+            actor=unit,
+            selected_unit_id=selected_unit_id,
+            selected_model_id=selection.selected_model_id,
+        ):
             return None
         editor_action = _proposal_editor_action(proposal)
         movement_mode = _proposal_movement_mode(proposal)
@@ -493,6 +516,8 @@ class MovementDraft:
                     model_id=model.model_id,
                     base_radius=model.base_radius,
                     points=(model.position,),
+                    elevation_z_inches=model.elevation_z_inches,
+                    facing_degrees=model.facing_degrees,
                 )
                 for model in unit.models
             ),
@@ -509,6 +534,7 @@ class MovementDraft:
             submission_variant_id=submission_variant_id,
             spatial_context_hash=proposal.spatial_context_hash,
             projection_state_hash=projection_state_hash,
+            component_unit_instance_ids=component_ids,
         )
         return draft.with_recomputed_hints(view=view)
 
@@ -552,47 +578,15 @@ class MovementDraft:
         return self.total_model_count - self.assigned_model_count
 
     @property
-    def synthetic_witness_model_ids(self) -> tuple[str, ...]:
-        """Return model IDs whose payload paths receive generated midpoint evidence."""
-
-        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
-        return tuple(
-            path.model_id
-            for path in self.model_paths
-            if path.uses_synthetic_payload_midpoint(
-                requires_sampled_witness=requires_sampled_witness
-            )
-        )
-
-    @property
-    def synthetic_witness_point_count(self) -> int:
-        """Return the number of generated witness points in the payload preview."""
-
-        return len(self.synthetic_witness_model_ids)
-
-    @property
     def payload_witness_summary_lines(self) -> tuple[str, ...]:
         """Return ready-preview path witness point summaries for debug HUD display."""
 
         if self.ready_payload is None:
             return ()
         lines: list[str] = []
-        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
         for path in self.model_paths:
-            suffix = (
-                ", synthetic midpoint"
-                if path.uses_synthetic_payload_midpoint(
-                    requires_sampled_witness=requires_sampled_witness
-                )
-                else ", no-op"
-                if not path.has_movement
-                else ""
-            )
-            lines.append(
-                f"{path.model_id}: "
-                f"{len(path.payload_points(requires_sampled_witness=requires_sampled_witness))} "
-                f"witness point(s){suffix}"
-            )
+            suffix = ", no-op" if not path.has_movement else ""
+            lines.append(f"{path.model_id}: {len(path.payload_points())} witness point(s){suffix}")
         return tuple(lines)
 
     @property
@@ -690,6 +684,14 @@ class MovementDraft:
             and _proposal_movement_mode(proposal) == self.movement_mode
             and _context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY) == self.fall_back_mode
             and proposal.spatial_context_hash == self.spatial_context_hash
+            and (
+                self.decision_type != SCOUT_MOVE_DECISION_TYPE
+                or proposal.component_unit_instance_ids == self.component_unit_instance_ids
+            )
+            and (
+                self.decision_type != SCOUT_MOVE_DECISION_TYPE
+                or proposal.required_model_ids == tuple(path.model_id for path in self.model_paths)
+            )
             and variant_id == self.submission_variant_id
             and (
                 self.projection_state_hash is None
@@ -936,22 +938,18 @@ class MovementDraft:
             return self._scout_move_payload()
         if not self.has_assignments and self.proposal_profile.allows_no_witness_no_move:
             return self._no_witness_no_move_payload()
-        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
         body: JsonObject = {
             "proposal_request_id": self.proposal_request_id,
             "proposal_kind": self.proposal_kind,
             "unit_instance_id": self.selected_unit_id,
             "movement_phase_action": self.movement_phase_action,
-            "movement_mode": _non_empty_string("movement_mode", self.movement_mode),
+            "movement_mode": self.movement_mode,
             "witness": {
                 "model_paths": [
                     {
                         "model_id": path.model_id,
                         "poses": [
-                            _pose_payload(point)
-                            for point in path.payload_points(
-                                requires_sampled_witness=requires_sampled_witness
-                            )
+                            _pose_payload(point, path=path) for point in path.payload_points()
                         ],
                     }
                     for path in self.model_paths
@@ -960,15 +958,8 @@ class MovementDraft:
             "model_movements": [
                 {
                     "model_instance_id": path.model_id,
-                    "path": [
-                        _pose_payload(point)
-                        for point in path.payload_points(
-                            requires_sampled_witness=requires_sampled_witness
-                        )
-                    ],
-                    "final_pose": _pose_payload(
-                        path.payload_points(requires_sampled_witness=requires_sampled_witness)[-1]
-                    ),
+                    "path": [_pose_payload(point, path=path) for point in path.payload_points()],
+                    "final_pose": _pose_payload(path.payload_points()[-1], path=path),
                 }
                 for path in self.model_paths
             ],
@@ -984,7 +975,6 @@ class MovementDraft:
         return _json_object("movement proposal payload", body)
 
     def _scout_move_payload(self) -> JsonObject:
-        requires_sampled_witness = self.proposal_profile.requires_sampled_witness
         body: JsonObject = {
             "proposal_request_id": self.proposal_request_id,
             "proposal_kind": self.proposal_kind,
@@ -1007,10 +997,7 @@ class MovementDraft:
                     {
                         "model_id": path.model_id,
                         "poses": [
-                            _pose_payload(point)
-                            for point in path.payload_points(
-                                requires_sampled_witness=requires_sampled_witness
-                            )
+                            _pose_payload(point, path=path) for point in path.payload_points()
                         ],
                     }
                     for path in self.model_paths
@@ -1027,24 +1014,15 @@ class MovementDraft:
             "proposal_kind": self.proposal_kind,
             "unit_instance_id": self.selected_unit_id,
             "movement_phase_action": self.movement_phase_action,
-            "movement_mode": _non_empty_string("movement_mode", self.movement_mode),
+            "movement_mode": self.movement_mode,
         }
         self._add_family_payload_fields(body, no_move=True)
         return _json_object("movement no-move payload", body)
 
     def _add_family_payload_fields(self, body: JsonObject, *, no_move: bool = False) -> None:
         if self.proposal_kind == "charge_move":
-            body["charge_target_unit_instance_ids"] = (
-                []
-                if no_move
-                else _first_non_empty_context_string_list(
-                    self.proposal_context,
-                    (
-                        "charge_target_unit_instance_ids",
-                        "reachable_target_unit_instance_ids",
-                    ),
-                )
-            )
+            committed_target_ids = _committed_charge_target_ids(self.proposal_context)
+            body["charge_target_unit_instance_ids"] = [] if no_move else committed_target_ids
             if "stratagem_handler_id" in self.proposal_context:
                 body["stratagem_handler_id"] = self.proposal_context["stratagem_handler_id"]
         elif self.proposal_kind == "pile_in":
@@ -1122,7 +1100,6 @@ def movement_proposal_for_selected_unit(
 ) -> UiMovementProposalRequest | None:
     """Return the movement proposal that can activate drafting for the selected unit."""
 
-    del view
     if selection.selected_unit_id is None or pending_decision is None:
         return None
     route = interaction_route_for_decision(pending_decision)
@@ -1137,7 +1114,19 @@ def movement_proposal_for_selected_unit(
         return None
     if movement_proposal_context_diagnostic(proposal) is not None:
         return None
-    if proposal.unit_instance_id != selection.selected_unit_id:
+    try:
+        component_ids = movement_proposal_component_unit_ids(view=view, proposal=proposal)
+        unit = movement_proposal_unit(view=view, proposal=proposal)
+    except EntitySelectionError:
+        return None
+    if selection.selected_unit_id not in (proposal.unit_instance_id, *component_ids):
+        return None
+    if unit is None or not movement_selection_matches_actor(
+        view=view,
+        actor=unit,
+        selected_unit_id=selection.selected_unit_id,
+        selected_model_id=selection.selected_model_id,
+    ):
         return None
     return proposal
 
@@ -1153,6 +1142,7 @@ def movement_proposal_context_diagnostic(
         movement_phase_action=proposal.movement_phase_action,
         movement_mode=_proposal_movement_mode(proposal),
         fall_back_mode=_context_string(proposal.context, FALL_BACK_MODE_CONTEXT_KEY),
+        allows_nullable_movement_mode=proposal.context.get("context_kind") == "triggered_movement",
     )
 
 
@@ -1190,6 +1180,7 @@ def _movement_context_diagnostic(
     movement_phase_action: str | None,
     movement_mode: str | None,
     fall_back_mode: str | None,
+    allows_nullable_movement_mode: bool,
 ) -> MovementProposalContextDiagnostic | None:
     if decision_type not in SUPPORTED_MOVEMENT_DRAFT_DECISION_TYPES:
         return MovementProposalContextDiagnostic(
@@ -1200,7 +1191,11 @@ def _movement_context_diagnostic(
                 f"{decision_type}."
             ),
         )
-    if proposal_kind in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS and movement_mode is None:
+    if (
+        proposal_kind in SUPPORTED_MOVEMENT_DRAFT_PROPOSAL_KINDS
+        and movement_mode is None
+        and not allows_nullable_movement_mode
+    ):
         return MovementProposalContextDiagnostic(
             violation_code="movement_mode_missing_from_proposal_context",
             field=f"context.{MOVEMENT_MODE_CONTEXT_KEY}",
@@ -1263,7 +1258,6 @@ def movement_proposal_profile(
     return MovementProposalProfile(
         proposal_kind=proposal_kind,
         decision_type=decision_type,
-        requires_sampled_witness=proposal_kind in SAMPLED_WITNESS_PROPOSAL_KINDS,
         allows_no_witness_no_move=proposal_kind in NO_WITNESS_NO_MOVE_PROPOSAL_KINDS,
         distance_context_key=distance_key,
     )
@@ -1285,6 +1279,10 @@ def _proposal_movement_budget_inches(
     explicit_budget = _context_positive_float(proposal.context, profile.distance_context_key)
     if explicit_budget is not None:
         return explicit_budget
+    if proposal.proposal_kind == "surge_move":
+        descriptor = proposal.context.get("descriptor")
+        if type(descriptor) is dict:
+            return _context_positive_float(descriptor, "max_distance_inches")
     base_budget = _proposal_base_movement_budget_inches(proposal=proposal, unit=unit)
     if proposal.proposal_kind == "advance":
         advance_roll = _advance_roll_value(proposal.context)
@@ -1343,13 +1341,6 @@ def _proposal_editor_action(proposal: UiMovementProposalRequest) -> str:
     return _non_empty_string("movement_phase_action", proposal.movement_phase_action)
 
 
-def _unit_by_id(view: BattlefieldView, unit_id: str) -> UnitView | None:
-    for unit in view.units:
-        if unit.unit_id == unit_id:
-            return unit
-    return None
-
-
 def unsupported_parameterized_tool_label(pending_decision: UiDecision | None) -> str | None:
     """Return a display label when a parameterized request is not movement-draftable."""
 
@@ -1382,14 +1373,13 @@ def _seed_entity_selection(
 ) -> EntitySelectionState:
     profile = build_entity_selection_profile(view=view, pending_decision=pending_decision)
     state = EntitySelectionState.initial(profile)
-    seed_ref = (
-        entity_ref_for_model(
-            view=view,
-            unit_id=unit.unit_id,
-            model_id=selection.selected_model_id,
-        )
-        if selection.selected_model_id is not None
-        else None
+    seed_ref = next(
+        (
+            model_entity_ref(unit=unit, model=model)
+            for model in unit.models
+            if model.model_id == selection.selected_model_id
+        ),
+        None,
     )
     if seed_ref is None:
         seed_ref = unit_entity_ref(unit)
@@ -1398,13 +1388,6 @@ def _seed_entity_selection(
 
 def _local_hint_lines(*, view: BattlefieldView, draft: MovementDraft) -> tuple[str, ...]:
     hints: list[str] = ["Preview/advisory only; engine validates movement."]
-    if draft.synthetic_witness_model_ids:
-        hints.append(
-            "Preview note: "
-            "UI-generated synthetic midpoint witness evidence will be inserted for "
-            f"{draft.synthetic_witness_point_count} straight moved model path(s): "
-            f"{_compact_model_ids(draft.synthetic_witness_model_ids)}."
-        )
     selected_count = len(draft.selected_model_ids)
     hints.append(f"Active movement selection: {selected_count} model(s).")
     if draft.unchanged_model_count:
@@ -1469,28 +1452,21 @@ def _has_self_overlap(draft: MovementDraft) -> bool:
     return False
 
 
-def _compact_model_ids(model_ids: tuple[str, ...], *, limit: int = 3) -> str:
-    if len(model_ids) <= limit:
-        return ", ".join(model_ids)
-    shown = ", ".join(model_ids[:limit])
-    return f"{shown}, +{len(model_ids) - limit} more"
-
-
 def _polyline_length(points: tuple[WorldPoint, ...]) -> float:
     if len(points) < 2:
         return 0.0
     return sum(math.dist(start, end) for start, end in pairwise(points))
 
 
-def _pose_payload(point: WorldPoint) -> JsonObject:
+def _pose_payload(point: WorldPoint, *, path: MovementModelPath) -> JsonObject:
     x, y = point
     return {
         "position": {
             "x": x,
             "y": y,
-            "z": 0.0,
+            "z": path.elevation_z_inches,
         },
-        "facing": {"degrees": 0.0},
+        "facing": {"degrees": path.facing_degrees},
     }
 
 
@@ -1516,15 +1492,16 @@ def _context_string_list(context: JsonObject, key: str) -> list[JsonValue]:
     return values
 
 
-def _first_non_empty_context_string_list(
-    context: JsonObject,
-    keys: tuple[str, ...],
-) -> list[JsonValue]:
-    for key in keys:
-        values = _context_string_list(context, key)
-        if values:
-            return values
-    return []
+def _committed_charge_target_ids(context: JsonObject) -> list[JsonValue]:
+    selection = _json_object("context.target_selection", context.get("target_selection"))
+    if "target_ids" not in selection:
+        raise MovementDraftError("context.target_selection.target_ids is required.")
+    target_ids = _context_string_list(selection, "target_ids")
+    if not target_ids:
+        raise MovementDraftError(
+            "context.target_selection.target_ids must not be empty for a move."
+        )
+    return target_ids
 
 
 def _first_context_string(context: JsonObject, key: str) -> str | None:

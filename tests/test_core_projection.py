@@ -333,6 +333,26 @@ def test_core_projection_uses_model_display_base_size_and_movement_hint() -> Non
     assert model.base_movement_inches == 10.0
 
 
+def test_core_projection_contains_rectangular_base_corners_in_advisory_circle() -> None:
+    view = battlefield_view_from_game_view(
+        _game_view(
+            _terrain_feature(center=(10.0, 20.0), size=(6.0, 4.0)),
+            model_display_by_id={
+                "unit-alpha:model-001": {
+                    "model_instance_id": "unit-alpha:model-001",
+                    "base_size": {
+                        "kind": "rectangular",
+                        "diameter_mm": None,
+                        "length_mm": 50.0,
+                        "width_mm": 40.0,
+                    },
+                }
+            },
+        )
+    )
+    assert math.isclose(view.units[0].models[0].base_radius, math.hypot(25.0, 20.0) / 25.4)
+
+
 def test_core_projection_rejects_source_terrain_footprint_bound_mismatch() -> None:
     with pytest.raises(
         CoreProjectionRenderError,

@@ -210,8 +210,6 @@ def test_movement_draft_panel_shows_measurements_and_ready_state() -> None:
     assert panel.unchanged_model_count == 2
     assert panel.total_path_inches == 3.0
     assert panel.remaining_budget_inches == 3.0
-    assert panel.synthetic_witness_model_ids == ()
-    assert panel.synthetic_witness_point_count == 0
     assert panel.payload_witness_lines == (
         "intercessor_1: 2 witness point(s)",
         "intercessor_2: 2 witness point(s), no-op",

@@ -78,7 +78,7 @@ def test_non_git_directory_fails_clearly(tmp_path: Path) -> None:
 
 def test_wrong_manifest_version_fails_clearly(fixture_checkout: tuple[Path, str]) -> None:
     core, _ = fixture_checkout
-    _write_manifest(core, contract_version="42.0.0")
+    _write_manifest(core, contract_version="10.2.0")
     revision = _commit(core)
 
     with pytest.raises(CoreContractFixtureError, match="contract_version mismatch"):
@@ -136,7 +136,7 @@ def test_assume_unchanged_cannot_hide_an_edited_manifest(
     core, revision = fixture_checkout
     _git(core, "update-index", "--assume-unchanged", "contracts/manifest.json")
     manifest = _manifest(core)
-    manifest["contract_version"] = "42.0.0"
+    manifest["contract_version"] = "10.2.0"
     _save_manifest(core, manifest)
     assert _git(core, "status", "--porcelain", "--untracked-files=all", "--", "contracts") == ""
 

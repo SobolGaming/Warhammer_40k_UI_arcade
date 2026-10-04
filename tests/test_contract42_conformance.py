@@ -1,4 +1,4 @@
-"""Conformance gates against the supported core Contract 10 examples."""
+"""Conformance gates against the supported core Contract 42 examples."""
 
 from __future__ import annotations
 
@@ -173,7 +173,7 @@ def test_all_current_interaction_conformance_cases_parse_and_dispatch() -> None:
     inventory = _json_object(_CORE_EXAMPLES / "decisions/interaction-conformance.json")
     cases = inventory["cases"]
     assert type(cases) is list
-    assert len(cases) == 90
+    assert len(cases) == 97
     observed_kinds: set[str] = set()
 
     for raw_case in cases:

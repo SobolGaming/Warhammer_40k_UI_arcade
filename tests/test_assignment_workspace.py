@@ -2,10 +2,27 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import cast
+from unittest.mock import patch
 
+import pytest
+from warhammer40k_core.core.army_catalog import ArmyCatalog
+from warhammer40k_core.engine.game_state import GameConfig
+
+from tests.support import contract42_battle_fixture
 from tests.support.contract_fixtures import decision_from_fixture
-from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
+from tests.support.gui_driver import GuiTestDriver
+from warhammer40k_arcade_ui.config import AppConfig
+from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
+from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
+from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
+    UiClientStatus,
+    UiDecision,
+    UiEventDelta,
+    UiGameView,
+)
 from warhammer40k_arcade_ui.hud.action_summary import build_action_visual_summary
 from warhammer40k_arcade_ui.hud.ergonomics import build_hud_ergonomics_view
 from warhammer40k_arcade_ui.hud.runtime_data import runtime_data_for_ergonomic_hud
@@ -14,12 +31,18 @@ from warhammer40k_arcade_ui.hud.view_models import (
     build_finite_decision_panel,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
-from warhammer40k_arcade_ui.state.assignment_submission import prepare_assignment_submission
+from warhammer40k_arcade_ui.state.assignment_submission import (
+    prepare_assignment_submission,
+    submit_assignment_workspace,
+)
 from warhammer40k_arcade_ui.state.assignment_workspace import (
     AssignmentWorkspace,
+    ShootingAssignmentSelection,
     is_assignment_parameterized_decision,
 )
+from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
 
 _DEFAULT_TARGET_BINDING: dict[str, object] = {
     "target_kind": "friendly_unit",
@@ -37,6 +60,8 @@ def test_shooting_assignment_workspace_builds_payload_from_engine_candidates() -
     assert workspace.is_ready is True
     assert workspace.request_id == "shooting-request-1"
     assert workspace.proposal_kind == "shooting_declaration"
+    assert workspace.editable is True
+    assert workspace.shooting_selections == (workspace.shooting_choices[0].selection,)
     assert workspace.assigned_ref_keys == ("model:intercessor_1",)
     assert workspace.target_ref_keys == ("unit:guardian_squad",)
     assert workspace.payload_preview is not None
@@ -45,26 +70,32 @@ def test_shooting_assignment_workspace_builds_payload_from_engine_candidates() -
     assert workspace.payload_preview["declarations"] == [
         {
             "attacker_model_instance_id": "intercessor_1",
+            "weapon_instance_id": "bolt-rifle-copy-1",
             "wargear_id": "bolt_rifle",
             "weapon_profile_id": "bolt_rifle_profile",
             "target_unit_instance_id": "guardian_squad",
             "shooting_type": "normal",
+            "selected_weapon_ability_ids": [],
+            "firing_deck_source_unit_instance_id": None,
+            "firing_deck_source_model_instance_id": None,
         }
     ]
     assert workspace.payload_preview["firing_deck_selection"] is None
 
 
-def test_shooting_assignment_workspace_can_seed_unit_wide_target_candidate() -> None:
+def test_shooting_assignment_workspace_matches_only_the_candidate_physical_copy() -> None:
     decision = _shooting_declaration_decision(
         available_weapons=[
             {
                 "model_instance_id": "intercessor_1",
+                "weapon_instance_id": "bolt-rifle-copy-1",
                 "wargear_id": "bolt_rifle",
                 "weapon_profile_id": "bolt_rifle_profile",
                 "weapon_profile": {"name": "Bolt Rifle"},
             },
             {
                 "model_instance_id": "intercessor_2",
+                "weapon_instance_id": "bolt-rifle-copy-2",
                 "wargear_id": "bolt_rifle",
                 "weapon_profile_id": "bolt_rifle_profile",
                 "weapon_profile": {"name": "Bolt Rifle"},
@@ -73,7 +104,7 @@ def test_shooting_assignment_workspace_can_seed_unit_wide_target_candidate() -> 
         target_candidates=[
             {
                 "is_legal": True,
-                "attacker_unit_instance_id": "intercessor_squad",
+                "weapon_instance_id": "bolt-rifle-copy-1",
                 "observer_model_id": "intercessor_1",
                 "weapon_profile_id": "bolt_rifle_profile",
                 "target_unit_instance_id": "guardian_squad",
@@ -93,9 +124,557 @@ def test_shooting_assignment_workspace_can_seed_unit_wide_target_candidate() -> 
     declaration_objects = [declaration for declaration in declarations if type(declaration) is dict]
     assert [declaration["attacker_model_instance_id"] for declaration in declaration_objects] == [
         "intercessor_1",
-        "intercessor_2",
     ]
-    assert len(workspace.rows) == 2
+    assert len(workspace.rows) == 1
+
+
+def test_shooting_assignment_workspace_keeps_identical_physical_copies_distinct() -> None:
+    weapons: list[dict[str, object]] = [
+        {
+            "model_instance_id": "intercessor_1",
+            "weapon_instance_id": copy_id,
+            "wargear_id": "bolt_rifle",
+            "weapon_profile_id": "bolt_rifle_profile",
+        }
+        for copy_id in ("copy-a", "copy-b")
+    ]
+    candidates: list[dict[str, object]] = [
+        {
+            "is_legal": True,
+            "weapon_instance_id": copy_id,
+            "weapon_profile_id": "bolt_rifle_profile",
+            "target_unit_instance_id": "guardian_squad",
+            "shooting_types": ["normal"],
+            "visibility_cache_key": "visibility-cache-1",
+        }
+        for copy_id in ("copy-a", "copy-b")
+    ]
+    decision = _shooting_declaration_decision(
+        available_weapons=weapons,
+        target_candidates=candidates,
+    )
+
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+
+    assert workspace is not None
+    assert workspace.is_ready
+    assert len({row.row_id for row in workspace.rows}) == 2
+    assert workspace.payload_preview is not None
+    declarations = workspace.payload_preview["declarations"]
+    assert type(declarations) is list
+    assert [row["weapon_instance_id"] for row in declarations if type(row) is dict] == [
+        "copy-a",
+        "copy-b",
+    ]
+    assert len({choice.choice_id for choice in workspace.shooting_choices}) == len(
+        workspace.shooting_choices
+    )
+    assert (
+        len(
+            [
+                choice
+                for choice in workspace.shooting_choices
+                if choice.selection.target_unit_instance_id == "guardian_squad"
+            ]
+        )
+        == 2
+    )
+    assert {choice.selection.weapon_instance_id for choice in workspace.shooting_choices} == {
+        "copy-a",
+        "copy-b",
+    }
+
+
+def test_shooting_assignment_workspace_keeps_legal_profiles_sharing_a_copy() -> None:
+    profiles = ("ctan-power-a", "ctan-power-b")
+    decision = _shooting_declaration_decision(
+        available_weapons=[
+            {
+                "model_instance_id": "intercessor_1",
+                "weapon_instance_id": "shared-physical-copy",
+                "wargear_id": "ctan-powers",
+                "weapon_profile_id": profile,
+            }
+            for profile in profiles
+        ],
+        target_candidates=[
+            {
+                "is_legal": True,
+                "weapon_instance_id": "shared-physical-copy",
+                "weapon_profile_id": profile,
+                "target_unit_instance_id": "guardian_squad",
+                "shooting_types": ["normal"],
+            }
+            for profile in profiles
+        ],
+        selection_limits=[
+            {
+                "model_instance_id": "intercessor_1",
+                "weapon_keyword": "C'tan Power",
+                "max_selections": 1,
+                "weapon_profile_ids": list(profiles),
+            }
+        ],
+    )
+
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+
+    assert workspace is not None
+    assert workspace.is_ready
+    assert len({row.row_id for row in workspace.rows}) == 2
+    assert all(
+        "Engine selection limit: 1 C'tan Power per model" in row.summary_lines
+        for row in workspace.rows
+    )
+    assert workspace.payload_preview is not None
+    declarations = workspace.payload_preview["declarations"]
+    assert type(declarations) is list
+    assert [row["weapon_profile_id"] for row in declarations if type(row) is dict] == list(profiles)
+    assert {choice.selection.weapon_profile_id for choice in workspace.shooting_choices} == set(
+        profiles
+    )
+    for profile in profiles:
+        selected = workspace.with_shooting_selections(
+            decision,
+            (
+                ShootingAssignmentSelection(
+                    model_instance_id="intercessor_1",
+                    weapon_instance_id="shared-physical-copy",
+                    weapon_profile_id=profile,
+                    target_unit_instance_id="guardian_squad",
+                ),
+            ),
+        )
+        assert selected.is_ready
+        assert selected.payload_preview is not None
+        chosen = selected.payload_preview["declarations"]
+        assert type(chosen) is list
+        assert len(chosen) == 1
+        assert type(chosen[0]) is dict
+        assert chosen[0]["weapon_profile_id"] == profile
+
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+        pending_decision=decision,
+    )
+    driver = GuiTestDriver(window=window)
+    try:
+
+        def click(action_kind: str) -> None:
+            driver.window.on_draw()
+            region = next(
+                region
+                for region in driver.hud_button_hit_regions
+                if region.action_kind == action_kind and region.enabled
+            )
+            driver.click_screen(
+                round((region.bounds[0] + region.bounds[2]) / 2.0),
+                round((region.bounds[1] + region.bounds[3]) / 2.0),
+            )
+
+        click("assignment_clear")
+        choices = tuple(
+            choice
+            for choice in workspace.shooting_choices
+            if choice.selection.target_unit_instance_id == "guardian_squad"
+        )
+        assert {choice.selection.weapon_profile_id for choice in choices} == set(profiles)
+        for choice in choices:
+            for _ in range(len(workspace.shooting_choices)):
+                driver.window.on_draw()
+                visible = next(
+                    region
+                    for region in driver.hud_button_hit_regions
+                    if region.action_kind == "assignment_select"
+                )
+                if visible.option_id == choice.choice_id:
+                    break
+                click("assignment_next_choice")
+            else:
+                raise AssertionError("Emitted profile choice was not reachable in HUD.")
+            click("assignment_select")
+        edited = driver.window.assignment_workspace
+        assert edited is not None
+        assert edited.payload_preview is not None
+        edited_declarations = edited.payload_preview["declarations"]
+        assert type(edited_declarations) is list
+        assert {
+            cast(str, row["weapon_profile_id"]) for row in edited_declarations if type(row) is dict
+        } == (set(profiles))
+    finally:
+        driver.close()
+
+
+def test_shooting_assignment_workspace_supports_explicit_empty_and_targetless_choice() -> None:
+    decision = _shooting_declaration_decision()
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+
+    empty = workspace.with_shooting_selections(decision, ())
+
+    assert empty.is_ready
+    assert empty.payload_preview is not None
+    assert empty.payload_preview["declarations"] == []
+    assert empty.rows == ()
+    assert empty.shooting_selections == ()
+    assert empty.shooting_choices == workspace.shooting_choices
+
+    targetless = workspace.with_shooting_selections(
+        decision,
+        (
+            ShootingAssignmentSelection(
+                model_instance_id="intercessor_1",
+                weapon_instance_id="bolt-rifle-copy-1",
+                weapon_profile_id="bolt_rifle_profile",
+                target_unit_instance_id=None,
+            ),
+        ),
+    )
+
+    assert targetless.is_ready
+    assert targetless.payload_preview is not None
+    assert targetless.payload_preview["declarations"] == [
+        {
+            "attacker_model_instance_id": "intercessor_1",
+            "weapon_instance_id": "bolt-rifle-copy-1",
+            "wargear_id": "bolt_rifle",
+            "weapon_profile_id": "bolt_rifle_profile",
+            "target_unit_instance_id": None,
+            "shooting_type": "normal",
+            "selected_weapon_ability_ids": [],
+            "firing_deck_source_unit_instance_id": None,
+            "firing_deck_source_model_instance_id": None,
+        }
+    ]
+    assert targetless.target_ref_keys == ()
+
+
+def test_targetless_duplicate_source_selection_copies_only_an_emitted_option() -> None:
+    candidate: dict[str, object] = {
+        "model_instance_id": "intercessor_1",
+        "weapon_instance_id": "bolt-rifle-copy-1",
+        "weapon_profile_id": "bolt_rifle_profile",
+        "target_unit_instance_id": None,
+        "shooting_type": "normal",
+        "required_weapon_ability_selections": [
+            {
+                "options": [
+                    {"option_id": "hazardous-source-a"},
+                    {"option_id": "hazardous-source-b"},
+                ]
+            }
+        ],
+    }
+    decision = _shooting_declaration_decision(targetless_weapon_candidates=[candidate])
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    choice = ShootingAssignmentSelection(
+        model_instance_id="intercessor_1",
+        weapon_instance_id="bolt-rifle-copy-1",
+        weapon_profile_id="bolt_rifle_profile",
+        target_unit_instance_id=None,
+        selected_weapon_ability_ids=("hazardous-source-b",),
+    )
+
+    selected = workspace.with_shooting_selections(decision, (choice,))
+    invalid = workspace.with_shooting_selections(
+        decision,
+        (
+            ShootingAssignmentSelection(
+                model_instance_id=choice.model_instance_id,
+                weapon_instance_id=choice.weapon_instance_id,
+                weapon_profile_id=choice.weapon_profile_id,
+                target_unit_instance_id=None,
+                selected_weapon_ability_ids=("invented-source",),
+            ),
+        ),
+    )
+
+    assert selected.is_ready
+    assert selected.payload_preview is not None
+    declarations = selected.payload_preview["declarations"]
+    assert type(declarations) is list
+    assert type(declarations[0]) is dict
+    assert declarations[0]["selected_weapon_ability_ids"] == ["hazardous-source-b"]
+    assert {row.selection.selected_weapon_ability_ids for row in workspace.shooting_choices} == {
+        (),
+        ("hazardous-source-a",),
+        ("hazardous-source-b",),
+    }
+    assert selected.shooting_selections == (choice,)
+    assert not invalid.is_ready
+    assert invalid.diagnostic_lines == (
+        "Selected weapon ability ID was not emitted for its source family.",
+    )
+
+
+def test_shooting_choices_expose_emitted_targets_and_complete_source_options() -> None:
+    candidates: list[dict[str, object]] = [
+        {
+            "is_legal": True,
+            "weapon_instance_id": "bolt-rifle-copy-1",
+            "weapon_profile_id": "bolt_rifle_profile",
+            "target_unit_instance_id": "guardian_squad",
+            "shooting_types": ["normal"],
+            "required_weapon_ability_selections": [
+                {
+                    "options": [
+                        {"option_id": "source-a", "label": "Source A"},
+                        {"option_id": "source-b", "label": "Source B"},
+                    ]
+                },
+                {"options": [{"option_id": "source-c", "label": "Source C"}]},
+            ],
+        },
+        {
+            "is_legal": True,
+            "weapon_instance_id": "bolt-rifle-copy-1",
+            "weapon_profile_id": "bolt_rifle_profile",
+            "target_unit_instance_id": "second_target",
+            "shooting_types": ["normal"],
+        },
+        {
+            "is_legal": False,
+            "weapon_instance_id": "bolt-rifle-copy-1",
+            "weapon_profile_id": "bolt_rifle_profile",
+            "target_unit_instance_id": "illegal_target",
+            "shooting_types": ["normal"],
+        },
+    ]
+    targetless: list[dict[str, object]] = [
+        {
+            "model_instance_id": "intercessor_1",
+            "weapon_instance_id": "bolt-rifle-copy-1",
+            "weapon_profile_id": "bolt_rifle_profile",
+            "target_unit_instance_id": None,
+            "shooting_type": "normal",
+        }
+    ]
+    decision = _shooting_declaration_decision(
+        target_candidates=candidates,
+        targetless_weapon_candidates=targetless,
+    )
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+
+    assert workspace is not None
+    assert workspace.editable
+    assert len(workspace.shooting_choices) == 4
+    assert len({choice.choice_id for choice in workspace.shooting_choices}) == 4
+    repeated = AssignmentWorkspace.start_for_pending(decision)
+    assert repeated is not None
+    assert workspace.shooting_choices == repeated.shooting_choices
+    assert {choice.selection.target_unit_instance_id for choice in workspace.shooting_choices} == {
+        "guardian_squad",
+        "second_target",
+        None,
+    }
+    source_choices = tuple(
+        choice
+        for choice in workspace.shooting_choices
+        if choice.selection.target_unit_instance_id == "guardian_squad"
+    )
+    assert {choice.selection.selected_weapon_ability_ids for choice in source_choices} == {
+        ("source-a", "source-c"),
+        ("source-b", "source-c"),
+    }
+    assert all(choice.target_ref_keys == ("unit:guardian_squad",) for choice in source_choices)
+    assert all(
+        "Weapon ability source: source-c" in choice.summary_lines for choice in source_choices
+    )
+    assert workspace.shooting_choices[-1].target_ref_keys == ()
+    assert workspace.shooting_choices[-1].selection.target_unit_instance_id is None
+
+    selected = workspace.with_shooting_selections(decision, (source_choices[1].selection,))
+    assert selected.is_ready
+    assert selected.shooting_selections == (source_choices[1].selection,)
+    assert selected.payload_preview is not None
+    declarations = selected.payload_preview["declarations"]
+    assert type(declarations) is list
+    assert type(declarations[0]) is dict
+    assert declarations[0]["selected_weapon_ability_ids"] == ["source-b", "source-c"]
+
+    other_decision = _shooting_declaration_decision(
+        request_id="shooting-request-2",
+        target_candidates=candidates,
+        targetless_weapon_candidates=targetless,
+    )
+    other_workspace = AssignmentWorkspace.start_for_pending(other_decision)
+    assert other_workspace is not None
+    assert {choice.choice_id for choice in workspace.shooting_choices}.isdisjoint(
+        choice.choice_id for choice in other_workspace.shooting_choices
+    )
+
+
+def test_shooting_firing_deck_choice_preserves_source_and_selection_evidence() -> None:
+    bolt_rifle = next(
+        item
+        for item in ArmyCatalog.phase9a_canonical_content_pack().wargear
+        if item.wargear_id == "core-bolt-rifle"
+    )
+    profile: JsonObject = cast(JsonObject, bolt_rifle.weapon_profiles[0].to_payload())
+    profile_id = cast(str, profile["profile_id"])
+    decision = _shooting_declaration_decision(
+        firing_deck_value=1,
+        firing_deck_history=[],
+        available_weapons=[
+            {
+                "model_instance_id": "embarked_model",
+                "weapon_instance_id": "embarked-copy-2",
+                "wargear_id": "core-bolt-rifle",
+                "weapon_profile_id": profile_id,
+                "weapon_profile": profile,
+                "firing_deck_source_unit_instance_id": "embarked_unit",
+                "firing_deck_source_model_instance_id": "embarked_model",
+            }
+        ],
+        target_candidates=[
+            {
+                "is_legal": True,
+                "weapon_instance_id": "embarked-copy-2",
+                "weapon_profile_id": profile_id,
+                "target_unit_instance_id": "guardian_squad",
+                "shooting_types": ["normal"],
+            }
+        ],
+    )
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    assert workspace.is_ready
+    assert workspace.diagnostic_lines == ()
+    assert workspace.shooting_choices
+    assert all(
+        choice.selection.firing_deck_source_unit_instance_id == "embarked_unit"
+        and choice.selection.firing_deck_source_model_instance_id == "embarked_model"
+        for choice in workspace.shooting_choices
+    )
+    evidence: JsonObject = {
+        "player_id": "player_1",
+        "battle_round": 1,
+        "transport_unit_instance_id": "intercessor_squad",
+        "firing_deck_value": 1,
+        "weapon_selections": [
+            {
+                "embarked_unit_instance_id": "embarked_unit",
+                "model_instance_id": "embarked_model",
+                "weapon_instance_id": "embarked-copy-2",
+                "wargear_id": "core-bolt-rifle",
+                "weapon_profile": profile,
+            }
+        ],
+        "already_shot_unit_instance_ids": [],
+    }
+
+    selected = workspace.with_shooting_selections(
+        decision,
+        (
+            ShootingAssignmentSelection(
+                model_instance_id="embarked_model",
+                weapon_instance_id="embarked-copy-2",
+                weapon_profile_id=profile_id,
+                target_unit_instance_id=None,
+                firing_deck_source_unit_instance_id="embarked_unit",
+                firing_deck_source_model_instance_id="embarked_model",
+            ),
+        ),
+    )
+
+    assert selected.is_ready
+    assert selected.payload_preview is not None
+    declarations = selected.payload_preview["declarations"]
+    assert type(declarations) is list
+    assert type(declarations[0]) is dict
+    assert declarations[0]["weapon_instance_id"] == "embarked-copy-2"
+    assert declarations[0]["firing_deck_source_unit_instance_id"] == "embarked_unit"
+    assert declarations[0]["firing_deck_source_model_instance_id"] == "embarked_model"
+    assert selected.payload_preview["firing_deck_selection"] == evidence
+
+
+@pytest.mark.parametrize("stale_authority", ["null_history", "missing_cargo", "stale_history"])
+def test_shooting_borrowed_copy_requires_current_public_authority(
+    stale_authority: str,
+) -> None:
+    decision = _shooting_declaration_decision(
+        firing_deck_value=1,
+        firing_deck_history=None if stale_authority == "null_history" else ["prior-unit"],
+        firing_deck_cargo=[] if stale_authority == "missing_cargo" else ["embarked_unit"],
+        available_weapons=[
+            {
+                "model_instance_id": "transport_model",
+                "weapon_instance_id": "borrowed-copy",
+                "wargear_id": "borrowed-wargear",
+                "weapon_profile_id": "borrowed-profile",
+                "weapon_profile": {"profile_id": "borrowed-profile"},
+                "firing_deck_source_unit_instance_id": "embarked_unit",
+                "firing_deck_source_model_instance_id": "embarked_model",
+            }
+        ],
+        target_candidates=[
+            {
+                "is_legal": True,
+                "weapon_instance_id": "borrowed-copy",
+                "weapon_profile_id": "borrowed-profile",
+                "target_unit_instance_id": "guardian_squad",
+                "shooting_types": ["normal"],
+                "visibility_cache_key": "visibility-cache-1",
+            }
+        ],
+    )
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    choice = next(
+        row
+        for row in workspace.shooting_choices
+        if row.selection.target_unit_instance_id == "guardian_squad"
+    )
+    explicit_selection: JsonObject | None = None
+    if stale_authority == "stale_history":
+        explicit_selection = {
+            "player_id": "player_1",
+            "battle_round": 1,
+            "transport_unit_instance_id": "intercessor_squad",
+            "firing_deck_value": 1,
+            "weapon_selections": [
+                {
+                    "weapon_instance_id": "borrowed-copy",
+                    "embarked_unit_instance_id": "embarked_unit",
+                    "model_instance_id": "embarked_model",
+                    "wargear_id": "borrowed-wargear",
+                    "weapon_profile": {"profile_id": "borrowed-profile"},
+                }
+            ],
+            "already_shot_unit_instance_ids": [],
+        }
+    selected = workspace.with_shooting_selections(
+        decision,
+        (choice.selection,),
+        firing_deck_selection=explicit_selection,
+    )
+    assert not selected.is_ready
+    assert selected.payload_preview is None
+    assert any("Firing Deck" in line for line in selected.diagnostic_lines)
+
+
+def test_shooting_missing_physical_id_fails_visibly() -> None:
+    decision = _shooting_declaration_decision(
+        available_weapons=[
+            {
+                "model_instance_id": "intercessor_1",
+                "wargear_id": "bolt_rifle",
+                "weapon_profile_id": "bolt_rifle_profile",
+            }
+        ]
+    )
+
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+
+    assert workspace is not None
+    assert not workspace.is_ready
+    assert workspace.payload_preview is None
+    assert "Shooting weapon candidate is missing physical/model/wargear/profile IDs." in (
+        workspace.diagnostic_lines
+    )
 
 
 def test_melee_assignment_workspace_builds_payload_from_engaged_targets() -> None:
@@ -110,8 +689,10 @@ def test_melee_assignment_workspace_builds_payload_from_engaged_targets() -> Non
     assert workspace.payload_preview["declarations"] == [
         {
             "attacker_model_instance_id": "intercessor_1",
+            "weapon_instance_id": "melee-copy-1",
             "wargear_id": "close_combat_weapon",
             "weapon_profile_id": "close_combat_weapon_profile",
+            "selected_weapon_ability_ids": [],
             "target_allocations": [
                 {
                     "target_unit_instance_id": "guardian_squad",
@@ -119,6 +700,69 @@ def test_melee_assignment_workspace_builds_payload_from_engaged_targets() -> Non
             ],
         }
     ]
+
+
+def test_melee_duplicate_ability_requires_emitted_source_and_hud_choice() -> None:
+    decision = _melee_declaration_decision(duplicate_abilities=True)
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    assert not workspace.is_ready
+    assert len(workspace.melee_choices) == 2
+    assert workspace.melee_selections == ()
+    assert all(
+        choice.selection.weapon_instance_id == "melee-copy-1" for choice in workspace.melee_choices
+    )
+    assert {choice.selection.selected_weapon_ability_ids for choice in workspace.melee_choices} == {
+        ("ability-instance:cleave-1",),
+        ("ability-instance:cleave-2",),
+    }
+    chosen = workspace.with_melee_selection(decision, workspace.melee_choices[1].selection)
+    assert chosen.is_ready
+    assert chosen.payload_preview is not None
+    declarations = chosen.payload_preview["declarations"]
+    assert type(declarations) is list
+    assert len(declarations) == 1
+    assert type(declarations[0]) is dict
+    assert declarations[0]["weapon_instance_id"] == "melee-copy-1"
+    assert declarations[0]["selected_weapon_ability_ids"] == ["ability-instance:cleave-2"]
+
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+        pending_decision=decision,
+    )
+    driver = GuiTestDriver(window=window)
+    try:
+        driver.window.on_draw()
+        assert driver.window.assignment_workspace is not None
+        assert not driver.window.assignment_workspace.is_ready
+        next_choice = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == "assignment_next_choice" and region.enabled
+        )
+        driver.click_screen(
+            round((next_choice.bounds[0] + next_choice.bounds[2]) / 2),
+            round((next_choice.bounds[1] + next_choice.bounds[3]) / 2),
+        )
+        driver.window.on_draw()
+        select = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == "assignment_select" and region.enabled
+        )
+        assert select.option_id == workspace.melee_choices[1].choice_id
+        driver.click_screen(
+            round((select.bounds[0] + select.bounds[2]) / 2),
+            round((select.bounds[1] + select.bounds[3]) / 2),
+        )
+        edited = driver.window.assignment_workspace
+        assert edited is not None
+        assert edited.is_ready
+        assert edited.payload_preview == chosen.payload_preview
+    finally:
+        driver.close()
 
 
 def test_stratagem_assignment_workspace_uses_exposed_binding_and_decline_flag() -> None:
@@ -181,6 +825,64 @@ def test_stratagem_assignment_workspace_without_binding_shows_catalog_context() 
         workspace.rows[0].summary_lines
     )
     assert workspace.diagnostic_lines == ()
+
+
+def test_non_enumerable_friendly_stratagem_target_uses_selected_unit_in_hud() -> None:
+    decision = _stratagem_target_binding_decision(
+        target_binding=None,
+        declinable=True,
+        friendly_target_selectable=True,
+    )
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    assert workspace.stratagem_target_selectable
+    assert workspace.editable
+    assert not workspace.is_ready
+    selected = workspace.with_stratagem_intent(
+        decision,
+        target_unit_id="intercessor_squad",
+    )
+    assert selected.is_ready
+    assert selected.payload_preview is not None
+    proposal = selected.payload_preview["proposal"]
+    assert type(proposal) is dict
+    assert proposal["target_binding"] == {
+        "target_kind": "friendly_unit",
+        "target_player_id": "player_1",
+        "target_unit_instance_id": "intercessor_squad",
+    }
+    assert proposal["effect_selection"] is None
+    context = proposal["context"]
+    assert type(context) is dict
+    assert context["active_player_id"] == "player_2"
+    assert context["player_id"] == "player_1"
+
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=default_battlefield_view(),
+        preferences=default_preferences(),
+        pending_decision=decision,
+    )
+    driver = GuiTestDriver(window=window)
+    try:
+        driver.click_world((7.0, 18.0))
+        assert driver.window.selection_state.selected_unit_id == "intercessor_squad"
+        driver.window.on_draw()
+        select = next(
+            region
+            for region in driver.hud_button_hit_regions
+            if region.action_kind == "assignment_select" and region.enabled
+        )
+        driver.click_screen(
+            round((select.bounds[0] + select.bounds[2]) / 2),
+            round((select.bounds[1] + select.bounds[3]) / 2),
+        )
+        edited = driver.window.assignment_workspace
+        assert edited is not None
+        assert edited.is_ready
+        assert edited.payload_preview == selected.payload_preview
+    finally:
+        driver.close()
 
 
 def test_required_stratagem_assignment_without_binding_is_invalid() -> None:
@@ -258,6 +960,130 @@ def test_prepare_assignment_submission_rejects_decline_without_engine_flag() -> 
         "assignment_decline_not_available"
     )
     assert next_result_index == 7
+
+
+def test_submit_assignment_workspace_preserves_unsupported_without_advancing() -> None:
+    decision = _shooting_declaration_decision()
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    status = UiClientStatus(
+        stage="battle",
+        status_kind="unsupported",
+        message="Core stopped at its transition safety boundary (transition_budget_exhausted).",
+        payload={"unsupported_reason": "transition_budget_exhausted"},
+    )
+    fake = FakeCoreClient(
+        status=status,
+        view=_assignment_game_view(pending_decision=decision),
+        event_delta=UiEventDelta(
+            viewer_player_id="player_1",
+            cursor=0,
+            next_cursor=0,
+            events=(),
+        ),
+    )
+
+    result = submit_assignment_workspace(
+        state=FiniteDecisionUiState(pending_decision=decision),
+        assignment_workspace=workspace,
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert len(fake.parameterized_submissions) == 1
+    assert fake.advance_call_count == 0
+    assert result.finite_state.status_kind == "unsupported"
+    assert result.finite_state.pending_decision is None
+    assert "transition_budget_exhausted" in result.finite_state.status_message
+    assert result.finite_state.diagnostics[0].violation_code == "core_unsupported"
+    assert result.finite_state.diagnostics[0].message == result.finite_state.status_message
+
+
+@pytest.mark.parametrize("status_kind", ["waiting_for_decision", "terminal"])
+def test_submit_assignment_workspace_preserves_waiting_or_terminal_boundary(
+    status_kind: str,
+) -> None:
+    decision = _shooting_declaration_decision()
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    status = UiClientStatus(
+        stage="battle",
+        status_kind=status_kind,
+        decision=decision if status_kind == "waiting_for_decision" else None,
+        message=f"Core returned {status_kind}.",
+    )
+    fake = FakeCoreClient(
+        status=status,
+        view=_assignment_game_view(pending_decision=decision),
+        event_delta=UiEventDelta(
+            viewer_player_id="player_1",
+            cursor=0,
+            next_cursor=0,
+            events=(),
+        ),
+    )
+
+    result = submit_assignment_workspace(
+        state=FiniteDecisionUiState(pending_decision=decision),
+        assignment_workspace=workspace,
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert fake.advance_call_count == 0
+    assert result.finite_state.status_kind == status_kind
+    assert result.finite_state.status_message == f"Core returned {status_kind}."
+    assert result.finite_state.pending_decision == (
+        decision if status_kind == "waiting_for_decision" else None
+    )
+    assert result.finite_state.diagnostics == ()
+
+
+def test_real_core_budget_exhaustion_remains_visible_after_assignment_submission() -> None:
+    with patch.object(
+        contract42_battle_fixture,
+        "GameConfig",
+        side_effect=partial(GameConfig, max_lifecycle_transitions=3),
+    ):
+        client = contract42_battle_fixture.shooting_client()
+    first = client.advance_until_decision_or_terminal().decision
+    assert first is not None
+    second = client.submit_finite(
+        request_id=first.request_id,
+        selected_option_id="army-alpha:shooter",
+        result_id="budget-shooter",
+    ).decision
+    assert second is not None
+    assignment_decision = client.submit_finite(
+        request_id=second.request_id,
+        selected_option_id="normal",
+        result_id="budget-type",
+    ).decision
+    assert assignment_decision is not None
+    workspace = AssignmentWorkspace.start_for_pending(assignment_decision)
+    assert workspace is not None
+    workspace = workspace.with_shooting_selections(assignment_decision, ())
+
+    with patch.object(
+        LocalSessionClient,
+        "advance_until_decision_or_terminal",
+        side_effect=AssertionError("unsupported submission must not advance"),
+    ):
+        result = submit_assignment_workspace(
+            state=FiniteDecisionUiState(pending_decision=assignment_decision),
+            assignment_workspace=workspace,
+            client=client,
+            viewer_player_id="player-a",
+        )
+
+    assert result.finite_state.status_kind == "unsupported"
+    assert result.finite_state.pending_decision is None
+    assert result.finite_state.status_message == (
+        "Lifecycle reached its deterministic transition safety boundary."
+    )
+    assert result.finite_state.diagnostics[0].violation_code == "core_unsupported"
+    assert "transition_budget_exhausted" in result.finite_state.diagnostics[0].message
+    assert client.get_view("player-a").current_battle_phase == "command"
 
 
 def test_assignment_hud_and_visual_summary_use_workspace_rows() -> None:
@@ -395,13 +1221,20 @@ def test_assignment_runtime_data_exposes_selectable_target_row() -> None:
 
 def _shooting_declaration_decision(
     *,
+    request_id: str = "shooting-request-1",
     available_weapons: list[dict[str, object]] | None = None,
     target_candidates: list[dict[str, object]] | None = None,
+    targetless_weapon_candidates: list[dict[str, object]] | None = None,
+    selection_limits: list[dict[str, object]] | None = None,
+    firing_deck_value: int | None = None,
+    firing_deck_history: list[str] | None = None,
+    firing_deck_cargo: list[str] | None = None,
 ) -> UiDecision:
     if available_weapons is None:
         available_weapons = [
             {
                 "model_instance_id": "intercessor_1",
+                "weapon_instance_id": "bolt-rifle-copy-1",
                 "wargear_id": "bolt_rifle",
                 "weapon_profile_id": "bolt_rifle_profile",
                 "weapon_profile": {"name": "Bolt Rifle"},
@@ -412,36 +1245,47 @@ def _shooting_declaration_decision(
             {
                 "is_legal": True,
                 "observer_model_id": "intercessor_1",
+                "weapon_instance_id": "bolt-rifle-copy-1",
                 "weapon_profile_id": "bolt_rifle_profile",
                 "target_unit_instance_id": "guardian_squad",
                 "shooting_types": ["normal"],
                 "visibility_cache_key": "visibility-cache-1",
             }
         ]
+    proposal_request: dict[str, object] = {
+        "request_id": request_id,
+        "decision_type": "submit_shooting_declaration",
+        "actor_id": "player_1",
+        "game_id": "game-1",
+        "battle_round": 1,
+        "phase": "shooting",
+        "active_player_id": "player_1",
+        "unit_instance_id": "intercessor_squad",
+        "proposal_kind": "shooting_declaration",
+        "source_decision_request_id": "select-shooting-unit",
+        "source_decision_result_id": "ui-result-000001",
+        "selected_shooting_type": "normal",
+        "ruleset_descriptor_hash": "rules",
+        "visibility_cache_key": "visibility-cache-1",
+        "available_weapons": available_weapons,
+        "shooting_weapon_selection_limits": [] if selection_limits is None else selection_limits,
+        "target_candidates": target_candidates,
+    }
+    if targetless_weapon_candidates is not None:
+        proposal_request["targetless_weapon_candidates"] = targetless_weapon_candidates
+    if firing_deck_value is not None:
+        proposal_request["firing_deck_value"] = firing_deck_value
+        proposal_request["firing_deck_already_shot_unit_instance_ids"] = firing_deck_history
+        proposal_request["firing_deck_embarked_unit_instance_ids"] = (
+            ["embarked_unit"] if firing_deck_cargo is None else firing_deck_cargo
+        )
     return decision_from_fixture(
         {
-            "request_id": "shooting-request-1",
+            "request_id": request_id,
             "decision_type": "submit_shooting_declaration",
             "actor_id": "player_1",
             "payload": {
-                "proposal_request": {
-                    "request_id": "shooting-request-1",
-                    "decision_type": "submit_shooting_declaration",
-                    "actor_id": "player_1",
-                    "game_id": "game-1",
-                    "battle_round": 1,
-                    "phase": "shooting",
-                    "active_player_id": "player_1",
-                    "unit_instance_id": "intercessor_squad",
-                    "proposal_kind": "shooting_declaration",
-                    "source_decision_request_id": "select-shooting-unit",
-                    "source_decision_result_id": "ui-result-000001",
-                    "selected_shooting_type": "normal",
-                    "ruleset_descriptor_hash": "rules",
-                    "visibility_cache_key": "visibility-cache-1",
-                    "available_weapons": available_weapons,
-                    "target_candidates": target_candidates,
-                }
+                "proposal_request": proposal_request,
             },
             "is_parameterized": True,
             "options": [_submit_parameterized_option()],
@@ -449,7 +1293,30 @@ def _shooting_declaration_decision(
     )
 
 
-def _melee_declaration_decision() -> UiDecision:
+def _melee_declaration_decision(*, duplicate_abilities: bool = False) -> UiDecision:
+    weapon: dict[str, object] = {
+        "weapon_instance_id": "melee-copy-1",
+        "model_instance_id": "intercessor_1",
+        "wargear_id": "close_combat_weapon",
+        "weapon_profile_id": "close_combat_weapon_profile",
+        "is_extra_attacks": False,
+        "maximum_declared_targets": 1,
+        "fixed_attacks": 2,
+        "engaged_target_unit_instance_ids": ["guardian_squad"],
+        "weapon_profile": {"name": "Close Combat Weapon"},
+    }
+    if duplicate_abilities:
+        weapon["required_weapon_ability_selections"] = [
+            {
+                "request_id": "melee-ability-request",
+                "decision_type": "select_weapon_ability_instance",
+                "actor_id": "player_1",
+                "options": [
+                    {"option_id": "ability-instance:cleave-1", "label": "Cleave 1"},
+                    {"option_id": "ability-instance:cleave-2", "label": "Cleave 2"},
+                ],
+            }
+        ]
     return decision_from_fixture(
         {
             "request_id": "melee-request-1",
@@ -469,18 +1336,7 @@ def _melee_declaration_decision() -> UiDecision:
                     "source_decision_result_id": "ui-result-000001",
                     "ruleset_descriptor_hash": "rules",
                     "target_unit_instance_ids": ["guardian_squad"],
-                    "available_weapons": [
-                        {
-                            "model_instance_id": "intercessor_1",
-                            "wargear_id": "close_combat_weapon",
-                            "weapon_profile_id": "close_combat_weapon_profile",
-                            "is_extra_attacks": False,
-                            "maximum_declared_targets": 1,
-                            "fixed_attacks": 2,
-                            "engaged_target_unit_instance_ids": ["guardian_squad"],
-                            "weapon_profile": {"name": "Close Combat Weapon"},
-                        }
-                    ],
+                    "available_weapons": [weapon],
                 }
             },
             "is_parameterized": True,
@@ -494,6 +1350,7 @@ def _stratagem_target_binding_decision(
     declinable: bool = False,
     target_binding: dict[str, object] | None = _DEFAULT_TARGET_BINDING,
     target_binding_candidates: list[dict[str, object]] | None = None,
+    friendly_target_selectable: bool = False,
 ) -> UiDecision:
     proposal_request: dict[str, object] = {
         "request_id": "stratagem-request-1",
@@ -515,10 +1372,24 @@ def _stratagem_target_binding_decision(
             "definition": {
                 "stratagem_id": "core:test",
                 "name": "Test Stratagem",
+                **(
+                    {
+                        "target_spec": {
+                            "target_kind": "friendly_unit",
+                            "enumerable": False,
+                        }
+                    }
+                    if friendly_target_selectable
+                    else {}
+                ),
             },
         },
         "effect_selection": None,
     }
+    if friendly_target_selectable:
+        context = proposal_request["context"]
+        assert type(context) is dict
+        context["active_player_id"] = "player_2"
     if target_binding is not None:
         proposal_request["target_binding"] = target_binding
     if target_binding_candidates is not None:
@@ -544,3 +1415,25 @@ def _submit_parameterized_option() -> dict[str, object]:
         "label": "Submit Parameterized Payload",
         "payload": {"submission_kind": "parameterized"},
     }
+
+
+def _assignment_game_view(*, pending_decision: UiDecision | None) -> UiGameView:
+    return UiGameView(
+        viewer_player_id="player_1",
+        game_id="game-1",
+        stage="battle",
+        battle_round=1,
+        active_player_id="player_1",
+        current_setup_step=None,
+        current_battle_phase="shooting",
+        player_ids=("player_1", "player_2"),
+        battlefield_state=None,
+        mission_setup=None,
+        public_secondary_mission_choices=(),
+        public_secondary_mission_card_states=(),
+        public_command_point_ledgers=(),
+        public_victory_point_ledgers=(),
+        public_stratagem_use_records=(),
+        pending_decision=pending_decision,
+        pending_proposal=None,
+    )

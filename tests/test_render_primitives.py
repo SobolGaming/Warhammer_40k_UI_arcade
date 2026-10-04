@@ -10,9 +10,11 @@ from pathlib import Path
 import pytest
 
 from tests.support.contract_fixtures import decision_from_fixture
+from tests.support.core_contract_examples import required_core_example_path
 from warhammer40k_arcade_ui.core_client.protocol import (
     UiDecision,
     UiFiniteOption,
+    UiGameView,
 )
 from warhammer40k_arcade_ui.hud.action_summary import (
     ActionVisualSummary,
@@ -23,6 +25,7 @@ from warhammer40k_arcade_ui.hud.view_models import (
     build_context_menu,
 )
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
+from warhammer40k_arcade_ui.render.core_projection import battlefield_view_from_game_view
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
 from warhammer40k_arcade_ui.render.primitives import (
     CirclePrimitive,
@@ -145,6 +148,80 @@ def test_selected_unit_builds_selection_overlay_primitives() -> None:
     ]
     assert "selected_unit_overlay" in circle_layers
     assert "selected_model_overlay" in circle_layers
+
+
+@pytest.mark.parametrize("drift", ["owner", "membership", "component", "request"])
+def test_attached_charge_selection_overlays_require_current_public_actor(drift: str) -> None:
+    path = required_core_example_path("projections", "attached_charge_view.json")
+    game_view = UiGameView.from_payload(json.loads(path.read_text(encoding="utf-8")))
+    decision = game_view.pending_decision
+    assert decision is not None
+    proposal = decision.movement_proposal
+    assert proposal is not None
+    battlefield = battlefield_view_from_game_view(game_view)
+    preferences = default_preferences()
+    model_id = next(
+        model.model_id
+        for unit in battlefield.units
+        for model in unit.models
+        if model.rules_unit_instance_id == proposal.unit_instance_id
+    )
+    selection = SelectionState.initial(preferences).select_model_id(
+        unit_id=proposal.unit_instance_id,
+        model_id=model_id,
+        preferences=preferences,
+    )
+    draft = MovementDraft.start_for_pending(
+        view=battlefield,
+        selection=selection,
+        pending_decision=decision,
+    )
+    assert draft is not None
+    assert len(draft.model_paths) == 6
+    assert {
+        primitive.layer
+        for primitive in build_world_primitives(battlefield, selection, draft)
+        if isinstance(primitive, CirclePrimitive)
+    } >= {"selected_unit_overlay", "selected_model_overlay"}
+
+    component_id = draft.component_unit_instance_ids[0]
+    if drift == "owner":
+        battlefield = replace(
+            battlefield,
+            units=tuple(
+                replace(unit, player_id="player-b") if unit.unit_id == component_id else unit
+                for unit in battlefield.units
+            ),
+        )
+    elif drift == "membership":
+        battlefield = replace(
+            battlefield,
+            units=tuple(
+                replace(
+                    unit,
+                    models=tuple(
+                        replace(model, rules_unit_instance_id="other")
+                        if model.model_id == model_id
+                        else model
+                        for model in unit.models
+                    ),
+                )
+                for unit in battlefield.units
+            ),
+        )
+    elif drift == "component":
+        battlefield = replace(
+            battlefield,
+            units=tuple(unit for unit in battlefield.units if unit.unit_id != component_id),
+        )
+    else:
+        draft = replace(draft, proposal_request_id="stale-request")
+
+    assert not {
+        primitive.layer
+        for primitive in build_world_primitives(battlefield, selection, draft)
+        if isinstance(primitive, CirclePrimitive)
+    } & {"selected_unit_overlay", "selected_model_overlay"}
 
 
 def test_movement_draft_builds_path_waypoint_ghost_and_budget_primitives() -> None:
