@@ -355,6 +355,8 @@ def test_real_core_materialization_accepts_drafted_models_after_invalid_retry() 
         pending_decision=owner_view.pending_decision,
         model_display_by_id=owner_view.model_display_by_id,
         authoritative_models_by_id=owner_view.battlefield_view.models_by_id,
+        battlefield_state=owner_view.battlefield_state,
+        current_game_id=owner_view.game_id,
         projection_state_hash=owner_view.projection_state_hash,
     )
     assert draft is not None
@@ -408,6 +410,52 @@ def test_real_core_materialization_accepts_drafted_models_after_invalid_retry() 
     for viewer in (owner, opponent):
         events = client.get_events_since(0, viewer).events
         assert any(event["event_type"] == "catalog_models_materialized" for event in events)
+
+
+@pytest.mark.integration
+def test_real_materialization_rejects_request_army_conflicting_with_public_owner() -> None:
+    client, owner, _opponent = _real_materialization_client()
+    status = client.advance_until_decision_or_terminal()
+    assert status.decision is not None
+    raw = cast(JsonObject, copy.deepcopy(client.session.view(viewer_player_id=owner)))
+    state = cast(JsonObject, raw["battlefield_state"])
+    placed = cast(list[JsonObject], state["placed_armies"])
+    owner_armies = [row["army_id"] for row in placed if row["player_id"] == owner]
+    assert owner_armies == ["army-horrors"]
+    cast(JsonObject, cast(JsonObject, raw["pending_decision"])["payload"])["army_id"] = (
+        "foreign-army"
+    )
+    cast(JsonObject, raw["pending_proposal"])["army_id"] = "foreign-army"
+    forged = UiGameView.from_payload(raw)
+    assert forged.pending_decision is not None
+    assert forged.battlefield_view is not None
+    proposal = forged.pending_decision.placement_proposal
+    assert proposal is not None
+    assert all(
+        model_id not in forged.battlefield_view.models_by_id
+        for model_id in proposal.required_model_ids
+    )
+    before_records = client.session.decision_record_count()
+    with pytest.raises(PlacementDraftError, match="request army differs from public army"):
+        PlacementDraft.start_for_pending(
+            view=battlefield_view_from_game_view(forged),
+            selection=SelectionState.initial(default_preferences()),
+            pending_decision=forged.pending_decision,
+            model_display_by_id=forged.model_display_by_id,
+            authoritative_models_by_id=forged.battlefield_view.models_by_id,
+            battlefield_state=forged.battlefield_state,
+            current_game_id=forged.game_id,
+            projection_state_hash=forged.projection_state_hash,
+        )
+    window = _window(forged)
+    try:
+        window._sync_placement_draft()  # pyright: ignore[reportPrivateUsage]
+        assert window.placement_draft is None
+        assert window.finite_state.status_kind == "invalid"
+        assert window.finite_state.diagnostics[0].violation_code == "placement_draft_unavailable"
+    finally:
+        window.close()
+    assert client.session.decision_record_count() == before_records
 
 
 def _window(view: UiGameView) -> ArcadeWarhammerWindow:

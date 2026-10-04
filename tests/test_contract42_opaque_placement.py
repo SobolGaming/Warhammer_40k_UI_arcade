@@ -54,6 +54,7 @@ def _draft(
             view.battlefield_state if battlefield_state is None else battlefield_state
         ),
         support_profile=support_profile,
+        current_game_id=view.game_id,
         projection_state_hash=view.projection_state_hash,
     )
     assert result is not None

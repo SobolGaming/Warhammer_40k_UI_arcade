@@ -134,6 +134,7 @@ def _draft(
         authoritative_models_by_id=view.battlefield_view.models_by_id,
         battlefield_state=view.battlefield_state,
         support_profile=client.get_support_profile(view.viewer_player_id),
+        current_game_id=view.game_id,
         projection_state_hash=view.projection_state_hash,
     )
     assert draft is not None
@@ -291,6 +292,7 @@ def test_grouped_placement_rejects_component_or_owner_drift_and_shares_disembark
             authoritative_models_by_id=projected,
             battlefield_state=view.battlefield_state,
             support_profile=client.get_support_profile(_OWNER),
+            current_game_id=view.game_id,
         )
 
     projected = copy.deepcopy(view.battlefield_view.models_by_id)
@@ -305,6 +307,7 @@ def test_grouped_placement_rejects_component_or_owner_drift_and_shares_disembark
             authoritative_models_by_id=projected,
             battlefield_state=view.battlefield_state,
             support_profile=client.get_support_profile(_OWNER),
+            current_game_id=view.game_id,
         )
 
     proposal = view.pending_decision.placement_proposal

@@ -265,6 +265,7 @@ def _placed_draft(view: UiGameView, *, support_profile: UiSupportProfile) -> Pla
         authoritative_models_by_id=view.battlefield_view.models_by_id,
         battlefield_state=view.battlefield_state,
         support_profile=support_profile,
+        current_game_id=view.game_id,
         projection_state_hash=view.projection_state_hash,
     )
     assert draft is not None
