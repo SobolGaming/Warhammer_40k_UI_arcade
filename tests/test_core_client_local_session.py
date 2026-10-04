@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from warhammer40k_core.adapters.local_session import LocalGameSession
 from warhammer40k_core.adapters.setup_smoke import canonical_setup_prebattle_smoke_config
+from warhammer40k_core.engine.battlefield_state import PlacementError
 
 from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
 from warhammer40k_arcade_ui.core_client.protocol import (
@@ -64,6 +67,40 @@ def test_local_session_parameterized_submission_rejects_finite_request() -> None
             payload={"proposal_request_id": decision.request_id},
             result_id="ui-result-wrong-kind",
         )
+
+
+def test_local_session_translates_placement_error_on_finite_submission() -> None:
+    client, waiting = _waiting_public_client()
+    decision = _required_decision(waiting)
+    with (
+        patch.object(LocalGameSession, "submit_option", side_effect=PlacementError("bad army")),
+        pytest.raises(UiClientSubmissionError, match="bad army") as caught,
+    ):
+        client.submit_finite(
+            request_id=decision.request_id,
+            selected_option_id=decision.options[0].option_id,
+            result_id="placement-error-finite",
+        )
+    assert isinstance(caught.value.__cause__, PlacementError)
+
+
+def test_local_session_translates_placement_error_on_parameterized_submission() -> None:
+    client, waiting = _waiting_public_client()
+    decision = _required_decision(waiting)
+    with (
+        patch.object(
+            LocalGameSession,
+            "submit_parameterized_payload",
+            side_effect=PlacementError("bad army"),
+        ),
+        pytest.raises(UiClientSubmissionError, match="bad army") as caught,
+    ):
+        client.submit_parameterized_payload(
+            request_id=decision.request_id,
+            payload={"proposal_request_id": decision.request_id},
+            result_id="placement-error-parameterized",
+        )
+    assert isinstance(caught.value.__cause__, PlacementError)
 
 
 def test_local_session_valid_finite_submission_uses_public_facade() -> None:

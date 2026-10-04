@@ -410,7 +410,7 @@ def test_attached_deployment_requires_public_army_authority() -> None:
     opponent_profile = client.get_support_profile(_OPPONENT)
     opponent_rows = cast(list[JsonObject], opponent_profile.payload["mustering_support_rows"])
     assert all(row["player_id"] != _OWNER for row in opponent_rows)
-    with pytest.raises(PlacementDraftError, match="public army"):
+    with pytest.raises(PlacementDraftError, match="profile viewer differs"):
         start_with(opponent_profile)
 
     muster_rows = cast(list[JsonObject], profile.payload["mustering_support_rows"])

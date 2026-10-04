@@ -311,6 +311,7 @@ def test_placement_draft_builds_ghost_primitives_without_labels() -> None:
         view=view,
         selection=SelectionState.initial(default_preferences()),
         pending_decision=_placement_proposal_decision(),
+        battlefield_state={"placed_armies": [{"player_id": "player_1", "army_id": "player_1"}]},
     )
     assert draft is not None
     draft = draft.place_current_model((8.0, 18.0))
@@ -332,6 +333,7 @@ def test_placement_history_keeps_previous_advisory_ghosts() -> None:
         view=view,
         selection=SelectionState.initial(default_preferences()),
         pending_decision=_placement_proposal_decision(),
+        battlefield_state={"placed_armies": [{"player_id": "player_1", "army_id": "player_1"}]},
     )
     assert draft is not None
     draft = draft.place_current_model((8.0, 18.0))

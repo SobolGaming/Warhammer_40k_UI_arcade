@@ -12,6 +12,7 @@ from warhammer40k_core.adapters.redaction import (
     public_support_profile_payload,
     redacted_lifecycle_status,
 )
+from warhammer40k_core.engine.battlefield_state import PlacementError
 from warhammer40k_core.engine.decision_request import DecisionError
 from warhammer40k_core.engine.game_state import GameConfig
 from warhammer40k_core.engine.phase import (
@@ -125,7 +126,7 @@ class LocalSessionClient:
                 option_id=selected_option_id,
                 result_id=result_id,
             )
-        except (DecisionError, GameLifecycleError) as exc:
+        except (DecisionError, GameLifecycleError, PlacementError) as exc:
             raise UiClientSubmissionError(str(exc)) from exc
         return self._status_from_lifecycle(status)
 
@@ -159,7 +160,7 @@ class LocalSessionClient:
                 payload=validate_json_value(payload),
                 result_id=result_id,
             )
-        except (DecisionError, GameLifecycleError) as exc:
+        except (DecisionError, GameLifecycleError, PlacementError) as exc:
             raise UiClientSubmissionError(str(exc)) from exc
         return self._status_from_lifecycle(status)
 
