@@ -318,7 +318,10 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._sync_selection_to_highlighted_option(source="initial_state")
         self._sync_assignment_workspace()
         if initial_game_view is not None:
-            self._refresh_public_contract_data(initial_game_view)
+            self._refresh_public_contract_data(
+                initial_game_view,
+                viewer_player_id=viewer_player_id,
+            )
 
     @property
     def camera(self) -> WorldCamera:
@@ -1739,17 +1742,17 @@ class ArcadeWarhammerWindow(arcade.Window):
             )
             return
         result = self._submit_finite_option_or_fatal(selected_option_id)
-        if result.viewer_player_id is not None:
-            self._viewer_player_id = result.viewer_player_id
         if result.refreshed_view is not None:
             try:
                 self._apply_refreshed_game_view(
                     view=result.refreshed_view,
                     state=result.finite_state,
                 )
-            except RenderViewModelError as exc:
+            except (RenderViewModelError, UiClientProtocolError) as exc:
                 self._set_finite_state(self._fatal_game_engine_state(exc))
                 return
+        elif result.viewer_player_id is not None:
+            self._viewer_player_id = result.viewer_player_id
         self._set_finite_state(result.finite_state)
         self._trace_event(
             category="ui",
@@ -1814,17 +1817,17 @@ class ArcadeWarhammerWindow(arcade.Window):
         except KeyError as exc:
             self._set_finite_state(self._fatal_game_engine_state(exc))
             return
-        if result.viewer_player_id is not None:
-            self._viewer_player_id = result.viewer_player_id
         if result.refreshed_view is not None:
             try:
                 self._apply_refreshed_game_view(
                     view=result.refreshed_view,
                     state=result.finite_state,
                 )
-            except RenderViewModelError as exc:
+            except (RenderViewModelError, UiClientProtocolError) as exc:
                 self._set_finite_state(self._fatal_game_engine_state(exc))
                 return
+        elif result.viewer_player_id is not None:
+            self._viewer_player_id = result.viewer_player_id
         if result.clear_movement_draft:
             self._movement_draft = None
             self._selection_state = self._selection_state.without_movement_draft_overlays(
@@ -1880,17 +1883,17 @@ class ArcadeWarhammerWindow(arcade.Window):
         except KeyError as exc:
             self._set_finite_state(self._fatal_game_engine_state(exc))
             return
-        if result.viewer_player_id is not None:
-            self._viewer_player_id = result.viewer_player_id
         if result.refreshed_view is not None:
             try:
                 self._apply_refreshed_game_view(
                     view=result.refreshed_view,
                     state=result.finite_state,
                 )
-            except RenderViewModelError as exc:
+            except (RenderViewModelError, UiClientProtocolError) as exc:
                 self._set_finite_state(self._fatal_game_engine_state(exc))
                 return
+        elif result.viewer_player_id is not None:
+            self._viewer_player_id = result.viewer_player_id
         if result.clear_placement_draft:
             self._placement_draft = None
             self._placement_history = ()
@@ -1933,17 +1936,17 @@ class ArcadeWarhammerWindow(arcade.Window):
         except KeyError as exc:
             self._set_finite_state(self._fatal_game_engine_state(exc))
             return
-        if result.viewer_player_id is not None:
-            self._viewer_player_id = result.viewer_player_id
         if result.refreshed_view is not None:
             try:
                 self._apply_refreshed_game_view(
                     view=result.refreshed_view,
                     state=result.finite_state,
                 )
-            except RenderViewModelError as exc:
+            except (RenderViewModelError, UiClientProtocolError) as exc:
                 self._set_finite_state(self._fatal_game_engine_state(exc))
                 return
+        elif result.viewer_player_id is not None:
+            self._viewer_player_id = result.viewer_player_id
         if result.clear_assignment_workspace:
             self._assignment_workspace = None
             self._selected_assignment_group_id = None
@@ -1979,11 +1982,56 @@ class ArcadeWarhammerWindow(arcade.Window):
         self._selection_state = self._selection_state.without_movement_draft_overlays(
             self._preferences
         )
+        self._clear_viewer_render_state_after_fatal_error()
         self._fatal_exit_deadline_monotonic = time.monotonic() + FATAL_ENGINE_EXIT_DELAY_SECONDS
-        return self._finite_state.with_fatal_game_engine_error(
+        return replace(
+            self._finite_state,
+            event_cursor=0,
+            event_log_lines=(),
+            event_payloads=(),
+        ).with_fatal_game_engine_error(
             message=_fatal_game_engine_error_message(crash_report_path),
             detail=_fatal_game_engine_error_detail(exc),
         )
+
+    def _clear_viewer_render_state_after_fatal_error(self) -> None:
+        """Remove all projection-derived data before the fatal frame can be drawn."""
+
+        self._battlefield_view = replace(
+            self._battlefield_view,
+            deployment_zones=(),
+            objectives=(),
+            terrain=(),
+            units=(),
+            hud=replace(
+                self._battlefield_view.hud,
+                phase_label="Unavailable",
+                active_player_id="none",
+                pending_decision_summary="No pending decision",
+                event_log_lines=(),
+            ),
+            interaction_request_id=None,
+            selected_or_acting_entity_ids=(),
+            legal_candidate_refs=(),
+            measurement_overlays=(),
+            path_overlays=(),
+            render_hints=(),
+            hit_regions=(),
+        )
+        self._last_game_view = None
+        self._viewer_player_id = "none"
+        self._known_unit_display_by_id = {}
+        self._known_model_display_by_id = {}
+        self._rules_catalog = None
+        self._support_profiles_by_viewer.clear()
+        self._selection_state = SelectionState.initial(self._preferences)
+        self._placement_history = ()
+        self._assignment_choice_index = 0
+        self._hud_button_hit_regions = ()
+        self._hud_scroll_hit_regions = ()
+        self._hud_scroll_offsets.clear()
+        self._hovered_hud_button_id = None
+        self._mouse_world_position = None
 
     def _write_fatal_crash_report(self, exc: FatalGameEngineException) -> Path | None:
         try:
@@ -2493,6 +2541,29 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._last_game_view is not None
             and self._last_game_view.viewer_player_id != view.viewer_player_id
         )
+        event_log_lines = _hud_event_lines(
+            current_lines=() if viewer_changed else self._battlefield_view.hud.event_log_lines,
+            state_lines=state.event_log_lines,
+        )
+        if _can_rebuild_core_projection(view):
+            try:
+                battlefield_view = battlefield_view_from_game_view(view).with_hud(
+                    phase_label=view.current_battle_phase or view.stage,
+                    active_player_id=view.active_player_id or "none",
+                    pending_decision_summary=_pending_decision_summary(state.pending_decision),
+                    event_log_lines=event_log_lines,
+                )
+            except CoreProjectionRenderError as exc:
+                raise RenderViewModelError(str(exc)) from exc
+        else:
+            battlefield_view = self._battlefield_view.refreshed_from_projection(
+                battlefield_state=view.battlefield_state,
+                phase_label=view.current_battle_phase or view.stage,
+                active_player_id=view.active_player_id or "none",
+                pending_decision_summary=_pending_decision_summary(state.pending_decision),
+                event_log_lines=event_log_lines,
+            )
+        self._refresh_public_contract_data(view, viewer_player_id=view.viewer_player_id)
         if viewer_changed:
             self._finite_state = state
             self._pending_decision = state.pending_decision
@@ -2504,33 +2575,11 @@ class ArcadeWarhammerWindow(arcade.Window):
             self._selected_assignment_group_id = None
             self._assignment_choice_index = 0
             self._selection_state = SelectionState.initial(self._preferences)
+        self._battlefield_view = battlefield_view
         self._last_game_view = view
         self._viewer_player_id = view.viewer_player_id
-        self._refresh_public_contract_data(view)
         self._known_unit_display_by_id = dict(view.unit_display_by_id)
         self._known_model_display_by_id = dict(view.model_display_by_id)
-        event_log_lines = _hud_event_lines(
-            current_lines=() if viewer_changed else self._battlefield_view.hud.event_log_lines,
-            state_lines=state.event_log_lines,
-        )
-        if _can_rebuild_core_projection(view):
-            try:
-                self._battlefield_view = battlefield_view_from_game_view(view).with_hud(
-                    phase_label=view.current_battle_phase or view.stage,
-                    active_player_id=view.active_player_id or "none",
-                    pending_decision_summary=_pending_decision_summary(state.pending_decision),
-                    event_log_lines=event_log_lines,
-                )
-            except CoreProjectionRenderError as exc:
-                raise RenderViewModelError(str(exc)) from exc
-        else:
-            self._battlefield_view = self._battlefield_view.refreshed_from_projection(
-                battlefield_state=view.battlefield_state,
-                phase_label=view.current_battle_phase or view.stage,
-                active_player_id=view.active_player_id or "none",
-                pending_decision_summary=_pending_decision_summary(state.pending_decision),
-                event_log_lines=event_log_lines,
-            )
         self._trace_event(
             category="ui",
             event_name="ui.projection_refreshed",
@@ -2542,7 +2591,12 @@ class ArcadeWarhammerWindow(arcade.Window):
             },
         )
 
-    def _refresh_public_contract_data(self, view: UiGameView) -> None:
+    def _refresh_public_contract_data(
+        self,
+        view: UiGameView,
+        *,
+        viewer_player_id: str,
+    ) -> None:
         if self._core_client is None:
             return
         if view.projection_schema == "ui-fixture-v1":
@@ -2550,10 +2604,11 @@ class ArcadeWarhammerWindow(arcade.Window):
         catalog_reference = view.rules_catalog
         if catalog_reference is None:
             raise UiClientProtocolError("Current game projection is missing rules_catalog.")
+        catalog = self._rules_catalog
         if (
-            self._rules_catalog is None
-            or self._rules_catalog.catalog_id != catalog_reference.catalog_id
-            or self._rules_catalog.source_hash != catalog_reference.source_hash
+            catalog is None
+            or catalog.catalog_id != catalog_reference.catalog_id
+            or catalog.source_hash != catalog_reference.source_hash
         ):
             catalog = self._core_client.get_rules_catalog()
             if (
@@ -2564,9 +2619,9 @@ class ArcadeWarhammerWindow(arcade.Window):
                 raise UiClientProtocolError(
                     "Rules catalog projection does not match the game-view catalog reference."
                 )
-            self._rules_catalog = catalog
-        if self._viewer_player_id not in self._support_profiles_by_viewer:
-            profile = self._core_client.get_support_profile(self._viewer_player_id)
+        profile = None
+        if viewer_player_id not in self._support_profiles_by_viewer:
+            profile = self._core_client.get_support_profile(viewer_player_id)
             if (
                 profile.game_id != view.game_id
                 or profile.catalog_id != catalog_reference.catalog_id
@@ -2574,7 +2629,9 @@ class ArcadeWarhammerWindow(arcade.Window):
                 raise UiClientProtocolError(
                     "Viewer support profile does not match the current game projection."
                 )
-            self._support_profiles_by_viewer[self._viewer_player_id] = profile
+        self._rules_catalog = catalog
+        if profile is not None:
+            self._support_profiles_by_viewer[viewer_player_id] = profile
 
     def _trace_event(
         self,

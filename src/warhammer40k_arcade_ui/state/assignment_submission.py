@@ -19,6 +19,7 @@ from warhammer40k_arcade_ui.state.assignment_workspace import (
 from warhammer40k_arcade_ui.state.finite_decision import (
     FiniteDecisionUiState,
     refresh_submission_projection,
+    status_after_submission,
 )
 
 
@@ -207,10 +208,9 @@ def submit_assignment_workspace(
         payload=submission.payload,
         result_id=submission.result_id,
     )
-    authoritative_status = (
-        submitted_status
-        if submitted_status.status_kind == "invalid"
-        else client.advance_until_decision_or_terminal()
+    authoritative_status = status_after_submission(
+        submitted_status=submitted_status,
+        client=client,
     )
     refresh = refresh_submission_projection(
         state=prepared_state,

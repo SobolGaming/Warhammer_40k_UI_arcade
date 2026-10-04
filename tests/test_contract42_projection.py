@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import replace
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -12,11 +13,15 @@ import pytest
 from tests.support.core_contract_examples import required_core_example_path
 from tests.support.render_capture import capture_window_frame
 from warhammer40k_arcade_ui.config import AppConfig
+from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
     UiClientProtocolError,
+    UiClientStatus,
+    UiEventDelta,
     UiGameView,
 )
+from warhammer40k_arcade_ui.hud.view_models import build_finite_decision_panel
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 from warhammer40k_arcade_ui.render.core_projection import (
@@ -403,6 +408,104 @@ def test_alternating_viewer_refresh_drops_hidden_display_rows_and_event_lines() 
         assert own_unit_id in window._known_unit_display_by_id  # pyright: ignore[reportPrivateUsage]
         assert own_model_id in window._known_model_display_by_id  # pyright: ignore[reportPrivateUsage]
         assert "player-b public event" not in window.battlefield_view.hud.event_log_lines
+    finally:
+        window.close()
+
+
+@pytest.mark.parametrize("failure_kind", ["membership", "pose"])
+def test_failed_viewer_refresh_clears_prior_viewer_from_fatal_frame(
+    failure_kind: str,
+    tmp_path: Path,
+) -> None:
+    raw = _post_deployment_payload()
+    old = UiGameView.from_payload(raw)
+    assert old.pending_decision is not None
+    next_decision = replace(old.pending_decision, actor_id="player-b")
+    changed = copy.deepcopy(raw)
+    changed["viewer_player_id"] = "player-b"
+    changed["unit_display_by_id"] = {}
+    changed["model_display_by_id"] = {}
+    models = cast(
+        JsonObject,
+        cast(JsonObject, cast(JsonObject, changed["battlefield_view"])["authoritative"])[
+            "models_by_id"
+        ],
+    )
+    model_id = next(
+        key
+        for key, row in models.items()
+        if cast(JsonObject, row)["owner_player_id"] == "player-b"
+        and cast(JsonObject, row)["state"] == "placed"
+    )
+    model = cast(JsonObject, models[model_id])
+    if failure_kind == "membership":
+        model["rules_unit_instance_id"] = None
+    else:
+        cast(JsonObject, cast(JsonObject, model["pose"])["position"])["z_inches"] = "bad"
+    cast(JsonObject, cast(JsonObject, changed["battlefield_view"])["authoritative"])[
+        "models_by_id"
+    ] = {model_id: model}
+    malformed = replace(UiGameView.from_payload(changed), pending_decision=next_decision)
+    client = FakeCoreClient(
+        status=UiClientStatus(
+            stage="battle",
+            status_kind="waiting_for_decision",
+            decision=next_decision,
+        ),
+        view=malformed,
+        event_delta=UiEventDelta(
+            viewer_player_id="player-b",
+            cursor=0,
+            next_cursor=0,
+            events=(),
+        ),
+    )
+    battlefield = battlefield_view_from_game_view(old).with_hud(
+        phase_label="movement",
+        active_player_id="player-a",
+        pending_decision_summary="Prior viewer action",
+        event_log_lines=("prior viewer private event",),
+    )
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=battlefield,
+        preferences=default_preferences(),
+        pending_decision=old.pending_decision,
+        initial_game_view=old,
+        viewer_player_id="player-a",
+        crash_report_dir=tmp_path,
+    )
+    try:
+        old_frame = capture_window_frame(window, source_name="old-viewer-before-fatal-refresh")
+        assert old_frame.close_color_count(PLAYER_1_COLOR, tolerance=0) > 0
+        assert window.battlefield_view.units
+        assert window._known_model_display_by_id  # pyright: ignore[reportPrivateUsage]
+        window._core_client = client  # pyright: ignore[reportPrivateUsage]
+
+        window._submit_finite_option(old.pending_decision.options[0].option_id)  # pyright: ignore[reportPrivateUsage]
+
+        assert window.finite_state.status_kind == "fatal"
+        assert window.finite_state.diagnostics[0].violation_code == "fatal_game_engine_error"
+        expected_field = "rules_unit_instance_id" if failure_kind == "membership" else "z_inches"
+        assert expected_field in window.finite_state.diagnostics[0].message
+        assert window.viewer_player_id == "none"
+        assert window.battlefield_view.units == ()
+        assert window.battlefield_view.hud.event_log_lines == ()
+        assert window.finite_state.event_log_lines == ()
+        assert window.finite_state.event_payloads == ()
+        assert window._last_game_view is None  # pyright: ignore[reportPrivateUsage]
+        assert window._known_unit_display_by_id == {}  # pyright: ignore[reportPrivateUsage]
+        assert window._known_model_display_by_id == {}  # pyright: ignore[reportPrivateUsage]
+        assert window._selection_state.selected_unit_id is None  # pyright: ignore[reportPrivateUsage]
+        panel = build_finite_decision_panel(
+            pending_decision=window.finite_state.pending_decision,
+            highlighted_option_index=window.finite_state.highlighted_option_index,
+            status_message=window.finite_state.status_message,
+            diagnostics=window.finite_state.diagnostics,
+        )
+        assert panel.diagnostic_lines
+        fatal_frame = capture_window_frame(window, source_name="fatal-viewer-refresh")
+        assert fatal_frame.close_color_count(PLAYER_1_COLOR, tolerance=0) == 0
     finally:
         window.close()
 

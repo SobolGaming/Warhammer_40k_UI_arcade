@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import cast
+from unittest.mock import patch
 
 import pytest
 from warhammer40k_core.core.army_catalog import ArmyCatalog
+from warhammer40k_core.engine.game_state import GameConfig
 
+from tests.support import contract42_battle_fixture
 from tests.support.contract_fixtures import decision_from_fixture
 from tests.support.gui_driver import GuiTestDriver
 from warhammer40k_arcade_ui.config import AppConfig
-from warhammer40k_arcade_ui.core_client.protocol import JsonObject, UiDecision
+from warhammer40k_arcade_ui.core_client.fake_client import FakeCoreClient
+from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
+from warhammer40k_arcade_ui.core_client.protocol import (
+    JsonObject,
+    UiClientStatus,
+    UiDecision,
+    UiEventDelta,
+    UiGameView,
+)
 from warhammer40k_arcade_ui.hud.action_summary import build_action_visual_summary
 from warhammer40k_arcade_ui.hud.ergonomics import build_hud_ergonomics_view
 from warhammer40k_arcade_ui.hud.runtime_data import runtime_data_for_ergonomic_hud
@@ -21,12 +33,16 @@ from warhammer40k_arcade_ui.hud.view_models import (
 from warhammer40k_arcade_ui.preferences.defaults import default_preferences
 from warhammer40k_arcade_ui.render.arcade_window import ArcadeWarhammerWindow
 from warhammer40k_arcade_ui.render.default_fixture import default_battlefield_view
-from warhammer40k_arcade_ui.state.assignment_submission import prepare_assignment_submission
+from warhammer40k_arcade_ui.state.assignment_submission import (
+    prepare_assignment_submission,
+    submit_assignment_workspace,
+)
 from warhammer40k_arcade_ui.state.assignment_workspace import (
     AssignmentWorkspace,
     ShootingAssignmentSelection,
     is_assignment_parameterized_decision,
 )
+from warhammer40k_arcade_ui.state.finite_decision import FiniteDecisionUiState
 
 _DEFAULT_TARGET_BINDING: dict[str, object] = {
     "target_kind": "friendly_unit",
@@ -946,6 +962,130 @@ def test_prepare_assignment_submission_rejects_decline_without_engine_flag() -> 
     assert next_result_index == 7
 
 
+def test_submit_assignment_workspace_preserves_unsupported_without_advancing() -> None:
+    decision = _shooting_declaration_decision()
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    status = UiClientStatus(
+        stage="battle",
+        status_kind="unsupported",
+        message="Core stopped at its transition safety boundary (transition_budget_exhausted).",
+        payload={"unsupported_reason": "transition_budget_exhausted"},
+    )
+    fake = FakeCoreClient(
+        status=status,
+        view=_assignment_game_view(pending_decision=decision),
+        event_delta=UiEventDelta(
+            viewer_player_id="player_1",
+            cursor=0,
+            next_cursor=0,
+            events=(),
+        ),
+    )
+
+    result = submit_assignment_workspace(
+        state=FiniteDecisionUiState(pending_decision=decision),
+        assignment_workspace=workspace,
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert len(fake.parameterized_submissions) == 1
+    assert fake.advance_call_count == 0
+    assert result.finite_state.status_kind == "unsupported"
+    assert result.finite_state.pending_decision is None
+    assert "transition_budget_exhausted" in result.finite_state.status_message
+    assert result.finite_state.diagnostics[0].violation_code == "core_unsupported"
+    assert result.finite_state.diagnostics[0].message == result.finite_state.status_message
+
+
+@pytest.mark.parametrize("status_kind", ["waiting_for_decision", "terminal"])
+def test_submit_assignment_workspace_preserves_waiting_or_terminal_boundary(
+    status_kind: str,
+) -> None:
+    decision = _shooting_declaration_decision()
+    workspace = AssignmentWorkspace.start_for_pending(decision)
+    assert workspace is not None
+    status = UiClientStatus(
+        stage="battle",
+        status_kind=status_kind,
+        decision=decision if status_kind == "waiting_for_decision" else None,
+        message=f"Core returned {status_kind}.",
+    )
+    fake = FakeCoreClient(
+        status=status,
+        view=_assignment_game_view(pending_decision=decision),
+        event_delta=UiEventDelta(
+            viewer_player_id="player_1",
+            cursor=0,
+            next_cursor=0,
+            events=(),
+        ),
+    )
+
+    result = submit_assignment_workspace(
+        state=FiniteDecisionUiState(pending_decision=decision),
+        assignment_workspace=workspace,
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert fake.advance_call_count == 0
+    assert result.finite_state.status_kind == status_kind
+    assert result.finite_state.status_message == f"Core returned {status_kind}."
+    assert result.finite_state.pending_decision == (
+        decision if status_kind == "waiting_for_decision" else None
+    )
+    assert result.finite_state.diagnostics == ()
+
+
+def test_real_core_budget_exhaustion_remains_visible_after_assignment_submission() -> None:
+    with patch.object(
+        contract42_battle_fixture,
+        "GameConfig",
+        side_effect=partial(GameConfig, max_lifecycle_transitions=3),
+    ):
+        client = contract42_battle_fixture.shooting_client()
+    first = client.advance_until_decision_or_terminal().decision
+    assert first is not None
+    second = client.submit_finite(
+        request_id=first.request_id,
+        selected_option_id="army-alpha:shooter",
+        result_id="budget-shooter",
+    ).decision
+    assert second is not None
+    assignment_decision = client.submit_finite(
+        request_id=second.request_id,
+        selected_option_id="normal",
+        result_id="budget-type",
+    ).decision
+    assert assignment_decision is not None
+    workspace = AssignmentWorkspace.start_for_pending(assignment_decision)
+    assert workspace is not None
+    workspace = workspace.with_shooting_selections(assignment_decision, ())
+
+    with patch.object(
+        LocalSessionClient,
+        "advance_until_decision_or_terminal",
+        side_effect=AssertionError("unsupported submission must not advance"),
+    ):
+        result = submit_assignment_workspace(
+            state=FiniteDecisionUiState(pending_decision=assignment_decision),
+            assignment_workspace=workspace,
+            client=client,
+            viewer_player_id="player-a",
+        )
+
+    assert result.finite_state.status_kind == "unsupported"
+    assert result.finite_state.pending_decision is None
+    assert result.finite_state.status_message == (
+        "Lifecycle reached its deterministic transition safety boundary."
+    )
+    assert result.finite_state.diagnostics[0].violation_code == "core_unsupported"
+    assert "transition_budget_exhausted" in result.finite_state.diagnostics[0].message
+    assert client.get_view("player-a").current_battle_phase == "command"
+
+
 def test_assignment_hud_and_visual_summary_use_workspace_rows() -> None:
     decision = _shooting_declaration_decision()
     workspace = AssignmentWorkspace.start_for_pending(decision)
@@ -1275,3 +1415,25 @@ def _submit_parameterized_option() -> dict[str, object]:
         "label": "Submit Parameterized Payload",
         "payload": {"submission_kind": "parameterized"},
     }
+
+
+def _assignment_game_view(*, pending_decision: UiDecision | None) -> UiGameView:
+    return UiGameView(
+        viewer_player_id="player_1",
+        game_id="game-1",
+        stage="battle",
+        battle_round=1,
+        active_player_id="player_1",
+        current_setup_step=None,
+        current_battle_phase="shooting",
+        player_ids=("player_1", "player_2"),
+        battlefield_state=None,
+        mission_setup=None,
+        public_secondary_mission_choices=(),
+        public_secondary_mission_card_states=(),
+        public_command_point_ledgers=(),
+        public_victory_point_ledgers=(),
+        public_stratagem_use_records=(),
+        pending_decision=pending_decision,
+        pending_proposal=None,
+    )

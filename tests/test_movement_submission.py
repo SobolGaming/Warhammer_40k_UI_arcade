@@ -208,6 +208,41 @@ def test_submit_movement_draft_refreshes_next_actor_viewer() -> None:
     assert "movement proposal pending" not in result.finite_state.event_log_lines
 
 
+def test_submit_movement_draft_preserves_unsupported_without_advancing() -> None:
+    decision = _movement_proposal_decision()
+    status = UiClientStatus(
+        stage="battle",
+        status_kind="unsupported",
+        message="Core stopped at its transition safety boundary (transition_budget_exhausted).",
+        payload={"unsupported_reason": "transition_budget_exhausted"},
+    )
+    fake = FakeCoreClient(
+        status=status,
+        view=_game_view(pending_decision=decision),
+        event_delta=UiEventDelta(
+            viewer_player_id="player_1",
+            cursor=0,
+            next_cursor=0,
+            events=(),
+        ),
+    )
+
+    result = submit_movement_draft(
+        state=FiniteDecisionUiState(pending_decision=decision),
+        movement_draft=_ready_draft(decision),
+        client=fake,
+        viewer_player_id="player_1",
+    )
+
+    assert len(fake.movement_submissions) == 1
+    assert fake.advance_call_count == 0
+    assert result.finite_state.status_kind == "unsupported"
+    assert result.finite_state.pending_decision is None
+    assert "transition_budget_exhausted" in result.finite_state.status_message
+    assert result.finite_state.diagnostics[0].violation_code == "core_unsupported"
+    assert result.finite_state.diagnostics[0].message == result.finite_state.status_message
+
+
 def test_submit_movement_draft_surfaces_invalid_diagnostics_and_keeps_draft() -> None:
     decision = _movement_proposal_decision()
     retry_decision = _movement_proposal_decision(request_id="decision-request-000006")
