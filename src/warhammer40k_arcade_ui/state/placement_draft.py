@@ -369,6 +369,12 @@ class PlacementDraft:
             and (proposal.army_id != public_army_id)
         ):
             raise PlacementDraftError("Placement request army differs from public army ownership.")
+        if proposal.decision_type == "submit_catalog_model_materialization_placement":
+            _validate_materialization_source_ownership(
+                proposal=proposal,
+                unit_display_by_id=unit_display_by_id,
+                authoritative_models_by_id=authoritative_models_by_id,
+            )
         materialized_models_by_id = {
             _non_empty_string("materialized model_instance_id", model["model_instance_id"]): model
             for model in proposal.materialized_models
@@ -886,6 +892,65 @@ def _whole_unit_return_model_ids(
     if set(display_ids) != physical_ids:
         raise PlacementDraftError("Whole-unit return model inventories differ across public views.")
     return display_ids
+
+
+def _validate_materialization_source_ownership(
+    *,
+    proposal: UiPlacementProposalRequest,
+    unit_display_by_id: JsonObject | None,
+    authoritative_models_by_id: JsonObject | None,
+) -> None:
+    """Match the existing physical source unit to the current public owner view."""
+
+    if unit_display_by_id is None or authoritative_models_by_id is None:
+        raise PlacementDraftError("Model materialization requires current public source authority.")
+    source_id = proposal.unit_instance_id
+    source_display = unit_display_by_id.get(source_id)
+    if source_display is None:
+        raise PlacementDraftError("Model materialization requires the current source unit display.")
+    display = _json_object("materialization source unit display", source_display)
+    if (
+        display.get("unit_instance_id") != source_id
+        or display.get("owner_player_id") != proposal.player_id
+        or display.get("visible_status") != "visible"
+    ):
+        raise PlacementDraftError(
+            "Materialization source unit display ownership differs from request."
+        )
+    raw_ids = display.get("model_instance_ids")
+    if type(raw_ids) is not list or not raw_ids:
+        raise PlacementDraftError("Materialization source unit requires public own-model IDs.")
+    display_ids = tuple(
+        _non_empty_string("materialization source model_instance_id", value) for value in raw_ids
+    )
+    if len(display_ids) != len(set(display_ids)):
+        raise PlacementDraftError("Materialization source unit model IDs must be unique.")
+    for model_id in display_ids:
+        source_model = authoritative_models_by_id.get(model_id)
+        if source_model is None:
+            raise PlacementDraftError(
+                "Model materialization requires current physical source model authority."
+            )
+        model = _json_object("physical materialization source model", source_model)
+        if (
+            model.get("model_instance_id") != model_id
+            or model.get("unit_instance_id") != source_id
+            or model.get("owner_player_id") != proposal.player_id
+        ):
+            raise PlacementDraftError(
+                "Physical materialization source model ownership differs from request."
+            )
+    source_model_ids = set(display_ids)
+    for model_id, value in authoritative_models_by_id.items():
+        model = _json_object("physical materialization model", value)
+        if (
+            model.get("unit_instance_id") == source_id
+            and model_id not in source_model_ids
+            and model_id not in proposal.required_model_ids
+        ):
+            raise PlacementDraftError(
+                "Materialization source model inventories differ across public views."
+            )
 
 
 def _public_army_id_for_player(

@@ -212,6 +212,7 @@ def test_materialization_rejects_missing_or_ambiguous_request_model_authority() 
             view=battlefield_view_from_game_view(view),
             selection=SelectionState.initial(default_preferences()),
             pending_decision=view.pending_decision,
+            unit_display_by_id=view.unit_display_by_id,
             model_display_by_id=view.model_display_by_id,
             authoritative_models_by_id=physical,
         )
@@ -225,6 +226,7 @@ def test_materialization_stale_and_invalid_submission_preserve_current_request()
         view=battlefield_view_from_game_view(view),
         selection=SelectionState.initial(default_preferences()),
         pending_decision=view.pending_decision,
+        unit_display_by_id=view.unit_display_by_id,
         model_display_by_id=view.model_display_by_id,
         authoritative_models_by_id=view.battlefield_view.models_by_id,
         projection_state_hash=view.projection_state_hash,
@@ -353,6 +355,7 @@ def test_real_core_materialization_accepts_drafted_models_after_invalid_retry() 
         view=battlefield_view_from_game_view(owner_view),
         selection=SelectionState.initial(default_preferences()),
         pending_decision=owner_view.pending_decision,
+        unit_display_by_id=owner_view.unit_display_by_id,
         model_display_by_id=owner_view.model_display_by_id,
         authoritative_models_by_id=owner_view.battlefield_view.models_by_id,
         battlefield_state=owner_view.battlefield_state,
@@ -441,6 +444,7 @@ def test_real_materialization_rejects_request_army_conflicting_with_public_owner
             view=battlefield_view_from_game_view(forged),
             selection=SelectionState.initial(default_preferences()),
             pending_decision=forged.pending_decision,
+            unit_display_by_id=forged.unit_display_by_id,
             model_display_by_id=forged.model_display_by_id,
             authoritative_models_by_id=forged.battlefield_view.models_by_id,
             battlefield_state=forged.battlefield_state,
@@ -453,6 +457,110 @@ def test_real_materialization_rejects_request_army_conflicting_with_public_owner
         assert window.placement_draft is None
         assert window.finite_state.status_kind == "invalid"
         assert window.finite_state.diagnostics[0].violation_code == "placement_draft_unavailable"
+    finally:
+        window.close()
+    assert client.session.decision_record_count() == before_records
+
+
+@pytest.fixture(scope="module")
+def real_materialization_source_view() -> tuple[LocalSessionClient, JsonObject, str, str]:
+    client, owner, opponent = _real_materialization_client()
+    status = client.advance_until_decision_or_terminal()
+    assert status.decision is not None
+    return client, cast(JsonObject, client.session.view(viewer_player_id=owner)), owner, opponent
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("corruption", "reason"),
+    [
+        ("display_owner", "source unit display ownership differs from request"),
+        ("physical_owner", "Physical materialization source model ownership differs"),
+        ("physical_unit", "Physical materialization source model ownership differs"),
+        ("missing_display", "requires the current source unit display"),
+        ("missing_physical", "requires current physical source model authority"),
+        ("foreign_physical_membership", "source model inventories differ across public views"),
+    ],
+)
+def test_real_materialization_rejects_conflicting_source_authority_before_draft(
+    real_materialization_source_view: tuple[LocalSessionClient, JsonObject, str, str],
+    corruption: str,
+    reason: str,
+) -> None:
+    client, original, owner, opponent = real_materialization_source_view
+    raw = copy.deepcopy(original)
+    request = cast(JsonObject, cast(JsonObject, raw["pending_decision"])["payload"])
+    source_id = cast(str, request["source_unit_instance_id"])
+    displays = cast(JsonObject, raw["unit_display_by_id"])
+    display = cast(JsonObject, displays[source_id])
+    physical = cast(
+        JsonObject,
+        cast(JsonObject, cast(JsonObject, raw["battlefield_view"])["authoritative"])[
+            "models_by_id"
+        ],
+    )
+    source_model_ids = cast(list[str], display["model_instance_ids"])
+    assert source_model_ids
+    assert all(model_id in physical for model_id in source_model_ids)
+    source_model_id = source_model_ids[0]
+    source_model = cast(JsonObject, physical[source_model_id])
+    assert source_model["unit_instance_id"] == source_id
+    assert source_model["owner_player_id"] == owner
+    if corruption == "display_owner":
+        display["owner_player_id"] = opponent
+    elif corruption == "physical_owner":
+        source_model["owner_player_id"] = opponent
+    elif corruption == "physical_unit":
+        other_unit_id = next(
+            cast(str, row["unit_instance_id"])
+            for value in physical.values()
+            if (row := cast(JsonObject, value))["unit_instance_id"] != source_id
+        )
+        source_model["unit_instance_id"] = other_unit_id
+    elif corruption == "missing_display":
+        displays.pop(source_id)
+    elif corruption == "missing_physical":
+        physical.pop(source_model_id)
+    elif corruption == "foreign_physical_membership":
+        other_model = next(
+            cast(JsonObject, value)
+            for value in physical.values()
+            if cast(JsonObject, value)["unit_instance_id"] != source_id
+        )
+        other_model["unit_instance_id"] = source_id
+    else:
+        raise AssertionError(f"Unsupported source corruption: {corruption}")
+
+    forged = UiGameView.from_payload(raw)
+    assert forged.pending_decision is not None
+    assert forged.battlefield_view is not None
+    proposal = forged.pending_decision.placement_proposal
+    assert proposal is not None
+    assert all(
+        model_id not in forged.battlefield_view.models_by_id
+        for model_id in proposal.required_model_ids
+    )
+    before_records = client.session.decision_record_count()
+    with pytest.raises(PlacementDraftError, match=reason):
+        PlacementDraft.start_for_pending(
+            view=battlefield_view_from_game_view(forged),
+            selection=SelectionState.initial(default_preferences()),
+            pending_decision=forged.pending_decision,
+            unit_display_by_id=forged.unit_display_by_id,
+            model_display_by_id=forged.model_display_by_id,
+            authoritative_models_by_id=forged.battlefield_view.models_by_id,
+            battlefield_state=forged.battlefield_state,
+            current_game_id=forged.game_id,
+            projection_state_hash=forged.projection_state_hash,
+        )
+    window = _window(forged)
+    try:
+        window._sync_placement_draft()  # pyright: ignore[reportPrivateUsage]
+        assert window.placement_draft is None
+        assert window.finite_state.status_kind == "invalid"
+        diagnostic = window.finite_state.diagnostics[0]
+        assert diagnostic.violation_code == "placement_draft_unavailable"
+        assert reason in diagnostic.message
     finally:
         window.close()
     assert client.session.decision_record_count() == before_records
