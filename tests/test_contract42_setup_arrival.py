@@ -100,6 +100,9 @@ def _draft(client: LocalSessionClient) -> PlacementDraft:
         pending_decision=view.pending_decision,
         model_display_by_id=view.model_display_by_id,
         authoritative_models_by_id=view.battlefield_view.models_by_id,
+        battlefield_state=view.battlefield_state,
+        support_profile=client.get_support_profile(view.viewer_player_id),
+        current_game_id=view.game_id,
         projection_state_hash=view.projection_state_hash,
     )
     assert result is not None

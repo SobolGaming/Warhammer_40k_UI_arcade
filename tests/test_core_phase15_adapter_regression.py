@@ -171,6 +171,7 @@ def test_phase28_placement_reinforcement_opens_local_placement_draft() -> None:
         view=view,
         selection=selection,
         pending_decision=decision,
+        battlefield_state={"placed_armies": [{"player_id": "player_1", "army_id": "player_1"}]},
     )
     placement_panel = build_placement_draft_panel(
         placement_draft=placement_draft,

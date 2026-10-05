@@ -93,6 +93,7 @@ def _placement_draft(client: LocalSessionClient, view: UiGameView) -> PlacementD
         authoritative_models_by_id=view.battlefield_view.models_by_id,
         battlefield_state=view.battlefield_state,
         support_profile=client.get_support_profile(view.viewer_player_id),
+        current_game_id=view.game_id,
         projection_state_hash=view.projection_state_hash,
     )
     assert draft is not None
@@ -317,6 +318,7 @@ def test_attached_deployment_opens_editor_rejects_nonmember_and_submits_current_
             authoritative_models_by_id=forged_projection,
             battlefield_state=owner.battlefield_state,
             support_profile=client.get_support_profile(_OWNER),
+            current_game_id=owner.game_id,
         )
 
     points = dict(original_points)
@@ -402,6 +404,7 @@ def test_attached_deployment_requires_public_army_authority() -> None:
             authoritative_models_by_id=physical.models_by_id,
             battlefield_state=owner.battlefield_state,
             support_profile=support_profile,
+            current_game_id=owner.game_id,
         )
 
     with pytest.raises(PlacementDraftError, match="public army"):
@@ -410,7 +413,7 @@ def test_attached_deployment_requires_public_army_authority() -> None:
     opponent_profile = client.get_support_profile(_OPPONENT)
     opponent_rows = cast(list[JsonObject], opponent_profile.payload["mustering_support_rows"])
     assert all(row["player_id"] != _OWNER for row in opponent_rows)
-    with pytest.raises(PlacementDraftError, match="public army"):
+    with pytest.raises(PlacementDraftError, match="profile viewer differs"):
         start_with(opponent_profile)
 
     muster_rows = cast(list[JsonObject], profile.payload["mustering_support_rows"])

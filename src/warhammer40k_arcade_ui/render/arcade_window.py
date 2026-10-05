@@ -2253,6 +2253,7 @@ class ArcadeWarhammerWindow(arcade.Window):
                 view=self._battlefield_view,
                 selection=self._selection_state,
                 pending_decision=self._pending_decision,
+                unit_display_by_id=self._known_unit_display_by_id,
                 model_display_by_id=self._known_model_display_by_id,
                 authoritative_models_by_id=(
                     None
@@ -2263,6 +2264,9 @@ class ArcadeWarhammerWindow(arcade.Window):
                     None if self._last_game_view is None else self._last_game_view.battlefield_state
                 ),
                 support_profile=self.support_profile,
+                current_game_id=(
+                    None if self._last_game_view is None else self._last_game_view.game_id
+                ),
                 projection_state_hash=self._current_projection_state_hash(),
             )
         except PlacementDraftError as exc:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -117,6 +118,81 @@ def test_canonical_model_projection_preserves_elevation_and_facing() -> None:
     )
     assert model.elevation_z_inches == 2.5
     assert model.facing_degrees == 45.0
+
+
+def test_canonical_ellipse_display_radius_uses_longer_semiaxis() -> None:
+    raw = _post_deployment_payload()
+    models = cast(
+        JsonObject,
+        cast(JsonObject, cast(JsonObject, raw["battlefield_view"])["authoritative"])[
+            "models_by_id"
+        ],
+    )
+    model_id = next(iter(models))
+    model = cast(JsonObject, models[model_id])
+    geometry = cast(JsonObject, model["geometry"])
+    circle = cast(JsonObject, geometry["support_shape"])
+    assert circle["kind"] == "circle"
+    circle_view = battlefield_view_from_game_view(UiGameView.from_payload(raw))
+    circle_model = next(
+        member
+        for unit in circle_view.units
+        for member in unit.models
+        if member.model_id == model_id
+    )
+    assert math.isclose(
+        circle_model.base_radius,
+        cast(float, circle["radius_inches"]),
+        rel_tol=0.0,
+        abs_tol=1.0e-9,
+    )
+
+    conformance = json.loads(
+        required_core_example_path("battlefield", "geometry-conformance.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    oval = cast(
+        JsonObject,
+        cast(JsonObject, cast(JsonObject, conformance["authoritative"])["models_by_id"])[
+            "geometry-conformance-oval-model"
+        ],
+    )
+    support_shape = copy.deepcopy(
+        cast(JsonObject, cast(JsonObject, oval["geometry"])["support_shape"])
+    )
+    assert support_shape["kind"] == "ellipse"
+    support_shape["length_inches"] = 2.0
+    support_shape["width_inches"] = 1.0
+    geometry["support_shape"] = support_shape
+
+    ellipse_view = battlefield_view_from_game_view(UiGameView.from_payload(raw))
+    ellipse_model = next(
+        member
+        for unit in ellipse_view.units
+        for member in unit.models
+        if member.model_id == model_id
+    )
+    assert math.isclose(ellipse_model.base_radius, 1.0, rel_tol=0.0, abs_tol=1.0e-9)
+    assert ellipse_model.support_footprint is not None
+    assert len(ellipse_model.support_footprint) == 32
+
+    support_shape["kind"] = "rectangle"
+    rectangle_view = battlefield_view_from_game_view(UiGameView.from_payload(raw))
+    rectangle_model = next(
+        member
+        for unit in rectangle_view.units
+        for member in unit.models
+        if member.model_id == model_id
+    )
+    assert math.isclose(
+        rectangle_model.base_radius,
+        math.hypot(1.0, 0.5),
+        rel_tol=0.0,
+        abs_tol=1.0e-9,
+    )
+    assert rectangle_model.support_footprint is not None
+    assert len(rectangle_model.support_footprint) == 4
 
 
 @pytest.mark.parametrize("field", ["z_inches", "facing_degrees"])

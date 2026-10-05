@@ -32,6 +32,7 @@ from warhammer40k_arcade_ui.core_client.local_session_client import LocalSession
 from warhammer40k_arcade_ui.core_client.protocol import (
     JsonObject,
     UiGameView,
+    UiSupportProfile,
     invalid_diagnostics_from_status,
     validate_json_value,
 )
@@ -185,7 +186,12 @@ def test_split_successor_origin_and_owner_survive_viewer_switch_and_placement(
         assert request is not None
         if request.decision_type == "submit_deployment_placement":
             current_view = _view(session, cast(str, request.actor_id))
-            draft = _placed_draft(current_view)
+            draft = _placed_draft(
+                current_view,
+                support_profile=LocalSessionClient(session=session).get_support_profile(
+                    current_view.viewer_player_id
+                ),
+            )
             assert current_view.pending_decision is not None
             assert current_view.pending_decision.placement_proposal is not None
             assert draft.selected_unit_id == (
@@ -248,7 +254,7 @@ def test_split_successor_origin_and_owner_survive_viewer_switch_and_placement(
     raise AssertionError("Split successor deployment was not reached.")
 
 
-def _placed_draft(view: UiGameView) -> PlacementDraft:
+def _placed_draft(view: UiGameView, *, support_profile: UiSupportProfile) -> PlacementDraft:
     assert view.pending_decision is not None
     assert view.battlefield_view is not None
     draft = PlacementDraft.start_for_pending(
@@ -257,6 +263,9 @@ def _placed_draft(view: UiGameView) -> PlacementDraft:
         pending_decision=view.pending_decision,
         model_display_by_id=view.model_display_by_id,
         authoritative_models_by_id=view.battlefield_view.models_by_id,
+        battlefield_state=view.battlefield_state,
+        support_profile=support_profile,
+        current_game_id=view.game_id,
         projection_state_hash=view.projection_state_hash,
     )
     assert draft is not None

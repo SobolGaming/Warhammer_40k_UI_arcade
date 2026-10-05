@@ -20,6 +20,7 @@ def test_reinforcement_placement_draft_uses_projected_unit_models() -> None:
         view=view,
         selection=_empty_selection(),
         pending_decision=decision,
+        battlefield_state=_public_owner_armies(),
     )
 
     assert draft is not None
@@ -89,6 +90,7 @@ def test_deployment_placement_draft_uses_display_base_size_for_unprojected_unit(
                 },
             }
         },
+        battlefield_state=_public_owner_armies(),
     )
 
     assert draft is not None
@@ -116,6 +118,7 @@ def _ready_draft(decision: UiDecision) -> PlacementDraft:
         view=view,
         selection=_empty_selection(),
         pending_decision=decision,
+        battlefield_state=_public_owner_armies(),
     )
     assert draft is not None
     draft = draft.place_current_model((8.0, 18.0))
@@ -127,6 +130,10 @@ def _ready_draft(decision: UiDecision) -> PlacementDraft:
 
 def _empty_selection() -> SelectionState:
     return SelectionState.initial(default_preferences())
+
+
+def _public_owner_armies() -> JsonObject:
+    return {"placed_armies": [{"player_id": "player_1", "army_id": "player_1"}]}
 
 
 def _placement_proposal_decision() -> UiDecision:

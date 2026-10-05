@@ -297,6 +297,7 @@ def test_placement_draft_updates_current_action_and_player_units_status() -> Non
         view=view,
         selection=selection,
         pending_decision=decision,
+        battlefield_state={"placed_armies": [{"player_id": "player_1", "army_id": "player_1"}]},
     )
     assert draft is not None
     draft = draft.place_current_model((8.0, 18.0))

@@ -486,6 +486,8 @@ def _shape_display_radius(shape: JsonObject) -> float:
     if kind in {"rectangle", "ellipse", "capsule"}:
         width = _required_positive_float(shape, "width_inches")
         length = _required_positive_float(shape, "length_inches")
+        if kind == "ellipse":
+            return max(width, length) / 2.0
         return math.hypot(width / 2.0, length / 2.0)
     if kind == "polygon":
         vertices = tuple(

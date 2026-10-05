@@ -122,7 +122,9 @@ def _reach_placement(
     return placement
 
 
-def _draft(view: UiGameView, decision: UiDecision | None = None) -> PlacementDraft:
+def _draft(
+    client: LocalSessionClient, view: UiGameView, decision: UiDecision | None = None
+) -> PlacementDraft:
     assert view.battlefield_view is not None
     draft = PlacementDraft.start_for_pending(
         view=battlefield_view_from_game_view(view),
@@ -131,6 +133,8 @@ def _draft(view: UiGameView, decision: UiDecision | None = None) -> PlacementDra
         model_display_by_id=view.model_display_by_id,
         authoritative_models_by_id=view.battlefield_view.models_by_id,
         battlefield_state=view.battlefield_state,
+        support_profile=client.get_support_profile(view.viewer_player_id),
+        current_game_id=view.game_id,
         projection_state_hash=view.projection_state_hash,
     )
     assert draft is not None
@@ -179,7 +183,7 @@ def test_attached_reserve_headless_editor_grouped_retry_and_current_ids() -> Non
     finally:
         window.close()
 
-    draft = _draft(owner)
+    draft = _draft(client, owner)
     assert draft.army_id == "army-alpha"
     assert draft.component_unit_instance_ids == (LEADER, SOURCE)
     assert [pose.model_id for pose in draft.model_poses] == expected_models
@@ -242,7 +246,7 @@ def test_attached_reserve_headless_editor_grouped_retry_and_current_ids() -> Non
     assert retry.placement_proposal.context["component_unit_instance_ids"] == [LEADER, SOURCE]
     assert retry.placement_proposal.context["model_instance_ids"] == expected_models
     assert client.session.decision_record_count() == before + 3
-    accepted = _ready(_draft(client.get_view(_OWNER)), _VALID_POINTS)
+    accepted = _ready(_draft(client, client.get_view(_OWNER)), _VALID_POINTS)
     payload = accepted.payload_preview
     assert payload is not None
     result = client.submit_parameterized_payload(
@@ -287,6 +291,8 @@ def test_grouped_placement_rejects_component_or_owner_drift_and_shares_disembark
             model_display_by_id=view.model_display_by_id,
             authoritative_models_by_id=projected,
             battlefield_state=view.battlefield_state,
+            support_profile=client.get_support_profile(_OWNER),
+            current_game_id=view.game_id,
         )
 
     projected = copy.deepcopy(view.battlefield_view.models_by_id)
@@ -300,6 +306,8 @@ def test_grouped_placement_rejects_component_or_owner_drift_and_shares_disembark
             model_display_by_id=view.model_display_by_id,
             authoritative_models_by_id=projected,
             battlefield_state=view.battlefield_state,
+            support_profile=client.get_support_profile(_OWNER),
+            current_game_id=view.game_id,
         )
 
     proposal = view.pending_decision.placement_proposal
@@ -312,7 +320,7 @@ def test_grouped_placement_rejects_component_or_owner_drift_and_shares_disembark
         ),
     )
     with pytest.raises(PlacementDraftError, match="ownership differs from request"):
-        _draft(view, decision=missing_component)
+        _draft(client, view, decision=missing_component)
 
     foreign_model_id = next(
         model_id
@@ -333,9 +341,9 @@ def test_grouped_placement_rejects_component_or_owner_drift_and_shares_disembark
         ),
     )
     with pytest.raises(PlacementDraftError, match="ownership differs from request"):
-        _draft(view, decision=wrong_model)
+        _draft(client, view, decision=wrong_model)
 
-    draft = _draft(view)
+    draft = _draft(client, view)
     disembark = replace(
         draft,
         proposal_kind="disembark_placement",

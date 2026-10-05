@@ -241,6 +241,7 @@ def _active_draft(decision: UiDecision) -> PlacementDraft:
         view=default_battlefield_view(),
         selection=SelectionState.initial(default_preferences()),
         pending_decision=decision,
+        battlefield_state={"placed_armies": [{"player_id": "player_1", "army_id": "player_1"}]},
     )
     assert draft is not None
     return draft
