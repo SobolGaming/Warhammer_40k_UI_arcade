@@ -1073,10 +1073,11 @@ def _projected_model_base_radius(model: JsonObject) -> float:
     if kind == "circle":
         return _positive_float_field(support, "radius_inches")
     if kind in {"ellipse", "rectangle"}:
-        return math.hypot(
-            _positive_float_field(support, "width_inches") / 2.0,
-            _positive_float_field(support, "length_inches") / 2.0,
-        )
+        half_width = _positive_float_field(support, "width_inches") / 2.0
+        half_length = _positive_float_field(support, "length_inches") / 2.0
+        if kind == "ellipse":
+            return max(half_width, half_length)
+        return math.hypot(half_width, half_length)
     raise PlacementDraftError("Physical return model support shape is unsupported.")
 
 

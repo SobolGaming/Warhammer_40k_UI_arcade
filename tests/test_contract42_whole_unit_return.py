@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import copy
+import json
+import math
 from dataclasses import replace
 from typing import cast
 
@@ -18,6 +20,7 @@ from warhammer40k_core.engine.return_on_death import (
 )
 
 from tests.support.contract42_battle_fixture import shooting_client
+from tests.support.core_contract_examples import required_core_example_path
 from warhammer40k_arcade_ui.config import AppConfig
 from warhammer40k_arcade_ui.core_client.local_session_client import LocalSessionClient
 from warhammer40k_arcade_ui.core_client.protocol import (
@@ -249,6 +252,80 @@ def test_real_whole_unit_return_opens_and_submits_all_destroyed_models() -> None
         cast(JsonObject, after.battlefield_view.models_by_id[model_id])["state"] == "placed"
         for model_id in original_positions
     )
+
+
+def test_whole_unit_return_oval_and_rectangle_previews_use_current_physical_geometry() -> None:
+    client, unit_id, _positions = _whole_unit_return_client()
+    raw = cast(JsonObject, copy.deepcopy(client.session.view(viewer_player_id=_OWNER)))
+    source_display = cast(JsonObject, cast(JsonObject, raw["unit_display_by_id"])[unit_id])
+    model_ids = cast(list[str], source_display["model_instance_ids"])
+    assert len(model_ids) >= 2
+    physical = cast(
+        JsonObject,
+        cast(JsonObject, cast(JsonObject, raw["battlefield_view"])["authoritative"])[
+            "models_by_id"
+        ],
+    )
+    example_path = required_core_example_path("battlefield", "geometry-conformance.json")
+    example = cast(JsonObject, json.loads(example_path.read_text(encoding="utf-8")))
+    example_models = cast(JsonObject, cast(JsonObject, example["authoritative"])["models_by_id"])
+    oval_example = cast(JsonObject, example_models["geometry-conformance-oval-model"])
+    oval_geometry = cast(JsonObject, oval_example["geometry"])
+    oval_shape = cast(JsonObject, copy.deepcopy(oval_geometry["support_shape"]))
+    oval_shape["width_inches"] = 1.0
+    oval_shape["length_inches"] = 2.0
+
+    model_displays = cast(JsonObject, raw["model_display_by_id"])
+    for model_id, physical_kind, display_kind in (
+        (model_ids[0], "ellipse", "oval"),
+        (model_ids[1], "rectangle", "rectangular"),
+    ):
+        row = cast(JsonObject, physical[model_id])
+        assert row["state"] == "destroyed"
+        assert row["pose"] is None
+        geometry = cast(JsonObject, row["geometry"])
+        shape = copy.deepcopy(oval_shape)
+        shape["kind"] = physical_kind
+        geometry["support_shape"] = shape
+        display = cast(JsonObject, model_displays[model_id])
+        display["base_size"] = {
+            "kind": display_kind,
+            "diameter_mm": None,
+            "length_mm": 50.8,
+            "width_mm": 25.4,
+        }
+
+    view = UiGameView.from_payload(raw)
+    expected_radii = {
+        model_ids[0]: 1.0,
+        model_ids[1]: math.hypot(1.0, 0.5),
+    }
+    draft = _draft(view, client=client)
+    assert set(expected_radii) <= {pose.model_id for pose in draft.model_poses}
+    for pose in draft.model_poses:
+        if pose.model_id in expected_radii:
+            assert math.isclose(pose.base_radius, expected_radii[pose.model_id])
+
+    window = ArcadeWarhammerWindow(
+        config=AppConfig(window_width=1280, window_height=800, resizable=False),
+        battlefield_view=battlefield_view_from_game_view(view),
+        preferences=default_preferences(),
+        pending_decision=view.pending_decision,
+        initial_game_view=view,
+        initial_support_profile=client.get_support_profile(_OWNER),
+        viewer_player_id=_OWNER,
+    )
+    try:
+        window._sync_placement_draft()
+        assert window.placement_draft is not None
+        assignments = {
+            assignment.model_id: assignment
+            for assignment in window.placement_draft.assignment_views()
+        }
+        for model_id, radius in expected_radii.items():
+            assert math.isclose(assignments[model_id].base_radius, radius)
+    finally:
+        window.close()
 
 
 def test_whole_unit_return_rejects_missing_or_foreign_current_model_authority() -> None:
